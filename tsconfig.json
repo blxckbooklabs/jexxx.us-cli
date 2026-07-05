@@ -5,11 +5,17 @@
     "rootDir": "./src",
     "outDir": "./dist",
 
+    // Canonical shared types (type-only imports — erased at compile time, so
+    // no runtime resolution is needed; points at built .d.ts declarations)
+    "paths": {
+      "@blxckbook/shared-types": ["../packages/shared-types/dist/index.d.ts"]
+    },
+
     // Environment Settings
     // See also https://aka.ms/tsconfig/module
     "module": "nodenext",
     "target": "esnext",
-    "types": [],
+    "types": ["node"],
     // For nodejs:
     // "lib": ["esnext"],
     // "types": ["node"],

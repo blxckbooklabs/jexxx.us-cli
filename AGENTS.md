@@ -34,6 +34,10 @@ Owned by the JEXXXUS platform / tooling team.
 
 - `npx tsc --noEmit` must pass, and `dist/index.js` must contain no
   `@blxckbook/shared-types` import after build.
+- `npm test` must pass (CSV parsing, duplicate handling, SYSTEM guard).
+- `jexxxus doctor` must perform read-only connectivity checks only.
+- Vault operator docs live in `jexxx.us-obsidian/CLI/`; public mirror in
+  `docs.jexxx.us/src/content/jexxxus-cli.md`. Keep both aligned.
 
 ## 6. Child DOX Index
 

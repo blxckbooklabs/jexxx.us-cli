@@ -4,6 +4,8 @@
 
 The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not** an end-user feature on TV, VEIL, Law, or Docs surfaces.
 
+**Status**: Closed-source, in active development.
+
 ---
 
 ## Relevance Across the Empire
@@ -11,28 +13,19 @@ The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not
 | Property | CLI role |
 |----------|----------|
 | **BLXCKBOOK** | Primary consumer — CSV bulk import into `api.contacts` |
-| **Docs** | Documented as operator tooling ([docs.jexxx.us](https://docs.jexxx.us) → JEXXXUS CLI page) |
-| **VEIL / TV / Law** | No runtime dependency — content and legal surfaces are separate |
-| **MAMAbase** | Writes via Supabase service-role key (`api` schema) |
-
-Use cases: migration from spreadsheets, seeding test contacts, one-time vault backfills. All writes require an explicit vault owner via `--user`.
-
----
-
-## Features
-
-- Styled terminal banner (empire pink gradient)
-- CSV parsing with legacy header aliases (`Bio` → `notes`, `Tags` → `tags`)
-- Duplicate detection (database constraints)
-- `--user` flag for row ownership (RLS bypass requires explicit `user_id`)
+| **Docs** | Public mirror — [docs.jexxx.us/jexxxus-cli](https://docs.jexxx.us/jexxxus-cli) |
+| **Obsidian** | Canonical operator runbook — `jexxx.us-obsidian/CLI/` |
+| **VEIL / TV / Law** | No runtime dependency |
+| **MAMAbase** | Writes via operator credentials (`api` schema) |
 
 ---
 
-## Prerequisites
+## Commands
 
-- Node.js 20+
-- Supabase **service-role** key (never commit)
-- Target table: `api.contacts` on MAMAbase
+| Command | Description |
+|---------|-------------|
+| `jexxxus doctor` | Verify `.env` credentials + read-only `api.contacts` probe |
+| `jexxxus import <file>` | Bulk import CSV contacts |
 
 ---
 
@@ -48,33 +41,21 @@ npm link   # optional — global `jexxxus` command
 
 ### Environment
 
-Copy `.env.example` to `.env` and fill values from managed operator secret storage:
-
 ```bash
 cp .env.example .env
+# Fill from managed operator secret storage — never commit .env
 ```
-
-> **Warning**: Operator credentials bypass RLS. Restrict to operator machines only. Never commit `.env`.
 
 ---
 
 ## Usage
 
-### Import contacts from CSV
-
 ```bash
+jexxxus doctor
 jexxxus import path/to/contacts.csv --user <clerk_user_id>
 ```
 
-#### CSV headers
-
-| Header | Maps to |
-|--------|---------|
-| `Name` / `name` | `name` |
-| `Notes` / `Bio` / `notes` / `bio` | `notes` |
-| `Tags` / `Interests` / `tags` / `interests` | `tags` (comma-separated → array) |
-
-#### Options
+### Import flags
 
 | Flag | Description |
 |------|-------------|
@@ -82,9 +63,23 @@ jexxxus import path/to/contacts.csv --user <clerk_user_id>
 | `-u, --user <id>` | Vault owner `user_id` (required for production) |
 | `--allow-system-user` | Permit default `SYSTEM` owner (dev/test only) |
 
+### CSV headers
+
+| Header | Maps to |
+|--------|---------|
+| `Name` / `name` | `name` |
+| `Notes` / `Bio` / `notes` / `bio` | `notes` |
+| `Tags` / `Interests` / `tags` / `interests` | `tags` (comma-separated → array) |
+
+---
+
+## Tests
+
 ```bash
-jexxxus import contacts.csv --user user_2abc123 --force
+npm test
 ```
+
+Covers CSV parsing, duplicate handling (`--force`), and the SYSTEM owner guard.
 
 ---
 
@@ -97,15 +92,17 @@ Type-only imports from canonical `@blxckbook/shared-types` at `<JEXXXUS root>/pa
 ## Security
 
 - Never commit `.env`
-- Never use service-role keys in browser or public repos
-- Always pass `--user` for production imports so RLS-scoped app users can see their rows
+- Never use operator credentials in browser or public repos
+- Always pass `--user` for production imports
+- Rotate keys if they leave the operator machine — see Obsidian `CLI/Operator Runbook.md`
 
 ---
 
 ## Obsidian & DOX
 
 - Local contract: `AGENTS.md`
-- Public docs: `jexxx.us-obsidian` → mirrored on docs.jexxx.us
+- Vault docs: `jexxx.us-obsidian/CLI/`
+- Public docs: `docs.jexxx.us/src/content/jexxxus-cli.md`
 
 ---
 
