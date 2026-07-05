@@ -17,9 +17,10 @@ Owned by the JEXXXUS platform / tooling team.
   (`import type`) so they erase at compile time — the published CLI has no
   runtime dependency on the package. Rebuild the canonical package
   (`tsc -p packages/shared-types/tsconfig.json`) after changing its types.
-- The CLI authenticates with a service-role key, which BYPASSES RLS. Every
-  write must set `user_id` explicitly (see the `--user` flag, default
-  `SYSTEM`) so rows are owned by the intended vault account.
+- The CLI authenticates with operator-only credentials (service-role key in
+  local `.env`), which BYPASSES RLS. Production imports must pass `--user`
+  with the target Clerk user ID; default `SYSTEM` is blocked unless
+  `--allow-system-user` is set for dev/test.
 - Writes target **`api.contacts`** (`db.schema: 'api'`) with columns `name`,
   `notes`, `tags`, `user_id`. Legacy CSV headers (Bio/Tags) map to `notes`/`tags`.
   Do not write to deprecated `public.vessels`.

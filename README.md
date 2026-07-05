@@ -48,14 +48,13 @@ npm link   # optional — global `jexxxus` command
 
 ### Environment
 
-Create `.env` in the project root:
+Copy `.env.example` to `.env` and fill values from managed operator secret storage:
 
-```env
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_KEY=your-service-role-jwt-key
+```bash
+cp .env.example .env
 ```
 
-> **Warning**: Service-role keys bypass RLS. Restrict to operator machines only.
+> **Warning**: Operator credentials bypass RLS. Restrict to operator machines only. Never commit `.env`.
 
 ---
 
@@ -79,8 +78,9 @@ jexxxus import path/to/contacts.csv --user <clerk_user_id>
 
 | Flag | Description |
 |------|-------------|
-| `-f, --force` | Attempt import when duplicate errors occur |
-| `-u, --user <id>` | Vault owner `user_id` (default: `SYSTEM`) |
+| `-f, --force` | Skip duplicate rows and import the rest |
+| `-u, --user <id>` | Vault owner `user_id` (required for production) |
+| `--allow-system-user` | Permit default `SYSTEM` owner (dev/test only) |
 
 ```bash
 jexxxus import contacts.csv --user user_2abc123 --force
