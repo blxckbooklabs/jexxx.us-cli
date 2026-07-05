@@ -1,101 +1,114 @@
-# JEXXXUS CLI 💖
+# JEXXXUS CLI
 
-The native command-line agent tool for the **BLXCKBOOK** ecosystem's **JEXXXUS Vault** and **MAMAbase**.
+> Operator tooling for the **JEXXXUS** ecosystem — bulk contact import into **BLXCKBOOK** / MAMAbase.
 
-Featuring a glistening pink terminal interface, the JEXXXUS CLI allows secure ingestion, profile management, and duplicate checking for vessel records.
-
----
-
-## 🚀 Features
-
-- **Sexy Pink Glistening Aesthetics**: Premium, styled CLI experience on startup.
-- **CSV Ingestion**: Easily parse and bulk-import contact/vessel entries.
-- **Smart Duplicate Prevention**: Automatic detection of duplicate entries before database inserts, aligned with database trigger rules (`check_vessel_duplicate`).
-- **Flexible Overrides**: Use force commands to bypass checks where permitted.
+The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not** an end-user feature on TV, VEIL, Law, or Docs surfaces.
 
 ---
 
-## 🛠️ Getting Started
+## Relevance Across the Empire
 
-### 1. Prerequisites
+| Property | CLI role |
+|----------|----------|
+| **BLXCKBOOK** | Primary consumer — CSV bulk import into `api.contacts` |
+| **Docs** | Documented as operator tooling ([docs.jexxx.us](https://docs.jexxx.us) → JEXXXUS CLI page) |
+| **VEIL / TV / Law** | No runtime dependency — content and legal surfaces are separate |
+| **MAMAbase** | Writes via Supabase service-role key (`api` schema) |
 
-Ensure you have **Node.js** (v18 or higher) and **npm** installed on your system.
+Use cases: migration from spreadsheets, seeding test contacts, one-time vault backfills. All writes require an explicit vault owner via `--user`.
 
-### 2. Installation & Build
+---
 
-Clone the repository and install dependencies:
+## Features
+
+- Styled terminal banner (empire pink gradient)
+- CSV parsing with legacy header aliases (`Bio` → `notes`, `Tags` → `tags`)
+- Duplicate detection (database constraints)
+- `--user` flag for row ownership (RLS bypass requires explicit `user_id`)
+
+---
+
+## Prerequisites
+
+- Node.js 20+
+- Supabase **service-role** key (never commit)
+- Target table: `api.contacts` on MAMAbase
+
+---
+
+## Installation
 
 ```bash
-# Clone the repository (if not already local)
 git clone git@github.com:blxckbooklabs/jexxx.us-cli.git
 cd jexxx.us-cli
-
-# Install dependencies
 npm install
-
-# Compile the TypeScript code
 npm run build
+npm link   # optional — global `jexxxus` command
 ```
 
-### 3. Setup Environment Variables
+### Environment
 
-The CLI reads the Supabase configuration from a `.env` file located in the root directory of the CLI project.
-
-Create a `.env` file:
-
-```bash
-touch .env
-```
-
-Populate the `.env` with your Supabase credentials:
+Create `.env` in the project root:
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_KEY=your-service-role-jwt-key
 ```
 
-> [!WARNING]
-> **Never commit your `.env` file to git.** It contains sensitive service-role keys that bypass Row-Level Security (RLS). Ensure it is listed in your `.gitignore`.
+> **Warning**: Service-role keys bypass RLS. Restrict to operator machines only.
 
-### 4. Link the CLI Globally
+---
 
-To make the `jexxxus` command available globally across your shell:
+## Usage
+
+### Import contacts from CSV
 
 ```bash
-npm link
+jexxxus import path/to/contacts.csv --user <clerk_user_id>
 ```
 
-Now you can invoke the CLI from any directory using the command:
+#### CSV headers
+
+| Header | Maps to |
+|--------|---------|
+| `Name` / `name` | `name` |
+| `Notes` / `Bio` / `notes` / `bio` | `notes` |
+| `Tags` / `Interests` / `tags` / `interests` | `tags` (comma-separated → array) |
+
+#### Options
+
+| Flag | Description |
+|------|-------------|
+| `-f, --force` | Attempt import when duplicate errors occur |
+| `-u, --user <id>` | Vault owner `user_id` (default: `SYSTEM`) |
+
 ```bash
-jexxxus
+jexxxus import contacts.csv --user user_2abc123 --force
 ```
 
 ---
 
-## 📖 Usage Guide
+## Types
 
-### Import Vessels / Contacts from CSV
-
-You can import profiles directly from a CSV file. The CSV should contain headers like `Name`, `Bio`/`Notes`, and `Tags` (comma-separated list).
-
-```bash
-jexxxus import path/to/vessels.csv
-```
-
-#### CSV Headers Supported:
-- **Name** (or `name`): The name of the vessel profile.
-- **Bio** (or `bio`, `Notes`, `notes`): A description or summary.
-- **Tags** (or `tags`): A comma-separated list of tags (e.g., `"model, pink, verified"`).
-
-#### Options:
-- `-f, --force`: Bypasses default check flags and forces execution (if database triggers permit).
-
-```bash
-jexxxus import path/to/vessels.csv --force
-```
+Type-only imports from canonical `@blxckbook/shared-types` at `<JEXXXUS root>/packages/shared-types`. Rebuild that package after type changes.
 
 ---
 
-## 📄 License
+## Security
 
-This project is licensed under the ISC License.
+- Never commit `.env`
+- Never use service-role keys in browser or public repos
+- Always pass `--user` for production imports so RLS-scoped app users can see their rows
+
+---
+
+## Obsidian & DOX
+
+- Local contract: `AGENTS.md`
+- Public docs: `jexxx.us-obsidian` → mirrored on docs.jexxx.us
+
+---
+
+## License
+
+ISC

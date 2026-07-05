@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { createClient } from '@supabase/supabase-js';
+
 import * as fs from 'fs';
 import { parse } from 'csv-parse';
 import chalk from 'chalk';
@@ -23,12 +24,28 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
   process.exit(1);
 }
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  db: { schema: 'api' },
+});
+
+/**
+ * Insert shape for `api.contacts` (live BLXCKBOOK data plane).
+ *
+ * NOTE: the CLI runs headless with a service-role key, which BYPASSES RLS —
+ * `user_id` is therefore not inferred from a session and MUST be set
+ * explicitly so rows are owned by (and visible to) the right vault account.
+ */
+type ContactInsert = {
+  name: string;
+  notes?: string;
+  tags?: string[];
+  user_id: string;
+};
 
 const jexxxusArt = figlet.textSync('JEXXXUS', { font: 'Slant' });
 // Glistening pink aesthetic using hot pink, light pink, and magenta
-console.log(gradient(['#FF1493', '#FFB6C1', '#E11D8A', '#FF69B4'])(jexxxusArt));
-console.log(gradient(['#E11D8A', '#FFB6C1'])('                            Welcome to the Vault.\n'));
+console.log(gradient(['#FF1A8C', '#FFB6C1', '#E11D8A', '#FF69B4'])(jexxxusArt));
+console.log(gradient(['#FF1A8C', '#FFB6C1'])('                            Welcome to the Vault.\n'));
 
 const program = new Command();
 
@@ -42,6 +59,11 @@ program
   .description('Import contacts from a CSV file into the BLXCKBOOK Vault')
   .argument('<file>', 'Path to the CSV file')
   .option('-f, --force', 'Force import even if duplicates are detected')
+  .option(
+    '-u, --user <userId>',
+    'Vault account (user_id) to own the imported profiles. The CLI uses a service-role key (RLS bypassed), so ownership must be explicit.',
+    'SYSTEM'
+  )
   .action((file, options) => {
     if (!fs.existsSync(file)) {
       console.log(chalk.red(`[ERROR] File not found: ${file}`));
@@ -70,23 +92,21 @@ program
     parser.on('end', async function () {
       console.log(chalk.blue(`[INFO] Parsed ${records.length} records. Importing to MAMAbase...`));
       
-      const newVessels = records.map(r => ({
-        // Assuming the CSV has Name, Bio, Tags headers
-        name: r.Name || r.name,
-        bio: r.Bio || r.bio || r.Notes || r.notes || '',
-        tags: r.Tags ? r.Tags.split(',').map((t: string) => t.trim()) : (r.tags ? r.tags.split(',').map((t: string) => t.trim()) : []),
-        metadata: { source: 'cli-import' }
+      // CSV headers: Name; Notes/Bio; Tags/Interests → api.contacts columns.
+      const splitList = (v: unknown): string[] =>
+        typeof v === 'string' ? v.split(',').map((t) => t.trim()).filter(Boolean) : [];
+
+      const payload: ContactInsert[] = records.map((r) => ({
+        name: r.Name || r.name || '',
+        notes: r.Notes || r.notes || r.Bio || r.bio || '',
+        tags: splitList(r.Interests || r.interests || r.Tags || r.tags),
+        user_id: options.user,
       }));
 
-      // In a real CLI, we might want to attach this to a specific user, or default to SYSTEM
-      // Let's assume user_id is handled by the trigger or defaults if nullable, or we set a mock ID for CLI imports if unauthenticated.
-      // We will assign a default 'SYSTEM' user_id since CLI operates autonomously.
-      const payload = newVessels.map(v => ({ ...v, user_id: 'SYSTEM' }));
-
-      const { error, data } = await supabase.from('vessels').insert(payload).select();
+      const { error, data } = await supabase.from('contacts').insert(payload).select();
 
       if (error) {
-        const isDupError = error.message.toLowerCase().includes('duplicate') || error.message.includes('check_vessel_duplicate');
+        const isDupError = error.message.toLowerCase().includes('duplicate');
         if (isDupError) {
           console.log(chalk.yellow(`[WARN] Import failed due to duplicate entry detected by Database.`));
           if (!options.force) {
@@ -96,7 +116,7 @@ program
           console.log(chalk.red(`[ERROR] Import failed: ${error.message}`));
         }
       } else {
-        console.log(chalk.green(`[SUCCESS] Imported ${data.length} vessel profiles into the Vault.`));
+        console.log(chalk.green(`[SUCCESS] Imported ${data.length} contacts into api.contacts.`));
       }
     });
   });
