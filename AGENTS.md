@@ -2,8 +2,9 @@
 
 ## 1. Purpose
 
-Native headless CLI agent (`jexxxus`) for the JEXXXUS ecosystem — bulk
-import/automation against MAMAbase (Supabase).
+Native headless CLI agent (`jexxxus`) for the JEXXXUS ecosystem — unified
+operator control plane for BLXCKBOOK and NXT dashboards. Provides bulk
+import/automation and connectivity diagnostics against MAMAbase (Supabase).
 
 ## 2. Ownership
 
@@ -21,14 +22,24 @@ Owned by the JEXXXUS platform / tooling team.
   local `.env`), which BYPASSES RLS. Production imports must pass `--user`
   with the target Clerk user ID; default `SYSTEM` is blocked unless
   `--allow-system-user` is set for dev/test.
-- Writes target **`api.contacts`** (`db.schema: 'api'`) with columns `name`,
-  `notes`, `tags`, `user_id`. Legacy CSV headers (Bio/Tags) map to `notes`/`tags`.
-  Do not write to deprecated `public.vessels`.
+- The `--target` flag routes commands to the correct schema:
+  - `--target blxckbook` (default): writes to **`api.contacts`** (`db.schema: 'api'`)
+  - `--target nxt`: writes to **`public.vessels`** (`db.schema: 'public'`)
+- Both targets share the same Supabase project. The `doctor` command checks
+  connectivity for both schemas when `--target` is omitted.
+- CSV columns `name`, `notes`/`bio`, `tags`/`interests` map consistently
+  across both targets. Legacy header aliases (Bio, Interests) map to `notes`/`tags`.
 
 ## 4. Work Guidance
 
 - Refer to the root `AGENTS.md` for brand spelling (`JEXXXUS`, `wing6`,
-  `BLXCKBOOK`) and conventions.
+  `BLXCKBOOK`, `NTX`) and conventions.
+- `src/lib/supabase.ts` exports `createOperatorClient(env, target)` and
+  `createEcosystemClient(env)` — the latter provides both BLXCKBOOK and NXT
+  clients simultaneously for cross-schema operations.
+- `src/lib/doctor.ts` exports `probeMamabase()`, `probeNxtVessels()`,
+  `probeNxtEvents()` — each targets a different schema/table for read-only
+  health checks.
 
 ## 5. Verification
 
@@ -36,6 +47,9 @@ Owned by the JEXXXUS platform / tooling team.
   `@blxckbook/shared-types` import after build.
 - `npm test` must pass (CSV parsing, duplicate handling, SYSTEM guard).
 - `jexxxus doctor` must perform read-only connectivity checks only.
+- `jexxxus doctor --target nxt` must probe `public.vessels` and
+  `public.contact_events` (not `api.contacts`).
+- `jexxxus import --target nxt` must write to `public.vessels` schema.
 - Vault operator docs live in `jexxx.us-obsidian/CLI/`; public mirror in
   `docs.jexxx.us/src/content/jexxxus-cli.md`. Keep both aligned.
 
