@@ -1,6 +1,6 @@
 # JEXXXUS CLI
 
-> Operator tooling for the **JEXXXUS** ecosystem — bulk contact import into **BLXCKBOOK** / MAMAbase.
+> Operator tooling for the **JEXXXUS** ecosystem — bulk contact/vessel import into **BLXCKBOOK** and **NXT.spread** dashboards.
 
 The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not** an end-user feature on TV, VEIL, Law, or Docs surfaces.
 
@@ -10,22 +10,23 @@ The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not
 
 ## Relevance Across the Empire
 
-| Property | CLI role |
-|----------|----------|
-| **BLXCKBOOK** | Primary consumer — CSV bulk import into `api.contacts` |
-| **Docs** | Public mirror — [docs.jexxx.us/jexxxus-cli](https://docs.jexxx.us/jexxxus-cli) |
-| **Obsidian** | Canonical operator runbook — `jexxx.us-obsidian/CLI/` |
-| **VEIL / TV / Law** | No runtime dependency |
-| **MAMAbase** | Writes via operator credentials (`api` schema) |
+| Property            | CLI role                                                                       |
+| ------------------- | ------------------------------------------------------------------------------ |
+| **BLXCKBOOK**       | Primary consumer (default `--target`) — CSV bulk import into `api.contacts`    |
+| **NXT.spread**      | Secondary consumer (`--target nxt`) — CSV bulk import into `public.vessels`    |
+| **Docs**            | Public mirror — [docs.jexxx.us/jexxxus-cli](https://docs.jexxx.us/jexxxus-cli) |
+| **Obsidian**        | Canonical operator runbook — `jexxx.us-obsidian/CLI/`                          |
+| **VEIL / TV / Law** | No runtime dependency                                                          |
+| **MAMAbase**        | Writes via operator credentials (`api` or `public` schema based on `--target`) |
 
 ---
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `jexxxus doctor` | Verify `.env` credentials + read-only `api.contacts` probe |
-| `jexxxus import <file>` | Bulk import CSV contacts |
+| Command                 | Description                                            |
+| ----------------------- | ------------------------------------------------------ |
+| `jexxxus doctor`        | Verify `.env` credentials + probe target schema(s)     |
+| `jexxxus import <file>` | Bulk import CSV contacts/vessels into target dashboard |
 
 ---
 
@@ -52,23 +53,26 @@ cp .env.example .env
 
 ```bash
 jexxxus doctor
+jexxxus doctor --target nxt
 jexxxus import path/to/contacts.csv --user <clerk_user_id>
+jexxxus import path/to/contacts.csv --target nxt --user <clerk_user_id>
 ```
 
 ### Import flags
 
-| Flag | Description |
-|------|-------------|
-| `-f, --force` | Skip duplicate rows and import the rest |
-| `-u, --user <id>` | Vault owner `user_id` (required for production) |
-| `--allow-system-user` | Permit default `SYSTEM` owner (dev/test only) |
+| Flag                       | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `-t, --target <dashboard>` | Target dashboard: `blxckbook` (default) or `nxt` |
+| `-f, --force`              | Skip duplicate rows and import the rest          |
+| `-u, --user <id>`          | Vault owner `user_id` (required for production)  |
+| `--allow-system-user`      | Permit default `SYSTEM` owner (dev/test only)    |
 
 ### CSV headers
 
-| Header | Maps to |
-|--------|---------|
-| `Name` / `name` | `name` |
-| `Notes` / `Bio` / `notes` / `bio` | `notes` |
+| Header                                      | Maps to                          |
+| ------------------------------------------- | -------------------------------- |
+| `Name` / `name`                             | `name`                           |
+| `Notes` / `Bio` / `notes` / `bio`           | `notes`                          |
 | `Tags` / `Interests` / `tags` / `interests` | `tags` (comma-separated → array) |
 
 ---
