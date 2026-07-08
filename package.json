@@ -24,13 +24,15 @@
   },
   "homepage": "https://github.com/blxckbooklabs/jexxx.us-cli#readme",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
     "@supabase/supabase-js": "^2.107.0",
     "chalk": "^4.1.2",
     "commander": "^15.0.0",
     "csv-parse": "^6.2.1",
     "dotenv": "^17.4.2",
     "figlet": "^1.11.0",
-    "gradient-string": "^3.0.0"
+    "gradient-string": "^3.0.0",
+    "openai": "^4.77.0"
   },
   "devDependencies": {
     "@types/figlet": "^1.7.0",

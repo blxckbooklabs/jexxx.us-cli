@@ -27,6 +27,15 @@ import {
 } from "./lib/bible.js";
 import { createOperatorClient } from "./lib/supabase.js";
 import type { DashboardTarget } from "./lib/supabase.js";
+import {
+  getDefaultProvider,
+  getProviderByName,
+  listProvidersRedacted,
+  runConfigureFlow,
+} from "./lib/blxckchat/config.js";
+import { resolveProvider } from "./lib/blxckchat/providers/registry.js";
+import { buildToolRegistry } from "./lib/blxckchat/tools/registry.js";
+import { runAgent } from "./lib/blxckchat/agent-loop.js";
 
 function printBanner(): void {
   const jexxxusArt = figlet.textSync("JEXXXUS", { font: "Slant" });
@@ -381,6 +390,121 @@ bibleCmd
       );
       process.exit(1);
     }
+  });
+
+const blxckchatCmd = program
+  .command("blxckchat")
+  .description(
+    "BLXCKCHAT — the native AI agent for the JEXXXUS kingdom/garden. Bring your own LLM (Anthropic, OpenAI, or local Ollama)."
+  );
+
+blxckchatCmd
+  .command("configure")
+  .description("Set up an LLM provider (Anthropic, OpenAI, or Ollama) for BLXCKCHAT")
+  .option("-l, --list", "List configured providers (API keys redacted)")
+  .action(async (options: { list?: boolean }) => {
+    if (options.list) {
+      const providers = listProvidersRedacted();
+      if (providers.length === 0) {
+        console.log(chalk.yellow("No providers configured yet. Run 'jexxxus blxckchat configure'."));
+        process.exit(0);
+      }
+      console.log(chalk.green("[Configured Providers]"));
+      providers.forEach((p) => {
+        const defaultTag = p.isDefault ? chalk.cyan(" (default)") : "";
+        const keyStatus = p.hasKey ? "key set" : "no key (local)";
+        console.log(`  • ${p.name}: ${p.provider}/${p.model} — ${keyStatus}${defaultTag}`);
+      });
+      process.exit(0);
+    }
+
+    try {
+      await runConfigureFlow();
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+      );
+      process.exit(1);
+    }
+  });
+
+blxckchatCmd
+  .argument("[prompt]", "One-shot prompt for BLXCKCHAT. Omit to enter interactive REPL mode.")
+  .option("-p, --provider <name>", "Named provider config to use for this invocation")
+  .option("--shell", "Opt in to shell access for this session (off by default; every call still requires confirmation and is checked against a hard blocklist)")
+  .action(async (prompt: string | undefined, options: { provider?: string; shell?: boolean }) => {
+    const storedConfig = options.provider
+      ? getProviderByName(options.provider)
+      : getDefaultProvider();
+
+    if (!storedConfig) {
+      console.error(
+        chalk.red(
+          "[ERROR] No BLXCKCHAT provider configured yet. Run 'jexxxus blxckchat configure' first."
+        )
+      );
+      process.exit(1);
+    }
+
+    const provider = resolveProvider(storedConfig);
+    const tools = buildToolRegistry(Boolean(options.shell));
+
+    if (options.shell) {
+      console.log(
+        chalk.yellow(
+          "[BLXCKCHAT] Shell access enabled for this session. Every command still requires confirmation and is checked against a hard-blocked pattern list."
+        )
+      );
+    }
+
+    if (prompt) {
+      const response = await runAgent(provider, tools, prompt);
+      console.log(chalk.white(`\n${response}\n`));
+      process.exit(0);
+    }
+
+    // Interactive REPL mode
+    console.log(
+      chalk.cyan(
+        `[BLXCKCHAT] Interactive mode — provider: ${storedConfig.provider}/${storedConfig.model}. Type /exit to quit.\n`
+      )
+    );
+
+    const readline = await import("readline");
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+      prompt: chalk.cyan("you> "),
+    });
+
+    rl.prompt();
+    rl.on("line", async (line: string) => {
+      const trimmed = line.trim();
+      if (trimmed === "/exit" || trimmed === "/quit") {
+        rl.close();
+        return;
+      }
+      if (!trimmed) {
+        rl.prompt();
+        return;
+      }
+
+      try {
+        const response = await runAgent(provider, tools, trimmed);
+        console.log(chalk.white(`\nblxckchat> ${response}\n`));
+      } catch (err) {
+        console.error(
+          chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+        );
+      }
+      rl.prompt();
+    });
+
+    rl.on("close", () => {
+      console.log(chalk.dim("\nSession ended."));
+      process.exit(0);
+    });
   });
 
 program.parseAsync().catch((err: unknown) => {
