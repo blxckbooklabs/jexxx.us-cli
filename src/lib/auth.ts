@@ -5,6 +5,15 @@ import * as crypto from "crypto";
 import * as readline from "readline";
 import chalk from "chalk";
 
+/**
+ * Overridable for local dev/testing against a non-production secure.jexxx.us
+ * deploy. Read lazily (not as a module-load-time constant) so tests can set
+ * JEXXXUS_SECURE_URL after this module has already been imported.
+ */
+export function getSecureBaseUrl(): string {
+  return process.env.JEXXXUS_SECURE_URL?.trim() || "https://secure.jexxx.us";
+}
+
 export interface Credentials {
   userId: string;
   email: string;
@@ -21,7 +30,6 @@ export interface CredentialsFile {
 
 const CREDS_DIR = path.join(os.homedir(), ".jexxxus");
 const CREDS_PATH = path.join(CREDS_DIR, "credentials.json");
-const PENDING_PATH = path.join(CREDS_DIR, "pending.json");
 const DEBUG_LOG = path.join(CREDS_DIR, "debug.log");
 
 export function getCredentialsDir(): string {
@@ -203,84 +211,149 @@ export async function ensureValidToken(
   return creds;
 }
 
+interface DeviceStartResponse {
+  userCode: string;
+  expiresIn: number;
+}
+
+interface PollResponse {
+  status:
+    | "pending"
+    | "authorized"
+    | "consumed"
+    | "denied"
+    | "expired"
+    | "not_found";
+  refreshToken?: string;
+  accessToken?: string;
+  expiresAt?: string;
+  userId?: string;
+  email?: string;
+}
+
+interface TokenResponse {
+  accessToken: string;
+  expiresAt: string;
+  userId: string;
+  email: string;
+}
+
 /**
- * Save device auth pending state to poll file
+ * Step 1 of `jexxxus auth login`: register a new device session with
+ * secure.jexxx.us. Sends only the PKCE code_challenge — the code_verifier
+ * this function generates stays local until poll time.
  */
-export function savePendingDeviceAuth(
-  codeVerifier: string,
-  pollUntilSeconds: number = 30,
-): void {
-  ensureCredsDir();
-  const pollUntil = new Date(Date.now() + pollUntilSeconds * 1000).toISOString();
-  const pending = { codeVerifier, pollUntil };
-  fs.writeFileSync(PENDING_PATH, JSON.stringify(pending, null, 2), {
-    mode: 0o600,
+export async function startDeviceAuth(): Promise<{
+  userCode: string;
+  codeVerifier: string;
+  expiresIn: number;
+  verificationUrl: string;
+}> {
+  const codeVerifier = generateCodeVerifier();
+  const codeChallenge = generateCodeChallenge(codeVerifier);
+
+  const response = await fetch(`${getSecureBaseUrl()}/api/auth/cli/device/start`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ codeChallenge }),
   });
-}
 
-/**
- * Load pending device auth state
- */
-export function loadPendingDeviceAuth(): { codeVerifier: string; pollUntil: string } | null {
-  try {
-    if (!fs.existsSync(PENDING_PATH)) {
-      return null;
-    }
-    const content = fs.readFileSync(PENDING_PATH, "utf-8");
-    return JSON.parse(content);
-  } catch {
-    return null;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body?.error ?? `Device auth start failed (${response.status})`);
   }
+
+  const data = (await response.json()) as DeviceStartResponse;
+
+  return {
+    userCode: data.userCode,
+    codeVerifier,
+    expiresIn: data.expiresIn,
+    verificationUrl: `${getSecureBaseUrl()}/auth/cli?code=${data.userCode}`,
+  };
 }
 
 /**
- * Delete pending device auth file
+ * Step 2: poll secure.jexxx.us until the browser-side consent screen
+ * resolves (allow, deny, or the device code expires). Returns full
+ * Credentials once the user grants access.
  */
-export function deletePendingDeviceAuth(): void {
-  if (fs.existsSync(PENDING_PATH)) {
-    fs.unlinkSync(PENDING_PATH);
-  }
-}
-
-/**
- * Poll ~/jexxxus/pending.json for device auth completion (fallback method)
- * Returns credentials when file is updated with refreshToken
- */
-export async function pollDeviceAuthFile(
-  timeoutSeconds: number = 30,
+export async function pollDeviceAuth(
+  userCode: string,
+  codeVerifier: string,
+  timeoutSeconds: number,
+  pollIntervalMs: number = 2000,
 ): Promise<Credentials> {
   const startTime = Date.now();
   const timeoutMs = timeoutSeconds * 1000;
-  const pollIntervalMs = 500;
 
-  return new Promise((resolve, reject) => {
-    const interval = setInterval(() => {
-      const pending = loadPendingDeviceAuth();
+  while (Date.now() - startTime < timeoutMs) {
+    const response = await fetch(`${getSecureBaseUrl()}/api/auth/cli/poll`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userCode, codeVerifier }),
+    });
 
-      if (!pending) {
-        // File was deleted (auth completed or timed out)
-        clearInterval(interval);
-        reject(new Error("Device auth file missing"));
-        return;
-      }
+    const data = (await response.json().catch(() => ({}))) as Partial<PollResponse>;
 
-      // Try to load completed credentials
-      const creds = loadCredentials();
-      if (creds && new Date(creds.refreshedAt) > new Date(startTime)) {
-        clearInterval(interval);
-        deletePendingDeviceAuth();
-        resolve(creds);
-        return;
-      }
+    if (data.status === "consumed" && data.accessToken && data.refreshToken) {
+      const now = new Date().toISOString();
+      return {
+        userId: data.userId ?? "",
+        email: data.email ?? "",
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+        expiresAt: data.expiresAt ?? now,
+        refreshedAt: now,
+      };
+    }
 
-      // Check timeout
-      if (Date.now() - startTime > timeoutMs) {
-        clearInterval(interval);
-        deletePendingDeviceAuth();
-        reject(new Error(`Device auth timeout after ${timeoutSeconds}s`));
-      }
-    }, pollIntervalMs);
+    if (data.status === "denied") {
+      throw new Error("Authorization was denied.");
+    }
+
+    if (data.status === "expired" || data.status === "not_found") {
+      throw new Error("Device code expired. Run 'jexxxus auth login' again.");
+    }
+
+    // status === "pending" (or transient "authorized" mid-consume) — keep polling
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+
+  throw new Error(`Timed out waiting for authorization after ${timeoutSeconds}s.`);
+}
+
+/**
+ * Refresh: exchange the stored refresh_token for a fresh access token via
+ * secure.jexxx.us. The server mints this server-side against the user's
+ * Clerk session — no browser interaction needed.
+ */
+export async function refreshAccessTokenViaServer(
+  refreshToken: string,
+): Promise<Credentials> {
+  const response = await fetch(`${getSecureBaseUrl()}/api/auth/cli/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refreshToken }),
   });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(
+      body?.error ?? `Token refresh failed (${response.status}). Run 'jexxxus auth login' again.`,
+    );
+  }
+
+  const data = (await response.json()) as TokenResponse;
+
+  return {
+    userId: data.userId,
+    email: data.email,
+    accessToken: data.accessToken,
+    refreshToken,
+    expiresAt: data.expiresAt,
+    refreshedAt: new Date().toISOString(),
+  };
 }
 
 /**

@@ -38,10 +38,14 @@ import { buildToolRegistry } from "./lib/blxckchat/tools/registry.js";
 import { runAgent } from "./lib/blxckchat/agent-loop.js";
 import {
   loadCredentials,
+  saveCredentials,
   deleteCredentials,
   ensureCredsDir,
   getTokenExpiryMinutes,
   promptYesNo,
+  startDeviceAuth,
+  pollDeviceAuth,
+  refreshAccessTokenViaServer,
 } from "./lib/auth.js";
 
 function printBanner(): void {
@@ -119,17 +123,40 @@ authCmd
   .action(async () => {
     try {
       ensureCredsDir();
-      console.log(
-        chalk.cyan(
-          "\n[AUTH] Starting device authorization flow...\n"
-        )
-      );
-      console.log(chalk.dim("This feature is coming in Phase 1 (July 2026)."));
-      console.log(chalk.dim("For now, use operator credentials via .env file.\n"));
+
+      const { userCode, codeVerifier, expiresIn, verificationUrl } =
+        await startDeviceAuth();
+
+      console.log(chalk.cyan("\n[AUTH] To authorize this CLI, visit:\n"));
+      console.log(`  ${chalk.bold.underline(verificationUrl)}\n`);
+      console.log(chalk.dim(`Confirm the code shown matches: ${chalk.bold(userCode)}`));
+      console.log(chalk.dim(`This code expires in ${Math.floor(expiresIn / 60)} minutes.\n`));
+
+      // Best-effort: try to open the default browser. Silently continue if
+      // this fails (e.g. headless/SSH session) — the printed URL still works.
+      try {
+        const { exec } = await import("child_process");
+        const openCommand =
+          process.platform === "darwin"
+            ? "open"
+            : process.platform === "win32"
+              ? "start"
+              : "xdg-open";
+        exec(`${openCommand} "${verificationUrl}"`);
+      } catch {
+        // ignore — user can open the link manually
+      }
+
+      console.log(chalk.dim("Waiting for authorization..."));
+
+      const credentials = await pollDeviceAuth(userCode, codeVerifier, expiresIn);
+      saveCredentials(credentials);
+
+      console.log(chalk.green(`\n[SUCCESS] Authenticated as ${credentials.email}.`));
       process.exit(0);
     } catch (err) {
       console.error(
-        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+        chalk.red(`\n[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
       );
       process.exit(1);
     }
@@ -208,8 +235,10 @@ authCmd
         process.exit(1);
       }
 
-      console.log(chalk.dim("Manual token refresh coming in Phase 1."));
-      console.log(chalk.dim("Tokens auto-refresh when < 5 minutes to expiry.\n"));
+      const refreshed = await refreshAccessTokenViaServer(creds.refreshToken);
+      saveCredentials(refreshed);
+
+      console.log(chalk.green(`[SUCCESS] Token refreshed for ${refreshed.email}.`));
       process.exit(0);
     } catch (err) {
       console.error(

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as http from "node:http";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -11,11 +12,57 @@ import {
   isTokenValid,
   shouldRefreshToken,
   getTokenExpiryMinutes,
-  savePendingDeviceAuth,
-  loadPendingDeviceAuth,
-  deletePendingDeviceAuth,
+  startDeviceAuth,
+  pollDeviceAuth,
+  refreshAccessTokenViaServer,
   type Credentials,
 } from "../lib/auth.js";
+
+/** Spins up a local HTTP server standing in for secure.jexxx.us, pointed at
+ * via JEXXXUS_SECURE_URL, so the device-auth HTTP functions can be tested
+ * without a real deployment or network access. */
+async function withMockSecureServer(
+  handler: (req: http.IncomingMessage, res: http.ServerResponse) => void,
+  fn: (baseUrl: string) => Promise<void>,
+): Promise<void> {
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      (req as http.IncomingMessage & { parsedBody?: unknown }).parsedBody =
+        body ? JSON.parse(body) : {};
+      handler(req, res);
+    });
+  });
+
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const address = server.address();
+  const port = typeof address === "object" && address ? address.port : 0;
+  const baseUrl = `http://127.0.0.1:${port}`;
+  const previousEnv = process.env.JEXXXUS_SECURE_URL;
+  process.env.JEXXXUS_SECURE_URL = baseUrl;
+
+  try {
+    await fn(baseUrl);
+  } finally {
+    if (previousEnv === undefined) {
+      delete process.env.JEXXXUS_SECURE_URL;
+    } else {
+      process.env.JEXXXUS_SECURE_URL = previousEnv;
+    }
+    // fetch()'s undici keep-alive sockets otherwise keep this connection
+    // open, and server.close() waits for existing connections to finish —
+    // without this, each test using the mock server pays Node's ~5s socket
+    // idle timeout on shutdown.
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
+  res.writeHead(status, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(body));
+}
 
 test("generateDeviceCode creates 8-char alphanumeric codes", () => {
   const code1 = generateDeviceCode();
@@ -118,57 +165,110 @@ test("getTokenExpiryMinutes calculates remaining time", () => {
   assert(minutes >= 4 && minutes <= 6);
 });
 
-test("savePendingDeviceAuth and loadPendingDeviceAuth round-trip", () => {
-  const testDir = path.join(os.tmpdir(), "jexxxus-test-auth");
-  if (!fs.existsSync(testDir)) {
-    fs.mkdirSync(testDir, { mode: 0o700, recursive: true });
-  }
-
-  const pendingPath = path.join(testDir, "pending.json");
-
-  try {
-    const verifier = generateCodeVerifier();
-    const pollSeconds = 30;
-
-    // Mock save/load by directly using the functions (they use real paths)
-    // For this test, we'll just verify the structure
-    const pending = { codeVerifier: verifier, pollUntil: new Date(Date.now() + pollSeconds * 1000).toISOString() };
-    fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2), { mode: 0o600 });
-
-    const loaded = JSON.parse(fs.readFileSync(pendingPath, "utf-8"));
-    assert.equal(loaded.codeVerifier, verifier);
-    assert.equal(loaded.codeVerifier.length, 128);
-  } finally {
-    if (fs.existsSync(pendingPath)) {
-      fs.unlinkSync(pendingPath);
-    }
-    if (fs.existsSync(testDir)) {
-      fs.rmdirSync(testDir);
-    }
-  }
+test("startDeviceAuth posts codeChallenge and returns a verificationUrl", async () => {
+  await withMockSecureServer(
+    (req, res) => {
+      const body = (req as http.IncomingMessage & { parsedBody: { codeChallenge?: string } })
+        .parsedBody;
+      assert.equal(req.url, "/api/auth/cli/device/start");
+      assert.ok(body.codeChallenge, "codeChallenge should be present");
+      sendJson(res, 200, { userCode: "ABCD1234", expiresIn: 300 });
+    },
+    async (baseUrl) => {
+      const result = await startDeviceAuth();
+      assert.equal(result.userCode, "ABCD1234");
+      assert.equal(result.expiresIn, 300);
+      assert.equal(result.verificationUrl, `${baseUrl}/auth/cli?code=ABCD1234`);
+      assert.equal(result.codeVerifier.length, 128);
+    },
+  );
 });
 
-test("deletePendingDeviceAuth removes file", () => {
-  const testDir = path.join(os.tmpdir(), "jexxxus-test-auth");
-  const pendingPath = path.join(testDir, "pending.json");
+test("pollDeviceAuth resolves credentials once status is consumed", async () => {
+  let callCount = 0;
+  await withMockSecureServer(
+    (_req, res) => {
+      callCount++;
+      if (callCount < 2) {
+        sendJson(res, 200, { status: "pending" });
+        return;
+      }
+      sendJson(res, 200, {
+        status: "consumed",
+        accessToken: "at_123",
+        refreshToken: "rt_456",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        userId: "user_abc",
+        email: "test@example.com",
+      });
+    },
+    async () => {
+      const creds = await pollDeviceAuth("ABCD1234", "verifier", 30, 10);
+      assert.equal(creds.accessToken, "at_123");
+      assert.equal(creds.refreshToken, "rt_456");
+      assert.equal(creds.userId, "user_abc");
+      assert.equal(creds.email, "test@example.com");
+      assert.equal(callCount, 2);
+    },
+  );
+});
 
-  try {
-    if (!fs.existsSync(testDir)) {
-      fs.mkdirSync(testDir, { mode: 0o700, recursive: true });
-    }
+test("pollDeviceAuth throws when the user denies authorization", async () => {
+  await withMockSecureServer(
+    (_req, res) => sendJson(res, 200, { status: "denied" }),
+    async () => {
+      await assert.rejects(
+        () => pollDeviceAuth("ABCD1234", "verifier", 30, 10),
+        /denied/i,
+      );
+    },
+  );
+});
 
-    const pending = { codeVerifier: "test", pollUntil: new Date().toISOString() };
-    fs.writeFileSync(pendingPath, JSON.stringify(pending, null, 2), { mode: 0o600 });
-    assert.equal(fs.existsSync(pendingPath), true);
+test("pollDeviceAuth throws when the device code expires", async () => {
+  await withMockSecureServer(
+    (_req, res) => sendJson(res, 200, { status: "expired" }),
+    async () => {
+      await assert.rejects(
+        () => pollDeviceAuth("ABCD1234", "verifier", 30, 10),
+        /expired/i,
+      );
+    },
+  );
+});
 
-    // Simulate deletion
-    fs.unlinkSync(pendingPath);
-    assert.equal(fs.existsSync(pendingPath), false);
-  } finally {
-    if (fs.existsSync(testDir)) {
-      fs.rmdirSync(testDir);
-    }
-  }
+test("refreshAccessTokenViaServer exchanges refreshToken for a fresh access token", async () => {
+  await withMockSecureServer(
+    (req, res) => {
+      const body = (req as http.IncomingMessage & { parsedBody: { refreshToken?: string } })
+        .parsedBody;
+      assert.equal(body.refreshToken, "rt_456");
+      sendJson(res, 200, {
+        accessToken: "at_new",
+        expiresAt: new Date(Date.now() + 3600000).toISOString(),
+        userId: "user_abc",
+        email: "test@example.com",
+      });
+    },
+    async () => {
+      const creds = await refreshAccessTokenViaServer("rt_456");
+      assert.equal(creds.accessToken, "at_new");
+      assert.equal(creds.refreshToken, "rt_456");
+      assert.equal(creds.userId, "user_abc");
+    },
+  );
+});
+
+test("refreshAccessTokenViaServer throws on server error", async () => {
+  await withMockSecureServer(
+    (_req, res) => sendJson(res, 401, { error: "Invalid refresh token" }),
+    async () => {
+      await assert.rejects(
+        () => refreshAccessTokenViaServer("bad_token"),
+        /Invalid refresh token/,
+      );
+    },
+  );
 });
 
 test("credential file permissions are 0600", () => {
