@@ -33,9 +33,14 @@ function printBanner(): void {
   console.log(
     gradient(["#FF1A8C", "#FFB6C1", "#E11D8A", "#FF69B4"])(jexxxusArt),
   );
+  const welcomeMessages = [
+    "Welcome to the kingdom.",
+    "Welcome to the garden.",
+  ];
+  const randomMessage = welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
   console.log(
     gradient(["#FF1A8C", "#FFB6C1"])(
-      "                            Welcome to the Vault.\n",
+      `                            ${randomMessage}\n`,
     ),
   );
 }
