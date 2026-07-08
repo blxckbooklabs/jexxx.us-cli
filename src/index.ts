@@ -63,6 +63,11 @@ program
     printBanner();
   });
 
+// Show banner before displaying help when no command is given
+if (process.argv.length < 3) {
+  printBanner();
+}
+
 const doctorCmd = program
   .command("doctor")
   .description(
