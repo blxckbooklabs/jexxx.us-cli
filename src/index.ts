@@ -10,6 +10,11 @@ import { parseCsvFile, rowsToContacts } from "./lib/csv.js";
 import { runDoctorFromEnv } from "./lib/doctor.js";
 import { loadOperatorEnv } from "./lib/env.js";
 import { getImportOwnerError } from "./lib/guards.js";
+import {
+  createNotificationsClient,
+  sendSystemNotification,
+  type NotificationType,
+} from "./lib/notifications.js";
 import { createOperatorClient } from "./lib/supabase.js";
 import type { DashboardTarget } from "./lib/supabase.js";
 
@@ -162,6 +167,64 @@ program
     }
 
     process.exit(1);
+  });
+
+program
+  .command("notify")
+  .description(
+    "Push a system notification into a user's bell in either dashboard (Realtime, no refresh needed)",
+  )
+  .requiredOption("-u, --user <clerkUserId>", "Recipient's Clerk user id")
+  .requiredOption("-m, --message <text>", "Notification message")
+  .option(
+    "-y, --type <type>",
+    "Notification type: info (default), success, warning, or error",
+    "info",
+  )
+  .action(async (options: { user: string; message: string; type: string }) => {
+    const validTypes: NotificationType[] = [
+      "info",
+      "success",
+      "warning",
+      "error",
+    ];
+    if (!validTypes.includes(options.type as NotificationType)) {
+      console.error(
+        chalk.red(
+          `[ERROR] --type must be one of: ${validTypes.join(", ")}`,
+        ),
+      );
+      process.exit(1);
+    }
+
+    const env = loadOperatorEnv();
+    if (!env) {
+      console.error(
+        chalk.red(
+          "[ERROR] Missing operator credentials. Copy .env.example to .env and configure locally.",
+        ),
+      );
+      process.exit(1);
+    }
+
+    const client = createNotificationsClient(env);
+    const result = await sendSystemNotification(client, {
+      recipientUserId: options.user,
+      message: options.message,
+      type: options.type as NotificationType,
+    });
+
+    if (!result.ok) {
+      console.error(chalk.red(`[ERROR] ${result.error}`));
+      process.exit(1);
+    }
+
+    console.log(
+      chalk.green(
+        `[SUCCESS] Notification sent to ${options.user} (visible in both dashboards).`,
+      ),
+    );
+    process.exit(0);
   });
 
 program.parseAsync().catch((err: unknown) => {
