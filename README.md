@@ -14,8 +14,9 @@ The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not
 | ------------------- | ------------------------------------------------------------------------------ |
 | **BLXCKBOOK**       | Primary consumer (default `--target`) — CSV bulk import into `api.contacts`    |
 | **NXT.spread**      | Secondary consumer (`--target nxt`) — CSV bulk import into `public.vessels`    |
+| **bible.jexxx.us**  | Bible vault read-only — verse/chapter/book/section lookup from local vault     |
 | **Docs**            | Public mirror — [docs.jexxx.us/jexxxus-cli](https://docs.jexxx.us/jexxxus-cli) |
-| **Obsidian**        | Canonical operator runbook — `jexxx.us-obsidian/CLI/`                          |
+| **Obsidian**        | Canonical operator runbook + Bible source — `jexxx.us-obsidian/CLI/`           |
 | **VEIL / TV / Law** | No runtime dependency                                                          |
 | **MAMAbase**        | Writes via operator credentials (`api` or `public` schema based on `--target`) |
 
@@ -27,6 +28,8 @@ The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not
 | ----------------------- | ------------------------------------------------------ |
 | `jexxxus doctor`        | Verify `.env` credentials + probe target schema(s)     |
 | `jexxxus import <file>` | Bulk import CSV contacts/vessels into target dashboard |
+| `jexxxus notify`        | Push a system notification to a user's dashboard bell  |
+| `jexxxus bible`         | Query the Obsidian Bible vault (verse/chapter/book)    |
 
 ---
 
@@ -45,17 +48,45 @@ npm link   # optional — global `jexxxus` command
 ```bash
 cp .env.example .env
 # Fill from managed operator secret storage — never commit .env
+
+# Optional: Set Bible vault path (defaults to local checkout path)
+# export BIBLE_VAULT_PATH="/path/to/obsidian-bible"
 ```
+
+**Bible Vault Setup:** The `jexxxus bible` commands require local access to the `obsidian-bible` vault. Clone it from `git@github.com:blxckbooklabs/bible-obsidian.git` or set `BIBLE_VAULT_PATH` to an existing checkout.
 
 ---
 
 ## Usage
+
+### Dashboard Management
 
 ```bash
 jexxxus doctor
 jexxxus doctor --target nxt
 jexxxus import path/to/contacts.csv --user <clerk_user_id>
 jexxxus import path/to/contacts.csv --target nxt --user <clerk_user_id>
+jexxxus notify -u <clerk_user_id> -m "Your tier unlocked!" -y success
+```
+
+### Bible Lookup
+
+```bash
+# List all major sections
+jexxxus bible section
+
+# List books in a section
+jexxxus bible book 01-Torah
+
+# List chapters in a book
+jexxxus bible chapter 01-Torah 01-Genesis
+
+# Get a specific verse
+jexxxus bible verse Genesis 1 1
+
+# Query by natural format
+jexxxus bible query "Genesis 1:1"
+jexxxus bible query "John 3 16"
 ```
 
 ### Import flags
