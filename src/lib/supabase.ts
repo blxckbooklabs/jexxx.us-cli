@@ -15,7 +15,7 @@ export function createOperatorClient(
 ): SupabaseClient {
   return createClient(env.supabaseUrl, env.supabaseKey, {
     db: { schema: SCHEMA_MAP[target] },
-  });
+  }) as SupabaseClient;
 }
 
 export function createEcosystemClient(env: OperatorEnv): {

@@ -237,141 +237,141 @@ program
     process.exit(0);
   });
 
-program
+const bibleCmd = program
   .command("bible")
-  .description("Query the Obsidian Bible vault (verses, chapters, books, sections)")
-  .addCommand(
-    new Command("section")
-      .description("List all major sections (Torah, Historical, Poetic, etc.)")
-      .action(() => {
-        try {
-          const sections = getBibleSections();
-          console.log(chalk.green("[Bible Sections]"));
-          sections.forEach((section) => {
-            const cleanName = section.replace(/^\d{2}-/, "");
-            console.log(`  • ${cleanName} (${section})`);
-          });
-          process.exit(0);
-        } catch (err) {
-          console.error(
-            chalk.red(
-              `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
-            )
-          );
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command("book <section>")
-      .description("List all books in a section")
-      .action((section: string) => {
-        try {
-          const books = getBibleBooks(section);
-          console.log(chalk.green(`[Books in ${section}]`));
-          books.forEach((book) => {
-            const cleanName = book.replace(/^\d{2}-/, "");
-            console.log(`  • ${cleanName}`);
-          });
-          process.exit(0);
-        } catch (err) {
-          console.error(
-            chalk.red(
-              `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
-            )
-          );
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command("chapter <section> <book>")
-      .description("List all chapters in a book")
-      .action((section: string, book: string) => {
-        try {
-          const chapters = getBibleChapters(section, book);
-          console.log(chalk.green(`[Chapters in ${book}]`));
-          chapters.forEach((ch) => {
-            const chNum = ch.replace("Chapter ", "");
-            console.log(`  • Chapter ${chNum}`);
-          });
-          process.exit(0);
-        } catch (err) {
-          console.error(
-            chalk.red(
-              `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
-            )
-          );
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command("verse <book> <chapter> <verse>")
-      .description("Get a specific verse (e.g., Genesis 1 1)")
-      .action((book: string, chapter: string, verse: string) => {
-        try {
-          const bookInfo = findBook(book);
-          if (!bookInfo) {
-            console.error(chalk.red(`[ERROR] Book not found: ${book}`));
-            process.exit(1);
-          }
-          const verseData = getVerse(
-            bookInfo.section,
-            bookInfo.book,
-            `Chapter ${chapter}`,
-            `${chapter}-${verse}.md`
-          );
-          console.log(chalk.blue(`${book} ${chapter}:${verse}`));
-          console.log(chalk.dim("─".repeat(60)));
-          console.log(verseData.text);
-          console.log(chalk.dim("─".repeat(60)));
-          if (verseData.canon) {
-            console.log(chalk.gray(`Canon: ${verseData.canon}`));
-          }
-          process.exit(0);
-        } catch (err) {
-          console.error(
-            chalk.red(
-              `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
-            )
-          );
-          process.exit(1);
-        }
-      })
-  )
-  .addCommand(
-    new Command("query <query>")
-      .description("Query a verse (e.g., \"Genesis 1:1\" or \"John 3 16\")")
-      .action((query: string) => {
-        try {
-          const verseData = findVerse(query);
-          if (!verseData) {
-            console.error(chalk.red(`[ERROR] Verse not found: ${query}`));
-            process.exit(1);
-          }
-          console.log(
-            chalk.blue(
-              `${verseData.book} ${verseData.chapter}:${verseData.verse}`
-            )
-          );
-          console.log(chalk.dim("─".repeat(60)));
-          console.log(verseData.text);
-          console.log(chalk.dim("─".repeat(60)));
-          if (verseData.canon) {
-            console.log(chalk.gray(`Canon: ${verseData.canon}`));
-          }
-          process.exit(0);
-        } catch (err) {
-          console.error(
-            chalk.red(
-              `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
-            )
-          );
-          process.exit(1);
-        }
-      })
-  );
+  .description("Query the Obsidian Bible vault (verses, chapters, books, sections)");
+
+bibleCmd
+  .command("section")
+  .description("List all major sections (Torah, Historical, Poetic, etc.)")
+  .action(() => {
+    try {
+      const sections = getBibleSections();
+      console.log(chalk.green("[Bible Sections]"));
+      sections.forEach((section) => {
+        const cleanName = section.replace(/^\d{2}-/, "");
+        console.log(`  • ${cleanName} (${section})`);
+      });
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(
+          `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+        )
+      );
+      process.exit(1);
+    }
+  });
+
+bibleCmd
+  .command("book <section>")
+  .description("List all books in a section")
+  .action((section: string) => {
+    try {
+      const books = getBibleBooks(section);
+      console.log(chalk.green(`[Books in ${section}]`));
+      books.forEach((book) => {
+        const cleanName = book.replace(/^\d{2}-/, "");
+        console.log(`  • ${cleanName}`);
+      });
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(
+          `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+        )
+      );
+      process.exit(1);
+    }
+  });
+
+bibleCmd
+  .command("chapter <section> <book>")
+  .description("List all chapters in a book")
+  .action((section: string, book: string) => {
+    try {
+      const chapters = getBibleChapters(section, book);
+      console.log(chalk.green(`[Chapters in ${book}]`));
+      chapters.forEach((ch) => {
+        const chNum = ch.replace("Chapter ", "");
+        console.log(`  • Chapter ${chNum}`);
+      });
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(
+          `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+        )
+      );
+      process.exit(1);
+    }
+  });
+
+bibleCmd
+  .command("verse <book> <chapter> <verse>")
+  .description("Get a specific verse (e.g., Genesis 1 1)")
+  .action((book: string, chapter: string, verse: string) => {
+    try {
+      const bookInfo = findBook(book);
+      if (!bookInfo) {
+        console.error(chalk.red(`[ERROR] Book not found: ${book}`));
+        process.exit(1);
+      }
+      const verseData = getVerse(
+        bookInfo.section,
+        bookInfo.book,
+        `Chapter ${chapter}`,
+        `${chapter}-${verse}.md`
+      );
+      console.log(chalk.blue(`${book} ${chapter}:${verse}`));
+      console.log(chalk.dim("─".repeat(60)));
+      console.log(verseData.text);
+      console.log(chalk.dim("─".repeat(60)));
+      if (verseData.canon) {
+        console.log(chalk.gray(`Canon: ${verseData.canon}`));
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(
+          `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+        )
+      );
+      process.exit(1);
+    }
+  });
+
+bibleCmd
+  .command("query <query>")
+  .description("Query a verse (e.g., \"Genesis 1:1\" or \"John 3 16\")")
+  .action((query: string) => {
+    try {
+      const verseData = findVerse(query);
+      if (!verseData) {
+        console.error(chalk.red(`[ERROR] Verse not found: ${query}`));
+        process.exit(1);
+      }
+      console.log(
+        chalk.blue(
+          `${verseData.book} ${verseData.chapter}:${verseData.verse}`
+        )
+      );
+      console.log(chalk.dim("─".repeat(60)));
+      console.log(verseData.text);
+      console.log(chalk.dim("─".repeat(60)));
+      if (verseData.canon) {
+        console.log(chalk.gray(`Canon: ${verseData.canon}`));
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(
+          `[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`
+        )
+      );
+      process.exit(1);
+    }
+  });
 
 program.parseAsync().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : "Unexpected CLI failure";
