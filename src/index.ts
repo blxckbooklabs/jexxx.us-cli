@@ -36,6 +36,13 @@ import {
 import { resolveProvider } from "./lib/blxckchat/providers/registry.js";
 import { buildToolRegistry } from "./lib/blxckchat/tools/registry.js";
 import { runAgent } from "./lib/blxckchat/agent-loop.js";
+import {
+  loadCredentials,
+  deleteCredentials,
+  ensureCredsDir,
+  getTokenExpiryMinutes,
+  promptYesNo,
+} from "./lib/auth.js";
 
 function printBanner(): void {
   const jexxxusArt = figlet.textSync("JEXXXUS", { font: "Slant" });
@@ -100,6 +107,116 @@ const doctorCmd = program
     }
 
     process.exit(report.ok ? 0 : 1);
+  });
+
+const authCmd = program
+  .command("auth")
+  .description("Manage CLI authentication (Clerk device flow)");
+
+authCmd
+  .command("login")
+  .description("Authenticate CLI via Clerk (device authorization flow)")
+  .action(async () => {
+    try {
+      ensureCredsDir();
+      console.log(
+        chalk.cyan(
+          "\n[AUTH] Starting device authorization flow...\n"
+        )
+      );
+      console.log(chalk.dim("This feature is coming in Phase 1 (July 2026)."));
+      console.log(chalk.dim("For now, use operator credentials via .env file.\n"));
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+      );
+      process.exit(1);
+    }
+  });
+
+authCmd
+  .command("status")
+  .description("Show current authentication status")
+  .action(() => {
+    try {
+      const creds = loadCredentials();
+      if (!creds) {
+        console.log(chalk.yellow("[AUTH] Not authenticated. Run: jexxxus auth login"));
+        process.exit(0);
+      }
+
+      const expiryMinutes = getTokenExpiryMinutes(creds);
+      const expiryStatus = expiryMinutes < 0
+        ? chalk.red("EXPIRED")
+        : expiryMinutes < 5
+          ? chalk.yellow(`${Math.floor(expiryMinutes)}m remaining`)
+          : chalk.green(`${Math.floor(expiryMinutes)}m remaining`);
+
+      console.log(chalk.green("[AUTH] Authenticated"));
+      console.log(`  Email: ${creds.email}`);
+      console.log(`  User ID: ${creds.userId}`);
+      console.log(`  Token expires: ${expiryStatus}`);
+      console.log(`  Last refreshed: ${new Date(creds.refreshedAt).toLocaleString()}`);
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+      );
+      process.exit(1);
+    }
+  });
+
+authCmd
+  .command("logout")
+  .description("Revoke CLI authentication (delete stored credentials)")
+  .action(async () => {
+    try {
+      const creds = loadCredentials();
+      if (!creds) {
+        console.log(chalk.yellow("[AUTH] Not authenticated."));
+        process.exit(0);
+      }
+
+      const confirmed = await promptYesNo(
+        chalk.yellow("Revoke authentication and delete stored credentials?")
+      );
+      if (!confirmed) {
+        console.log(chalk.dim("Cancelled."));
+        process.exit(0);
+      }
+
+      deleteCredentials();
+      console.log(chalk.green("[AUTH] Credentials deleted. Run 'jexxxus auth login' to re-authenticate."));
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+      );
+      process.exit(1);
+    }
+  });
+
+authCmd
+  .command("refresh")
+  .description("Manually refresh access token")
+  .action(async () => {
+    try {
+      const creds = loadCredentials();
+      if (!creds) {
+        console.error(chalk.red("[ERROR] Not authenticated. Run: jexxxus auth login"));
+        process.exit(1);
+      }
+
+      console.log(chalk.dim("Manual token refresh coming in Phase 1."));
+      console.log(chalk.dim("Tokens auto-refresh when < 5 minutes to expiry.\n"));
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+      );
+      process.exit(1);
+    }
   });
 
 program
