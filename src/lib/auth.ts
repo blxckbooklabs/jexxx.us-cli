@@ -241,7 +241,8 @@ interface TokenResponse {
 /**
  * Step 1 of `jexxxus auth login`: register a new device session with
  * secure.jexxx.us. Sends only the PKCE code_challenge — the code_verifier
- * this function generates stays local until poll time.
+ * this function generates stays local until poll time. Returns the URL
+ * without the code — user enters code manually on the page for security.
  */
 export async function startDeviceAuth(): Promise<{
   userCode: string;
@@ -269,7 +270,7 @@ export async function startDeviceAuth(): Promise<{
     userCode: data.userCode,
     codeVerifier,
     expiresIn: data.expiresIn,
-    verificationUrl: `${getSecureBaseUrl()}/auth/cli?code=${data.userCode}`,
+    verificationUrl: `${getSecureBaseUrl()}/auth/cli`,
   };
 }
 

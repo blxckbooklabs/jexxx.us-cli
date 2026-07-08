@@ -127,10 +127,10 @@ authCmd
       const { userCode, codeVerifier, expiresIn, verificationUrl } =
         await startDeviceAuth();
 
-      console.log(chalk.cyan("\n[AUTH] To authorize this CLI, visit:\n"));
-      console.log(`  ${chalk.bold.underline(verificationUrl)}\n`);
-      console.log(chalk.dim(`Confirm the code shown matches: ${chalk.bold(userCode)}`));
-      console.log(chalk.dim(`This code expires in ${Math.floor(expiresIn / 60)} minutes.\n`));
+      console.log(chalk.cyan("\n[AUTH] To authorize this CLI:\n"));
+      console.log(`Visit:   ${chalk.bold.underline(verificationUrl)}`);
+      console.log(`Enter:   ${chalk.bold.bgMagenta.black(` ${userCode} `)}`);
+      console.log(chalk.dim(`Expires: ${Math.floor(expiresIn / 60)} minutes\n`));
 
       // Best-effort: try to open the default browser. Silently continue if
       // this fails (e.g. headless/SSH session) — the printed URL still works.
