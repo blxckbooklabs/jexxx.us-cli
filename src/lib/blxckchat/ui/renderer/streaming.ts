@@ -1,4 +1,4 @@
-import { markdownToAnsi, STREAM_CURSOR } from "./markdown-ansi.js";
+import { BLESSED_STREAM_CURSOR, markdownToBlessed } from "./markdown.js";
 
 /** Accumulates streamed tokens for incremental UI updates. */
 export class StreamBuffer {
@@ -23,18 +23,18 @@ export class StreamBuffer {
 }
 
 /**
- * Format a partial stream buffer for live display.
- * Incremental markdown → ANSI (Pi / OpenCode) so blessed wrap stays readable.
+ * Format a partial stream buffer for live display in the blessed TUI.
+ * Uses blessed tags — not ANSI — so wrap width stays correct.
  */
 export function formatStreamingChunk(buffer: string): string {
   if (!buffer.trim()) {
-    return STREAM_CURSOR;
+    return BLESSED_STREAM_CURSOR;
   }
-  const rendered = markdownToAnsi(buffer);
+  const rendered = markdownToBlessed(buffer);
   if (!rendered) {
-    return `${buffer.trimEnd()}\n${STREAM_CURSOR}`;
+    return `${buffer.trimEnd()}\n${BLESSED_STREAM_CURSOR}`;
   }
-  return `${rendered}${STREAM_CURSOR}`;
+  return `${rendered}${BLESSED_STREAM_CURSOR}`;
 }
 
 /** Finalize streamed assistant text with markdown rendering. */
@@ -42,7 +42,7 @@ export function finalizeStreamedContent(raw: string): string {
   if (!raw.trim()) {
     return "";
   }
-  return markdownToAnsi(raw);
+  return markdownToBlessed(raw);
 }
 
 /**

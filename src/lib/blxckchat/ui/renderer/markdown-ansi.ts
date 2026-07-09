@@ -34,7 +34,7 @@ export function normalizeAgentMarkup(text: string): string {
 }
 
 /** Pi-style: trim partial closing fences so streamed code blocks do not flicker. */
-function trimPartialClosingFences(tokens: readonly Token[]): void {
+export function trimPartialClosingFences(tokens: readonly Token[]): void {
   const token = tokens[tokens.length - 1];
   if (!token) return;
 

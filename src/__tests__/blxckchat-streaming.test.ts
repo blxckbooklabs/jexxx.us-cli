@@ -29,16 +29,16 @@ test("formatStreamingChunk appends cursor to partial text", () => {
 
 test("formatStreamingChunk renders incremental markdown during stream", () => {
   const out = formatStreamingChunk("**Hello**");
-  assert.match(out, /\x1b\[/);
-  assert.match(out, /Hello/);
+  assert.match(out, /\{bold\}Hello\{\/bold\}/);
   assert.match(out, /▌/);
+  assert.doesNotMatch(out, /\x1b\[/);
 });
 
-test("finalizeStreamedContent applies markdown rendering", () => {
+test("finalizeStreamedContent applies blessed markdown rendering", () => {
   const out = finalizeStreamedContent("**done**");
-  assert.match(out, /\x1b\[/);
-  assert.match(out, /done/);
+  assert.match(out, /\{bold\}done\{\/bold\}/);
   assert.doesNotMatch(out, /\*\*done\*\*/);
+  assert.doesNotMatch(out, /\x1b\[/);
 });
 
 test("streamTokens invokes onUpdate for each chunk and finalizes", async () => {

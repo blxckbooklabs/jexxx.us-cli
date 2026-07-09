@@ -1,8 +1,32 @@
 import { marked, type Token, type Tokens } from "marked";
 
+import { normalizeAgentMarkup, trimPartialClosingFences } from "./markdown-ansi.js";
+import { TAG } from "../theme.js";
+
+/** Pink streaming cursor for blessed TUI (ANSI breaks blessed wrap). */
+export const BLESSED_STREAM_CURSOR = `${TAG.pink}{bold}▌{/bold}${TAG.pinkEnd}`;
+
 /** Escape blessed tag delimiters in plain text segments. */
 export function escapeBlessed(text: string): string {
   return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
+}
+
+function renderListItem(tokens: Token[]): string {
+  const parts: string[] = [];
+  for (const token of tokens) {
+    if (token.type === "paragraph") {
+      parts.push(renderInline((token as Tokens.Paragraph).tokens));
+    } else if (token.type === "text") {
+      const t = token as Tokens.Text;
+      parts.push(t.tokens ? renderInline(t.tokens) : escapeBlessed(t.text));
+    } else if (token.type === "list") {
+      parts.push(`\n${renderBlock(token).trimEnd()}`);
+    } else {
+      const block = renderBlock(token).trim();
+      if (block) parts.push(block);
+    }
+  }
+  return parts.join(" ").replace(/\s+/g, " ").trim();
 }
 
 function renderInline(tokens: Token[] | undefined): string {
@@ -59,7 +83,11 @@ function renderBlock(token: Token): string {
     case "list": {
       const t = token as Tokens.List;
       return t.items
-        .map((item) => `  • ${renderBlocks(item.tokens).trim()}\n`)
+        .map((item) => {
+          const body = renderListItem(item.tokens);
+          if (!body) return "";
+          return `  {gray-fg}•{/gray-fg} ${body}\n`;
+        })
         .join("");
     }
     case "hr":
@@ -80,8 +108,18 @@ function renderBlocks(tokens: Token[]): string {
  * Code blocks render in a gray bordered box; links show as `label [url]`.
  */
 export function markdownToBlessed(markdown: string): string {
-  const tokens = marked.lexer(markdown, { gfm: true, breaks: true });
-  return renderBlocks(tokens).trimEnd();
+  const normalized = normalizeAgentMarkup(markdown.trim());
+  if (!normalized) return "";
+
+  const tokens = marked.lexer(normalized, { gfm: true, breaks: true });
+  trimPartialClosingFences(tokens);
+  const body = renderBlocks(tokens).trimEnd();
+  if (!body) return "";
+
+  return body
+    .split("\n")
+    .map((line) => (line.length > 0 ? `  ${line}` : line))
+    .join("\n");
 }
 
 /** Render a user message — Pi-style compact pill (plain text). */
