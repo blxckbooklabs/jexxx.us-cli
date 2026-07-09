@@ -17,6 +17,16 @@ const STATUS_COLORS: Record<ToolStatus, string> = {
   blocked: "red-fg",
 };
 
+export function formatToolLinePlain(
+  toolName: string,
+  result: string,
+  status: ToolStatus,
+): string {
+  const icon = STATUS_ICONS[status];
+  const label = status === "pending" ? "Running..." : result;
+  return `[${icon} Tool: ${toolName}] ${label}\n`;
+}
+
 export function formatToolLine(toolName: string, result: string, status: ToolStatus): string {
   const icon = STATUS_ICONS[status];
   const color = STATUS_COLORS[status];
@@ -30,4 +40,10 @@ export function formatToolResult(entry: ToolResult): string {
 
 export function formatToolResults(entries: ToolResult[]): string {
   return entries.map(formatToolResult).join("");
+}
+
+export function formatToolResultsPlain(entries: ToolResult[]): string {
+  return entries
+    .map((e) => formatToolLinePlain(e.toolName, e.result, e.status))
+    .join("");
 }

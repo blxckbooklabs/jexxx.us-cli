@@ -5,11 +5,17 @@ export interface InputBoxHandle {
   focus: () => void;
   clear: () => void;
   getHistory: () => string[];
+  getPlainText: () => string;
+}
+
+export interface InputBoxOptions {
+  onUpdate?: () => void;
 }
 
 export function createInputBox(
   screen: blessed.Widgets.Screen,
   onSubmit: (line: string) => void,
+  options: InputBoxOptions = {},
 ): InputBoxHandle {
   const history: string[] = [];
   let historyIndex = -1;
@@ -36,6 +42,10 @@ export function createInputBox(
     vi: false,
   });
 
+  const notify = (): void => {
+    options.onUpdate?.();
+  };
+
   input.on("submit", (value: string) => {
     const trimmed = value.trim();
     if (trimmed) {
@@ -46,6 +56,11 @@ export function createInputBox(
     input.clearValue();
     onSubmit(trimmed);
     input.focus();
+    notify();
+  });
+
+  input.on("keypress", () => {
+    notify();
   });
 
   input.key("up", () => {
@@ -57,6 +72,7 @@ export function createInputBox(
       historyIndex--;
       input.setValue(history[historyIndex] ?? "");
       screen.render();
+      notify();
     }
   });
 
@@ -70,7 +86,15 @@ export function createInputBox(
       input.setValue(draft);
     }
     screen.render();
+    notify();
   });
+
+  const getPlainText = (): string => {
+    const cols = Math.max(40, screen.width as number);
+    const value = input.getValue();
+    const border = "─".repeat(Math.max(10, cols - 2));
+    return [`┌${border}┐`, `│ > ${value}_`, `└${border}┘`].join("\n");
+  };
 
   return {
     element: input,
@@ -81,9 +105,11 @@ export function createInputBox(
       input.clearValue();
       draft = "";
       historyIndex = history.length;
+      notify();
     },
     getHistory() {
       return [...history];
     },
+    getPlainText,
   };
 }

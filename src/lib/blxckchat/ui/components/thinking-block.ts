@@ -36,6 +36,23 @@ export function extractThinkingBlocks(content: string): ParsedThinking {
   };
 }
 
+export function formatThinkingBlockPlain(block: ThinkingBlock): string {
+  const indicator = block.collapsed ? "▶" : "▼";
+  const label = `[${indicator} Thinking]`;
+  if (block.collapsed) {
+    const preview =
+      block.content.length > 80
+        ? `${block.content.slice(0, 77)}…`
+        : block.content;
+    return `${label} (${block.content.length} chars) ${preview}\n`;
+  }
+  const body = block.content
+    .split("\n")
+    .map((line) => `  ${line}`)
+    .join("\n");
+  return `${label}\n${body}\n`;
+}
+
 export function formatThinkingBlock(block: ThinkingBlock): string {
   const indicator = block.collapsed ? "▶" : "▼";
   const label = `{gray-fg}[${indicator} Thinking]{/gray-fg}`;

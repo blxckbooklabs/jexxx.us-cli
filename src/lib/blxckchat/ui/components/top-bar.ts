@@ -3,9 +3,17 @@ import blessed from "blessed";
 export interface TopBarHandle {
   element: blessed.Widgets.BoxElement;
   setSubtitle: (text: string) => void;
+  getPlainText: () => string;
 }
 
-export function createTopBar(screen: blessed.Widgets.Screen): TopBarHandle {
+export interface TopBarOptions {
+  onUpdate?: () => void;
+}
+
+export function createTopBar(
+  screen: blessed.Widgets.Screen,
+  options: TopBarOptions = {},
+): TopBarHandle {
   let subtitle = "Welcome to the kingdom.";
 
   const bar = blessed.box({
@@ -23,6 +31,14 @@ export function createTopBar(screen: blessed.Widgets.Screen): TopBarHandle {
     content: "",
   });
 
+  const getPlainText = (): string => {
+    const cols = screen.width as number;
+    const closeHint = cols > 50 ? "  ✕" : "";
+    const title = `BLXCKCHAT — ${subtitle}`;
+    const pad = Math.max(1, cols - title.length - closeHint.length);
+    return `${title}${" ".repeat(pad)}${closeHint}`;
+  };
+
   const render = (): void => {
     const cols = screen.width as number;
     const closeHint = cols > 50 ? "  ✕" : "";
@@ -30,6 +46,7 @@ export function createTopBar(screen: blessed.Widgets.Screen): TopBarHandle {
     const pad = Math.max(1, cols - title.replace(/\{[^}]+\}/g, "").length - closeHint.length);
     bar.setContent(`${title}${" ".repeat(pad)}${closeHint}`);
     screen.render();
+    options.onUpdate?.();
   };
 
   render();
@@ -40,5 +57,6 @@ export function createTopBar(screen: blessed.Widgets.Screen): TopBarHandle {
       subtitle = text;
       render();
     },
+    getPlainText,
   };
 }

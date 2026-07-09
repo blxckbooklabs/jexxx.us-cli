@@ -3,11 +3,19 @@ import blessed from "blessed";
 export interface StatusBarHandle {
   element: blessed.Widgets.BoxElement;
   setMessage: (text: string) => void;
+  getPlainText: () => string;
 }
 
-export function createStatusBar(screen: blessed.Widgets.Screen): StatusBarHandle {
+export interface StatusBarOptions {
+  onUpdate?: () => void;
+}
+
+export function createStatusBar(
+  screen: blessed.Widgets.Screen,
+  options: StatusBarOptions = {},
+): StatusBarHandle {
   let message =
-    "Ctrl+C/Q/Esc exit · ↑↓ scroll/history · Space toggle thinking · Ctrl+S save";
+    "Ctrl+C/Q/Esc exit · ↑↓ scroll/history · Space toggle thinking · Ctrl+S save · Ctrl+Y copy";
 
   const bar = blessed.box({
     parent: screen,
@@ -26,6 +34,7 @@ export function createStatusBar(screen: blessed.Widgets.Screen): StatusBarHandle
   const render = (): void => {
     bar.setContent(`{gray-fg}${message}{/gray-fg}`);
     screen.render();
+    options.onUpdate?.();
   };
 
   render();
@@ -35,6 +44,9 @@ export function createStatusBar(screen: blessed.Widgets.Screen): StatusBarHandle
     setMessage(text: string) {
       message = text;
       render();
+    },
+    getPlainText() {
+      return message;
     },
   };
 }

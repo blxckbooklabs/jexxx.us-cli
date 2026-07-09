@@ -1,24 +1,28 @@
 import blessed from "blessed";
 
 import type { ThinkingBlock } from "../session/session-store.js";
-import { formatThinkingBlock } from "./thinking-block.js";
+import { formatThinkingBlock, formatThinkingBlockPlain } from "./thinking-block.js";
 import { markdownToBlessed } from "../renderer/markdown.js";
-import { renderUserMessageBox } from "../renderer/markdown.js";
-import { formatToolResults } from "./tool-box.js";
+import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/markdown.js";
+import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult } from "../session/session-store.js";
+import { wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
 
 export interface MessageBlock {
   type: "welcome" | "user" | "assistant" | "tool" | "error" | "system";
   content: string;
   thinkingBlocks?: ThinkingBlock[];
+  /** Raw assistant text for plain-text snapshot (pre-markdown). */
+  assistantRaw?: string;
+  toolEntries?: ToolResult[];
 }
 
 export interface MessageBoxHandle {
   element: blessed.Widgets.BoxElement;
-  appendWelcome: (content: string) => void;
+  appendWelcome: (plainContent: string) => void;
   appendUser: (text: string) => void;
   appendAssistantStart: () => number;
-  updateAssistantStream: (blockIndex: number, partial: string) => void;
+  updateAssistantStream: (blockIndex: number, partial: string, rawPlain?: string) => void;
   finalizeAssistant: (
     blockIndex: number,
     content: string,
@@ -32,10 +36,18 @@ export interface MessageBoxHandle {
   scrollToBottom: () => void;
   getThinkingBlocks: () => ThinkingBlock[];
   toggleFocusedThinking: () => void;
+  getPlainText: () => string;
   rebuild: () => void;
 }
 
-export function createMessageBox(screen: blessed.Widgets.Screen): MessageBoxHandle {
+export interface MessageBoxOptions {
+  onUpdate?: () => void;
+}
+
+export function createMessageBox(
+  screen: blessed.Widgets.Screen,
+  options: MessageBoxOptions = {},
+): MessageBoxHandle {
   const blocks: MessageBlock[] = [];
   let focusedThinkingIndex: number | null = null;
 
@@ -65,14 +77,14 @@ export function createMessageBox(screen: blessed.Widgets.Screen): MessageBoxHand
   const allThinkingBlocks = (): ThinkingBlock[] =>
     blocks.flatMap((b) => b.thinkingBlocks ?? []);
 
-  const renderContent = (): string => {
+  const renderBlessedContent = (): string => {
     const parts: string[] = [];
     let thinkIdx = 0;
 
     for (const block of blocks) {
       switch (block.type) {
         case "welcome":
-          parts.push(block.content);
+          parts.push(wrapWelcomeBannerBlessed(block.content));
           break;
         case "user":
           parts.push(renderUserMessageBox(block.content));
@@ -105,16 +117,61 @@ export function createMessageBox(screen: blessed.Widgets.Screen): MessageBoxHand
     return parts.join("\n");
   };
 
+  const renderPlainContent = (): string => {
+    const parts: string[] = [];
+
+    for (const block of blocks) {
+      switch (block.type) {
+        case "welcome":
+          parts.push(block.content);
+          break;
+        case "user":
+          parts.push(renderUserMessageBoxPlain(block.content));
+          break;
+        case "assistant": {
+          parts.push("Assistant:");
+          if (block.thinkingBlocks) {
+            for (const tb of block.thinkingBlocks) {
+              parts.push(formatThinkingBlockPlain(tb));
+            }
+          }
+          parts.push(block.assistantRaw ?? block.content);
+          parts.push("");
+          break;
+        }
+        case "tool":
+          if (block.toolEntries) {
+            parts.push(formatToolResultsPlain(block.toolEntries));
+          } else {
+            parts.push(block.content);
+          }
+          break;
+        case "error":
+          parts.push(block.content);
+          break;
+        case "system":
+          parts.push(block.content);
+          break;
+      }
+    }
+    return parts.join("\n");
+  };
+
+  const notify = (): void => {
+    options.onUpdate?.();
+  };
+
   const rebuild = (): void => {
-    box.setContent(renderContent());
+    box.setContent(renderBlessedContent());
     box.setScrollPerc(100);
     screen.render();
+    notify();
   };
 
   return {
     element: box,
-    appendWelcome(content: string) {
-      blocks.push({ type: "welcome", content });
+    appendWelcome(plainContent: string) {
+      blocks.push({ type: "welcome", content: plainContent });
       rebuild();
     },
     appendUser(text: string) {
@@ -122,21 +179,24 @@ export function createMessageBox(screen: blessed.Widgets.Screen): MessageBoxHand
       rebuild();
     },
     appendAssistantStart() {
-      blocks.push({ type: "assistant", content: "", thinkingBlocks: [] });
+      blocks.push({ type: "assistant", content: "", assistantRaw: "", thinkingBlocks: [] });
       return blocks.length - 1;
     },
-    updateAssistantStream(blockIndex: number, partial: string) {
+    updateAssistantStream(blockIndex: number, partial: string, rawPlain?: string) {
       const block = blocks[blockIndex];
       if (block?.type === "assistant") {
         block.content = partial;
-        box.setContent(renderContent());
+        block.assistantRaw = rawPlain ?? partial;
+        box.setContent(renderBlessedContent());
         box.setScrollPerc(100);
         screen.render();
+        notify();
       }
     },
     finalizeAssistant(blockIndex: number, content: string, thinkingBlocks: ThinkingBlock[]) {
       const block = blocks[blockIndex];
       if (block?.type === "assistant") {
+        block.assistantRaw = content;
         block.content = markdownToBlessed(content);
         block.thinkingBlocks = thinkingBlocks;
         rebuild();
@@ -144,7 +204,11 @@ export function createMessageBox(screen: blessed.Widgets.Screen): MessageBoxHand
     },
     appendTools(tools: ToolResult[]) {
       if (tools.length === 0) return;
-      blocks.push({ type: "tool", content: formatToolResults(tools) });
+      blocks.push({
+        type: "tool",
+        content: formatToolResults(tools),
+        toolEntries: tools,
+      });
       rebuild();
     },
     appendError(message: string) {
@@ -182,6 +246,9 @@ export function createMessageBox(screen: blessed.Widgets.Screen): MessageBoxHand
         }
       }
       rebuild();
+    },
+    getPlainText() {
+      return renderPlainContent();
     },
     rebuild,
   };

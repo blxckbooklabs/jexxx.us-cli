@@ -21,38 +21,16 @@ import {
 } from "./session/session-store.js";
 import { StreamBuffer, formatStreamingChunk } from "./renderer/streaming.js";
 import { extractThinkingBlocks } from "./components/thinking-block.js";
+import { buildTuISnapshot, buildWelcomeBannerPlain } from "./renderer/plain-text.js";
+import {
+  copyToClipboard,
+  getSnapshotPath,
+  writeSnapshot,
+} from "./session/tui-snapshot.js";
 
 export interface TerminalChatOptions {
   providerLabel?: string;
   toolCount?: number;
-}
-
-function truncateEmail(email: string, maxLen = 18): string {
-  if (email.length <= maxLen) return email;
-  return `${email.slice(0, maxLen - 3)}...`;
-}
-
-function buildWelcomeBanner(authEmail: string, toolCount: number): string {
-  const email = truncateEmail(authEmail || "operator");
-  const inner = [
-    "  Welcome to the kingdom.",
-    "",
-    `  You are authenticated as ${email}`,
-    `  BLXCKCHAT loaded with ${toolCount} tools.`,
-    "",
-    "  Type a message to begin, or",
-    "  /help for commands.",
-  ];
-  const width = 42;
-  const lines = [
-    `╔${"═".repeat(width - 2)}╗`,
-    ...inner.map((line) => {
-      const padded = line.padEnd(width - 4);
-      return `║${padded}║`;
-    }),
-    `╚${"═".repeat(width - 2)}╝`,
-  ];
-  return `{#ec4899-fg}${lines.join("\n")}{/}`;
 }
 
 function createBlessedConfirm(
@@ -118,9 +96,42 @@ export async function startTerminalChat(
   const toolCount = options.toolCount ?? tools.length;
   const authEmail = creds?.email ?? "not authenticated";
 
-  const topBar = createTopBar(screen);
-  const messageBox = createMessageBox(screen);
-  const statusBar = createStatusBar(screen);
+  let topBar!: ReturnType<typeof createTopBar>;
+  let messageBox!: ReturnType<typeof createMessageBox>;
+  let statusBar!: ReturnType<typeof createStatusBar>;
+  let inputBox!: ReturnType<typeof createInputBox>;
+
+  const syncSnapshot = (): void => {
+    const snapshot = buildTuISnapshot({
+      width: (screen.width as number) || 80,
+      topBar: topBar.getPlainText(),
+      messages: messageBox.getPlainText(),
+      statusBar: statusBar.getPlainText(),
+      input: inputBox.getPlainText(),
+    });
+    writeSnapshot(snapshot);
+  };
+
+  const copySnapshot = async (): Promise<{ path: string; copied: boolean }> => {
+    const snapshot = buildTuISnapshot({
+      width: (screen.width as number) || 80,
+      topBar: topBar.getPlainText(),
+      messages: messageBox.getPlainText(),
+      statusBar: statusBar.getPlainText(),
+      input: inputBox.getPlainText(),
+    });
+    const path = writeSnapshot(snapshot);
+    const copied = await copyToClipboard(snapshot);
+    return { path, copied };
+  };
+
+  const onSnapshotUpdate = (): void => {
+    syncSnapshot();
+  };
+
+  topBar = createTopBar(screen, { onUpdate: onSnapshotUpdate });
+  messageBox = createMessageBox(screen, { onUpdate: onSnapshotUpdate });
+  statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
 
   let isProcessing = false;
   let inputHasFocus = true;
@@ -146,9 +157,19 @@ export async function startTerminalChat(
       return;
     }
 
+    if (trimmed === "/copy") {
+      const { path, copied } = await copySnapshot();
+      const hint = copied
+        ? "TUI copied to clipboard"
+        : `TUI snapshot written (clipboard unavailable)`;
+      statusBar.setMessage(`${hint} — ${path}`);
+      messageBox.appendSystem(`${hint}: ${path}`);
+      return;
+    }
+
     if (trimmed === "/help") {
       messageBox.appendSystem(
-        "Commands: /help, /reset, /exit. Shortcuts: Ctrl+C/Q/Esc exit, Ctrl+S save, Space toggle thinking, ↑↓ scroll.",
+        "Commands: /help, /reset, /copy, /exit. Shortcuts: Ctrl+C/Q/Esc exit, Ctrl+S save, Ctrl+Y copy, Space toggle thinking, ↑↓ scroll.",
       );
       return;
     }
@@ -175,7 +196,7 @@ export async function startTerminalChat(
       if (entry) {
         messageBox.appendTools([entry]);
       }
-      statusBar.setMessage("Ready — Ctrl+S to save session");
+      statusBar.setMessage("Ready — Ctrl+Y copy TUI · Ctrl+S save session");
     };
 
     try {
@@ -190,6 +211,7 @@ export async function startTerminalChat(
             messageBox.updateAssistantStream(
               assistantBlockIndex,
               formatStreamingChunk(streamBuffer.getContent()),
+              streamBuffer.getContent(),
             );
           },
           onToolStart: showToolPending,
@@ -212,7 +234,6 @@ export async function startTerminalChat(
         visible,
         parsed.blocks,
       );
-
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       messageBox.appendError(`[ERROR] ${msg}`);
@@ -223,9 +244,9 @@ export async function startTerminalChat(
     }
   };
 
-  const inputBox = createInputBox(screen, (line) => {
+  inputBox = createInputBox(screen, (line) => {
     void handleSubmit(line);
-  });
+  }, { onUpdate: onSnapshotUpdate });
 
   inputBox.element.on("focus", () => {
     inputHasFocus = true;
@@ -234,8 +255,14 @@ export async function startTerminalChat(
     inputHasFocus = false;
   });
 
-  messageBox.appendWelcome(buildWelcomeBanner(authEmail, toolCount));
+  messageBox.appendWelcome(buildWelcomeBannerPlain(authEmail, toolCount));
   topBar.setSubtitle(options.providerLabel ?? "Interactive mode");
+
+  const snapshotPath = getSnapshotPath();
+  statusBar.setMessage(
+    `Snapshot: ${snapshotPath} · Ctrl+Y or /copy to copy full TUI`,
+  );
+  syncSnapshot();
 
   screen.key(["escape", "q", "C-c"], () => {
     screen.destroy();
@@ -246,6 +273,13 @@ export async function startTerminalChat(
     const path = exportSessionToFile(session);
     statusBar.setMessage(`Session saved to ${path}`);
     messageBox.appendSystem(`Session exported to ${path}`);
+  });
+
+  screen.key(["C-y"], async () => {
+    const { path, copied } = await copySnapshot();
+    const hint = copied ? "TUI copied to clipboard" : `Snapshot: ${path}`;
+    statusBar.setMessage(hint);
+    messageBox.appendSystem(copied ? `TUI copied to clipboard (${path})` : `TUI snapshot: ${path}`);
   });
 
   screen.key(["space"], () => {

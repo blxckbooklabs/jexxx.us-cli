@@ -84,11 +84,19 @@ export function markdownToBlessed(markdown: string): string {
   return renderBlocks(tokens).trimEnd();
 }
 
+/** Render a user message inside a pink-bordered box (plain text). */
+export function renderUserMessageBoxPlain(text: string): string {
+  const label = `You: ${text}`;
+  const width = Math.min(72, Math.max(label.length + 4, 24));
+  const border = "─".repeat(width - 2);
+  return [`┌${border}┐`, `│ ${label}`, `└${border}┘`, ""].join("\n");
+}
+
 /** Render a user message inside a pink-bordered box. */
 export function renderUserMessageBox(text: string): string {
   const inner = escapeBlessed(text);
   const label = `{#ec4899-fg}{bold}You:{/bold}{/} ${inner}`;
-  const width = Math.min(72, Math.max(label.length + 4, 24));
+  const width = Math.min(72, Math.max(`You: ${text}`.length + 4, 24));
   const border = "─".repeat(width - 2);
   return [
     `{#ec4899-fg}┌${border}┐{/}`,
