@@ -1,7 +1,9 @@
-/** Built-in JEXXXUS super-admin Clerk IDs (env can extend, not replace). */
-const DEFAULT_SUPER_ADMIN_CLERK_IDS = [
-  "user_3AH8ufbCQvjfxL0RkA75RDDGYsy",
-] as const;
+/**
+ * Super-admin Clerk IDs are env-only (JEXXXUS_SUPER_ADMIN_CLERK_IDS).
+ * No defaults — operators must explicitly grant elevation via env var.
+ * This prevents hardcoded IDs from leaking who has super-admin access.
+ */
+const DEFAULT_SUPER_ADMIN_CLERK_IDS: string[] = [];
 
 function parseEnvSuperAdminIds(): string[] {
   const raw = process.env.JEXXXUS_SUPER_ADMIN_CLERK_IDS?.trim();

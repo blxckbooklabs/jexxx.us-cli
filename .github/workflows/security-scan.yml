@@ -1,0 +1,73 @@
+name: Security Scan — Secrets & Hardcoded Paths
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  gitleaks:
+    name: Detect secrets in commit history
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          source: file://. # Scan current directory
+          verbose: true
+          config: .gitleaksrc.yml # Optional: custom config
+
+  check-hardcoded-paths:
+    name: Check for hardcoded dev paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan for hardcoded machine paths
+        run: |
+          # Fail if any hardcoded dev paths found
+          if grep -r "/Users/dylanroberts\|/home/dylanroberts\|C:\\Users\\" \
+            src --include="*.ts" --include="*.tsx" --include="*.js"; then
+            echo "❌ ERROR: Found hardcoded machine paths. Use env vars instead."
+            echo "See src/lib/path-resolver.ts for the pattern."
+            exit 1
+          fi
+          echo "✅ No hardcoded machine paths found"
+
+  check-env-files:
+    name: Block .env file commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure .env is not tracked
+        run: |
+          if git log --all --pretty=format: --name-only | grep -E "^\.env(\..*)?$"; then
+            echo "❌ ERROR: .env files should not be committed to git"
+            exit 1
+          fi
+          echo "✅ No .env files in git history"
+
+  check-supabase-keys:
+    name: Scan for Supabase/API keys
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for exposed keys in source
+        run: |
+          # Fail if any actual API key patterns found (not env var references)
+          if grep -r "SUPABASE_KEY=\|sk_live_\|sk_test_\|Bearer sk_" \
+            src --include="*.ts" --include="*.tsx" --include="*.json" \
+            | grep -v "\.env\.example" | grep -v "process.env" | grep -v "//" ; then
+            echo "❌ ERROR: Found hardcoded API keys"
+            exit 1
+          fi
+          echo "✅ No hardcoded API keys found"
