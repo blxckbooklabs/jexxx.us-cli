@@ -69,12 +69,25 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     },
   });
 
+  const footer = blessed.box({
+    parent: container,
+    bottom: 0,
+    left: 0,
+    width: "100%-2",
+    height: 1,
+    tags: true,
+    content: mouseEnabled
+      ? "{gray-fg}↑↓ navigate · Enter or click select · Tab filter · Esc cancel{/gray-fg}"
+      : "{gray-fg}↑↓ navigate · Enter select · Tab filter · Esc cancel{/gray-fg}",
+    style: { fg: THEME.textDim, bg: THEME.bgElevated },
+  });
+
   const list = blessed.list({
     parent: container,
     top: 3,
     left: 0,
     width: "100%-2",
-    height: "100%-4",
+    height: "100%-5",
     border: { type: "line" },
     label: " items ",
     tags: true,
@@ -178,8 +191,18 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     close();
   };
 
+  const navigateList = (delta: number): void => {
+    highlightIndex(stepListIndex(selectedIndex, delta, filteredItems.length));
+  };
+
   filterBox.key(["escape", "C-c"], cancel);
   list.key(["escape", "C-c", "q"], cancel);
+
+  filterBox.key(["up", "k"], () => navigateList(-1));
+  filterBox.key(["down", "j"], () => navigateList(1));
+  filterBox.key(["enter", "C-m"], () => pickIndex(selectedIndex));
+
+  list.key(["tab"], () => filterBox.focus());
 
   filterBox.on("keypress", (_ch, key) => {
     if (key.name === "tab") {
@@ -216,7 +239,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
         list.mouse = true;
         screen.enableMouse(list);
       }
-      filterBox.focus();
+      list.focus();
       visible = true;
       screen.render();
     },

@@ -130,6 +130,14 @@ export function createInputBox(
         notify();
       });
     },
+    onArrowKey: (delta) => {
+      if (!options.slashPopup?.isVisible() || slashSuggestions.length === 0) {
+        return false;
+      }
+      options.slashPopup.moveSelection(delta, slashSuggestions.length);
+      notify();
+      return true;
+    },
   });
 
   const applySlashSuggestionAt = (idx: number): boolean => {

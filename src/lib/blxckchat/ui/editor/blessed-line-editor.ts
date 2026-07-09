@@ -41,6 +41,8 @@ export interface BlessedLineEditorHandle {
 
 export interface BlessedLineEditorOptions {
   onChange?: (text: string) => void;
+  /** When true, arrow key was handled externally (e.g. slash suggestion list). */
+  onArrowKey?: (delta: -1 | 1) => boolean;
 }
 
 export function attachBlessedLineEditor(
@@ -93,6 +95,11 @@ export function attachBlessedLineEditor(
     if (key.name === "escape") {
       box._done?.(null, null);
       return;
+    }
+
+    if (key.name === "up" || key.name === "down") {
+      const delta = key.name === "up" ? -1 : 1;
+      if (options.onArrowKey?.(delta)) return;
     }
 
     const action = resolveLineEditorKey({ ...key, ch });

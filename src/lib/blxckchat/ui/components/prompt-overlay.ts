@@ -1,5 +1,6 @@
 import blessed from "blessed";
 
+import { attachBlessedPaste } from "../editor/blessed-paste.js";
 import { THEME } from "../theme.js";
 
 export interface PromptOverlayOptions {
@@ -87,6 +88,8 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     resolve?.(value);
   };
 
+  attachBlessedPaste(input, screen);
+
   input.on("submit", (value: string) => finish(value.trim()));
 
   input.key(["escape", "C-c"], () => finish(null));
@@ -104,8 +107,12 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
         input.setValue(options.defaultValue ?? "");
         if (options.secret) {
           input.secret = true;
+          footer.setContent(
+            "{gray-fg}Enter confirm · Esc cancel · ⌘V paste (masked){/gray-fg}",
+          );
         } else {
           input.secret = false;
+          footer.setContent("{gray-fg}Enter confirm · Esc cancel · ⌘V paste{/gray-fg}");
         }
         box.setFront();
         box.show();
