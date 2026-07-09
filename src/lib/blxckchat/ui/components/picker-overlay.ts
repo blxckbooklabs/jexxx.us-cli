@@ -179,6 +179,8 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
   };
 
   let filterHidden = false;
+  /** Ignore Enter briefly after open so submit-key does not auto-pick row 0. */
+  let enterArmedAt = 0;
 
   const layoutList = (): void => {
     if (filterHidden) {
@@ -336,6 +338,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     }
 
     if (key.name === "enter" || key.name === "return") {
+      if (Date.now() < enterArmedAt) return;
       pickIndex(selectedIndex);
       return;
     }
@@ -410,6 +413,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       takeOverlayFocus(screen, list);
       modalKeys.start(handleKeypress);
       visible = true;
+      enterArmedAt = Date.now() + 200;
       renderFilter();
       renderFooter();
       screen.render();

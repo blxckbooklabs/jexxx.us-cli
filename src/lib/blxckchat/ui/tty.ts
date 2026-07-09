@@ -70,6 +70,7 @@ function blessedProgram(screen: blessed.Widgets.Screen): BlessedProgramPause & B
  */
 export function pauseBlessedForConsole(screen: blessed.Widgets.Screen): () => void {
   const program = blessedProgram(screen);
+  program.disableMouse?.();
   const resume = program.pause?.();
   return () => {
     if (typeof resume === "function") {

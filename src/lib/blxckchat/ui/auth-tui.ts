@@ -5,11 +5,13 @@ import {
   formatAuthStatusLines,
   loadCredentials,
   refreshAccessTokenViaServer,
-  runInteractiveDeviceLogin,
   saveCredentials,
 } from "../../auth.js";
+import {
+  DeviceLoginCancelledError,
+  type DeviceLoginOverlayHandle,
+} from "./components/device-login-overlay.js";
 import { THEME } from "./theme.js";
-import { pauseBlessedForConsole } from "./tty.js";
 
 export function promptBlessedYesNo(
   screen: blessed.Widgets.Screen,
@@ -61,24 +63,13 @@ export interface AuthTuiActions {
 export interface CreateAuthTuiActionsOptions {
   screen: blessed.Widgets.Screen;
   onAuthChanged: () => void;
+  deviceLoginOverlay: DeviceLoginOverlayHandle;
 }
 
 export function createAuthTuiActions(
   options: CreateAuthTuiActionsOptions,
 ): AuthTuiActions {
-  const { screen, onAuthChanged } = options;
-
-  let resumeBlessed: (() => void) | null = null;
-
-  const restoreTui = (): void => {
-    resumeBlessed?.();
-    resumeBlessed = null;
-    screen.render();
-  };
-
-  const hideTui = (): void => {
-    resumeBlessed = pauseBlessedForConsole(screen);
-  };
+  const { screen, onAuthChanged, deviceLoginOverlay } = options;
 
   return {
     async status() {
@@ -86,9 +77,8 @@ export function createAuthTuiActions(
     },
 
     async login() {
-      hideTui();
       try {
-        const creds = await runInteractiveDeviceLogin();
+        const creds = await deviceLoginOverlay.run();
         saveCredentials(creds);
         onAuthChanged();
         return [
@@ -96,10 +86,11 @@ export function createAuthTuiActions(
           "JEXXXUS account linked via secure.jexxx.us",
         ];
       } catch (err) {
+        if (err instanceof DeviceLoginCancelledError) {
+          return ["Login cancelled."];
+        }
         const msg = err instanceof Error ? err.message : String(err);
         return [`Login failed: ${msg}`];
-      } finally {
-        restoreTui();
       }
     },
 

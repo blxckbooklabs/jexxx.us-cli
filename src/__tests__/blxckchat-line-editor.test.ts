@@ -12,6 +12,7 @@ import {
   killToStart,
   moveWordLeft,
   moveWordRight,
+  isSpuriousTerminalInput,
   resolveInsertChar,
   resolveLineEditorKey,
   selectAll,
@@ -98,6 +99,12 @@ test("resolveInsertChar handles question mark and shifted punctuation", () => {
   assert.equal(resolveInsertChar({ name: "slash", shift: true }), "?");
   assert.equal(resolveInsertChar({ name: "slash", shift: false }), "/");
   assert.equal(resolveInsertChar({ name: "1", shift: true }), "!");
+});
+
+test("isSpuriousTerminalInput drops mouse tracking escape noise", () => {
+  assert.equal(isSpuriousTerminalInput("\x1b[MCp!", { full: "\x1b[MCp!" }), true);
+  assert.equal(resolveInsertChar({ ch: "\x1b[MCp!", full: "\x1b[MCp!" }), null);
+  assert.equal(resolveLineEditorKey({ ch: "\x1b[MCp!", full: "\x1b[MCp!" }).type, "noop");
 });
 
 test("deleteWordBackward removes prior token", () => {

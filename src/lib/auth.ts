@@ -1,3 +1,4 @@
+import { exec } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -304,8 +305,16 @@ export async function runInteractiveDeviceLogin(): Promise<Credentials> {
   console.log(`Enter:   ${chalk.bold.bgMagenta.black(` ${userCode} `)}`);
   console.log(chalk.dim(`Expires: ${Math.floor(expiresIn / 60)} minutes\n`));
 
+  openDeviceAuthBrowser(verificationUrl);
+
+  console.log(chalk.dim("Waiting for authorization..."));
+
+  return pollDeviceAuth(userCode, codeVerifier, expiresIn);
+}
+
+/** Open the secure.jexxx.us device consent page in the system browser. */
+export function openDeviceAuthBrowser(verificationUrl: string): void {
   try {
-    const { exec } = await import("child_process");
     const openCommand =
       process.platform === "darwin"
         ? "open"
@@ -316,10 +325,6 @@ export async function runInteractiveDeviceLogin(): Promise<Credentials> {
   } catch {
     // Headless / SSH — user opens the URL manually
   }
-
-  console.log(chalk.dim("Waiting for authorization..."));
-
-  return pollDeviceAuth(userCode, codeVerifier, expiresIn);
 }
 
 /**

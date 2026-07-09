@@ -69,6 +69,7 @@ import {
 } from "./menu-mutex.js";
 import { openExternalEditor } from "./external-editor.js";
 import { createAuthPickerOverlay } from "./components/auth-picker-overlay.js";
+import { createDeviceLoginOverlay } from "./components/device-login-overlay.js";
 import { createAuthTuiActions } from "./auth-tui.js";
 import {
   isBlessedMouseEnabled,
@@ -180,6 +181,7 @@ export async function startTerminalChat(
   let providerOverlay!: ReturnType<typeof createProviderOverlay>;
   let divinityPickerOverlay!: ReturnType<typeof createDivinityPickerOverlay>;
   let authPickerOverlay!: ReturnType<typeof createAuthPickerOverlay>;
+  let deviceLoginOverlay!: ReturnType<typeof createDeviceLoginOverlay>;
 
   let isProcessing = false;
   let abortController: AbortController | null = null;
@@ -210,9 +212,12 @@ export async function startTerminalChat(
     syncSnapshot();
   };
 
+  deviceLoginOverlay = createDeviceLoginOverlay(screen);
+
   const authActions = createAuthTuiActions({
     screen,
     onAuthChanged: refreshAuthChrome,
+    deviceLoginOverlay,
   });
 
   authPickerOverlay = createAuthPickerOverlay(screen, {
@@ -689,6 +694,7 @@ export async function startTerminalChat(
       providerOverlay.isVisible() ||
       divinityPickerOverlay.isVisible() ||
       authPickerOverlay.isVisible() ||
+      deviceLoginOverlay.isVisible() ||
       searchOverlay.isVisible() ||
       hotkeysOverlay.isVisible(),
   );
@@ -696,6 +702,11 @@ export async function startTerminalChat(
   const handleEscapeLayer = (): boolean => {
     if (isProcessing) {
       abortInFlight();
+      return true;
+    }
+    if (deviceLoginOverlay.isVisible()) {
+      deviceLoginOverlay.cancel();
+      inputBox.focus();
       return true;
     }
     if (authPickerOverlay.isVisible()) {

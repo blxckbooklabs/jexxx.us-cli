@@ -315,12 +315,22 @@ const NAMED_KEY_CHARS: Record<string, string> = {
   rightbracket: "]",
 };
 
+/** Drop legacy/SGR mouse tracking bytes that leak into transmit when TTY modes desync. */
+export function isSpuriousTerminalInput(ch: string, key: LineEditorKey): boolean {
+  const full = key.full ?? "";
+  if (full.includes("\x1b[M") || full.includes("\x1b[<")) return true;
+  if (ch.includes("\x1b[M") || ch.includes("\x1b[<")) return true;
+  if (ch.length >= 6 && /^[\x1b\[MCGF@.,:/\-\d^]+$/i.test(ch)) return true;
+  return false;
+}
+
 /** Resolve a single printable character from a key event (incl. punctuation). */
 export function resolveInsertChar(key: LineEditorKey): string | null {
   const { name, shift, meta, ctrl } = parseKeyModifiers(key);
   if (meta || ctrl) return null;
 
   const ch = key.ch ?? "";
+  if (isSpuriousTerminalInput(ch, key)) return null;
   if (ch.length === 1 && !/^[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]$/.test(ch)) {
     return ch;
   }
@@ -346,6 +356,8 @@ export function resolveInsertChar(key: LineEditorKey): string | null {
 /** Map terminal key events to editor actions (macOS + cross-platform). */
 export function resolveLineEditorKey(key: LineEditorKey): LineEditorKeyAction {
   const { name, shift, meta, ctrl } = parseKeyModifiers(key);
+
+  if (isSpuriousTerminalInput(key.ch ?? "", key)) return { type: "noop" };
 
   if (name === "enter" || name === "return") return { type: "submit" };
 
