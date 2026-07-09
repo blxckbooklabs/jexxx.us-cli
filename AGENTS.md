@@ -86,6 +86,9 @@ Owned by the JEXXXUS platform / tooling team.
   recent conversation history for short persona follow-ups (Proverbs 31, drafts, corruption beats).
   `empire-url-sanitize.ts` repairs model-hallucinated URLs on final replies. Regression tests:
   `src/__tests__/empire-routing.test.ts`, `src/__tests__/empire-url-sanitize.test.ts`.
+- BLXCKCHAT **Docs/Law routing** (`kingdom-surfaces.ts`, `kingdom-routing.ts`): prompts like
+  "tell me about Docs and Law" must not hit `account_query` contact lookup — use RAG docs context
+  + `law_query` instead.
 - BLXCKCHAT TUI **startup LLM resolution** (`resolveStartupProvider` in `config.ts`):
   pinned default (`isDefault` from provider setup **y**) beats `lastUsed` profile;
   without a pin, reopens with the last active provider/model from the previous session.

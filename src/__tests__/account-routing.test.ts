@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   formatAccountRoutingHint,
+  isVaultPrimaryPrompt,
   planAccountTools,
 } from "../lib/blxckchat/account-routing.js";
 
@@ -56,6 +57,21 @@ test("videos in playlist captures playlistName", () => {
   const plan = planAccountTools("what is in my playlist Late Night");
   assert.equal(plan.action, "playlist");
   assert.equal(plan.playlistName, "Late Night");
+});
+
+test("Docs and Law does not route to account_query contact lookup", () => {
+  const prompt = "What can you tell me about Docs and Law?";
+  const plan = planAccountTools(prompt);
+  assert.equal(plan.tools.length, 0);
+  assert.equal(plan.contactName, null);
+  assert.equal(isVaultPrimaryPrompt(prompt), false);
+  assert.equal(formatAccountRoutingHint(prompt), null);
+});
+
+test("tell me about Docs alone does not capture contactName", () => {
+  const plan = planAccountTools("tell me about Docs");
+  assert.equal(plan.contactName, null);
+  assert.ok(!plan.tools.includes("account_query"));
 });
 
 test("formatAccountRoutingHint includes account_query and no-fabrication rule", () => {

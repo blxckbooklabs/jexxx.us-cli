@@ -6,12 +6,12 @@ import { confirmToolCall as defaultConfirmToolCall } from "./confirm.js";
 import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
 import {
-  EMPIRE_CONTENT_ROUTING,
+  KINGDOM_CONTENT_ROUTING,
   extractRoutingContextFromHistory,
-  formatEmpireRoutingHint,
-  type EmpireRoutingOptions,
-} from "./empire-routing.js";
-import { prefetchEmpireContext } from "./empire-prefetch.js";
+  formatKingdomRoutingHint,
+  type KingdomRoutingOptions,
+} from "./kingdom-routing.js";
+import { prefetchGardenContext } from "./garden-prefetch.js";
 import {
   ACCOUNT_CONTENT_ROUTING,
   ACCOUNT_VAULT_REPLY_RULES,
@@ -26,16 +26,16 @@ import {
   buildOperatorIdentityContext,
 } from "../operator-identity.js";
 import {
-  extractEmpireUrlsFromText,
-  sanitizeEmpireUrls,
-  type EmpireUrlEntry,
-} from "./empire-url-sanitize.js";
+  extractKingdomUrlsFromText,
+  sanitizeKingdomUrls,
+  type KingdomUrlEntry,
+} from "./kingdom-url-sanitize.js";
 import {
-  collectEmpireToolResultsSinceUser,
-  EMPIRE_SYNTHESIS_NUDGE,
-  needsEmpireSynthesis,
+  collectGardenToolResultsSinceUser,
+  GARDEN_SYNTHESIS_NUDGE,
+  needsGardenSynthesis,
   stripMetaContinuationPrompts,
-} from "./empire-synthesis.js";
+} from "./garden-synthesis.js";
 import { sanitizeRoleplayProse } from "./prose-sanitize.js";
 import { formatToolResultForFallback } from "./tool-result-format.js";
 
@@ -96,7 +96,7 @@ binding. When a tool call would \
 write data or run a shell command, expect the user to be prompted for confirmation before it \
 executes — explain what you're about to do so they can make an informed choice.
 
-${EMPIRE_CONTENT_ROUTING}
+${KINGDOM_CONTENT_ROUTING}
 
 ${ACCOUNT_CONTENT_ROUTING}`;
 
@@ -125,14 +125,14 @@ public JEXXXUS | TV videos, signed-in vault/TV playlist data via account_query, 
 notifications, contact imports). Stay in character when explaining tool actions; the operator must \
 confirm any write/shell tool before it runs.
 
-**Persona + empire:** When the scene mentions scripture bookmarks (Proverbs 31, etc.), a VEIL draft/article, \
+**Persona + kingdom/garden:** When the scene mentions scripture bookmarks (Proverbs 31, etc.), a VEIL draft/article, \
 or a TV sacrament, call veil_query / bible_query / tv_query in the **same turn** and weave real URLs and \
 quoted verses into the dialogue. If a character offers "the draft" or "number 11," fetch a matching VEIL \
 article via veil_query action=search — do not invent unpublished pieces. Cite 2–3 articles as markdown \
 [Title](url) markdown links woven into the scene — not a mid-reply catalog dump with ALL-CAPS section headers. \
 Advance with catalog-backed detail; avoid generic "want me to keep going?" prompts.
 
-${EMPIRE_CONTENT_ROUTING}`;
+${KINGDOM_CONTENT_ROUTING}`;
 
 async function appendDocContext(prompt: string, userPrompt: string): Promise<string> {
   const docChunks = await searchDocs(userPrompt, 5);
@@ -148,7 +148,7 @@ async function appendDocContext(prompt: string, userPrompt: string): Promise<str
 async function buildSystemPrompt(
   userPrompt: string,
   persona?: PersonaContext,
-  routingOptions?: EmpireRoutingOptions,
+  routingOptions?: KingdomRoutingOptions,
 ): Promise<string> {
   const base = persona
     ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
@@ -157,7 +157,7 @@ async function buildSystemPrompt(
   const vaultPrimary = isVaultPrimaryPrompt(userPrompt);
   const routingHint = vaultPrimary
     ? null
-    : formatEmpireRoutingHint(userPrompt, routingOptions);
+    : formatKingdomRoutingHint(userPrompt, routingOptions);
   const accountHint = formatAccountRoutingHint(userPrompt);
   let prompt = base;
   if (routingHint) prompt = `${prompt}\n\n${routingHint}`;
@@ -168,7 +168,7 @@ async function buildSystemPrompt(
 
   const prefetch = vaultPrimary
     ? null
-    : await prefetchEmpireContext(userPrompt, routingOptions);
+    : await prefetchGardenContext(userPrompt, routingOptions);
   if (prefetch) {
     prompt = `${prompt}\n\n${prefetch}`;
   }
@@ -222,7 +222,7 @@ export async function runAgent(
       ? history.slice(history.length - MAX_HISTORY_MESSAGES)
       : history;
 
-  const routingOptions: EmpireRoutingOptions = {
+  const routingOptions: KingdomRoutingOptions = {
     conversationContext: extractRoutingContextFromHistory(trimmedHistory),
   };
   const systemPrompt = await buildSystemPrompt(
@@ -230,8 +230,8 @@ export async function runAgent(
     options.persona,
     routingOptions,
   );
-  const canonicalUrlCatalog: EmpireUrlEntry[] = [
-    ...extractEmpireUrlsFromText(systemPrompt),
+  const canonicalUrlCatalog: KingdomUrlEntry[] = [
+    ...extractKingdomUrlsFromText(systemPrompt),
   ];
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -269,7 +269,7 @@ export async function runAgent(
   // ended (clean stop, repeat-loop short-circuit, or MAX_TURNS exhaustion).
   const finish = (response: string): AgentTurnResult => {
     const cleaned = sanitizeRoleplayProse(stripMetaContinuationPrompts(response));
-    const sanitized = sanitizeEmpireUrls(cleaned, canonicalUrlCatalog);
+    const sanitized = sanitizeKingdomUrls(cleaned, canonicalUrlCatalog);
     messages.push({ role: "assistant", content: sanitized });
     return { response: sanitized, history: messages.slice(conversationStartIndex) };
   };
@@ -311,17 +311,17 @@ export async function runAgent(
     assertNotAborted(options.signal);
 
     if (result.stopReason === "stop" || result.toolCalls.length === 0) {
-      const empireTools = collectEmpireToolResultsSinceUser(messages);
+      const gardenTools = collectGardenToolResultsSinceUser(messages);
       const draft = result.message.content;
       if (
         synthesisNudgeCount < MAX_SYNTHESIS_NUDGES &&
-        needsEmpireSynthesis(draft, empireTools)
+        needsGardenSynthesis(draft, gardenTools)
       ) {
         if (draft.trim()) {
           messages.push({ role: "assistant", content: draft });
         }
         options.onSynthesisRetry?.();
-        messages.push({ role: "user", content: EMPIRE_SYNTHESIS_NUDGE });
+        messages.push({ role: "user", content: GARDEN_SYNTHESIS_NUDGE });
         synthesisNudgeCount++;
         continue;
       }
@@ -436,7 +436,7 @@ export async function runAgent(
         if (!isError) {
           lastSuccessfulResult = toolResult;
           lastSuccessfulTool = tool.name;
-          for (const entry of extractEmpireUrlsFromText(toolResult)) {
+          for (const entry of extractKingdomUrlsFromText(toolResult)) {
             const key = `${entry.surface}:${entry.slug}`;
             if (!canonicalUrlCatalog.some((e) => `${e.surface}:${e.slug}` === key)) {
               canonicalUrlCatalog.push(entry);

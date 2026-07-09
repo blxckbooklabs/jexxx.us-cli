@@ -1,4 +1,5 @@
 import type { AccountQueryAction } from "../account-data/account-query.js";
+import { isKingdomSurfaceName, isKingdomSurfacePrompt } from "./kingdom-surfaces.js";
 
 export type AccountRoutableTool = "account_query";
 
@@ -146,7 +147,14 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
     }
 
     if (row.action === "contact" && match[2]) {
-      contactName = match[2].trim();
+      const captured = match[2].trim();
+      if (isKingdomSurfaceName(captured)) {
+        matchedRules.pop();
+        tools.delete("account_query");
+        action = null;
+        continue;
+      }
+      contactName = captured;
     }
     if (row.action === "playlist" && match[2]) {
       playlistName = match[2].trim();
@@ -155,12 +163,21 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
 
   if (!contactName) {
     const named = CONTACT_CAPTURE.exec(userPrompt);
-    if (named?.[1] && tools.has("account_query")) {
-      contactName = named[1].trim();
-      if (!action) action = "contact";
-      tools.add("account_query");
-      matchedRules.push("contact-name-captured");
+    if (named?.[1]) {
+      const captured = named[1].trim();
+      if (!isKingdomSurfaceName(captured)) {
+        contactName = captured;
+        if (!action) action = "contact";
+        tools.add("account_query");
+        matchedRules.push("contact-name-captured");
+      }
     }
+  }
+
+  if (contactName && isKingdomSurfaceName(contactName)) {
+    contactName = null;
+    if (action === "contact") action = null;
+    tools.delete("account_query");
   }
 
   return {
@@ -175,8 +192,9 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
   };
 }
 
-/** True when the user prompt is a private vault/data question (not empire TV/VEIL). */
+/** True when the user prompt is a private vault/data question (not empire TV/VEIL/Docs/Law). */
 export function isVaultPrimaryPrompt(userPrompt: string): boolean {
+  if (isKingdomSurfacePrompt(userPrompt)) return false;
   return planAccountTools(userPrompt).tools.length > 0;
 }
 
@@ -189,6 +207,7 @@ export const ACCOUNT_VAULT_REPLY_RULES = `**Vault-only reply rules (this message
 - Never invent URLs; never glue tv.jexxx.us or veil.jexxx.us links into vault answers.`;
 
 export function formatAccountRoutingHint(userPrompt: string): string | null {
+  if (isKingdomSurfacePrompt(userPrompt)) return null;
   const plan = planAccountTools(userPrompt);
   if (plan.tools.length === 0) return null;
 
@@ -241,6 +260,7 @@ export const ACCOUNT_CONTENT_ROUTING = `## Account data routing (private vault �
 
 **Response rules:**
 - Call account_query before answering questions about contacts, dating status, journal entries, timeline, or NXT dates.
+- **Never** use account_query for JEXXXUS | Docs (docs.jexxx.us) or Law (law.jexxx.us) — those are public surfaces, not contact names.
 - Vault-only turns: account_query **only** — never mix TV/VEIL/scripture into contact lists; tags are metadata, not watch recommendations.
 - Summarize by default; quote journal notes only when the user asks for detail.
 - If account_query returns empty results, say the vault is empty — do not fabricate people or events.

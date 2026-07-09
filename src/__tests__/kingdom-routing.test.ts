@@ -3,10 +3,10 @@ import { test } from "node:test";
 
 import {
   COMPANION_VERSE_SETS,
-  formatEmpireRoutingHint,
-  planEmpireTools,
+  formatKingdomRoutingHint,
+  planKingdomTools,
   type RoutableTool,
-} from "../lib/blxckchat/empire-routing.js";
+} from "../lib/blxckchat/kingdom-routing.js";
 
 function expectTools(
   prompt: string,
@@ -17,7 +17,7 @@ function expectTools(
     companionVerses?: string[];
   },
 ): void {
-  const plan = planEmpireTools(prompt);
+  const plan = planKingdomTools(prompt);
   for (const tool of opts.include) {
     assert.ok(
       plan.tools.includes(tool),
@@ -44,6 +44,19 @@ function expectTools(
   }
 }
 
+test("Docs and Law routes to docs + law hints, not vault tools", () => {
+  const plan = planKingdomTools("What can you tell me about Docs and Law?");
+  assert.equal(plan.docsHint, true);
+  assert.ok(plan.lawQuery);
+  assert.equal(plan.lawQuery?.action, "list");
+  assert.ok(!plan.tools.includes("import_contacts"));
+  const hint = formatKingdomRoutingHint("What can you tell me about Docs and Law?");
+  assert.ok(hint);
+  assert.match(hint!, /account_query/i);
+  assert.match(hint!, /law_query/i);
+  assert.match(hint!, /docs\.jexxx\.us/i);
+});
+
 test("regression 1: Forgive Me Father videos → tv_query + companion scripture", () => {
   expectTools("Forgive Me Father videos", {
     include: ["tv_query", "bible_query"],
@@ -52,7 +65,7 @@ test("regression 1: Forgive Me Father videos → tv_query + companion scripture"
 });
 
 test("regression 1b: Forgive Me, father? → series routing with punctuation", () => {
-  const plan = planEmpireTools("Forgive Me, father?");
+  const plan = planKingdomTools("Forgive Me, father?");
   assert.ok(plan.tools.includes("tv_query"));
   assert.ok(plan.tools.includes("bible_query"));
   assert.equal(plan.tvSearchQuery, "Forgive Me Father");
@@ -116,8 +129,8 @@ test("regression 9: Latest VEIL and TV → both catalogs without scripture", () 
   });
 });
 
-test("formatEmpireRoutingHint lists companion bible_query refs", () => {
-  const hint = formatEmpireRoutingHint("Forgive Me Father videos");
+test("formatKingdomRoutingHint lists companion bible_query refs", () => {
+  const hint = formatKingdomRoutingHint("Forgive Me Father videos");
   assert.ok(hint);
   assert.match(hint!, /tv_query/);
   assert.match(hint!, /action=search/);
@@ -128,8 +141,8 @@ test("formatEmpireRoutingHint lists companion bible_query refs", () => {
   assert.doesNotMatch(hint!, /Avoid tools: bible_query/);
 });
 
-test("formatEmpireRoutingHint returns null for unrelated prompts", () => {
-  assert.equal(formatEmpireRoutingHint("hello there"), null);
+test("formatKingdomRoutingHint returns null for unrelated prompts", () => {
+  assert.equal(formatKingdomRoutingHint("hello there"), null);
 });
 
 test("COMPANION_VERSE_SETS forgiveness includes confession verse", () => {
@@ -137,7 +150,7 @@ test("COMPANION_VERSE_SETS forgiveness includes confession verse", () => {
 });
 
 test("regression 10: short follow-up routes via conversation context (Proverbs 31)", () => {
-  const plan = planEmpireTools("keep going", {
+  const plan = planKingdomTools("keep going", {
     conversationContext:
       "Lil' Bible: the blonde with the Proverbs 31 bookmark. Hannah: read the draft on the way to her car.",
   });
@@ -148,7 +161,7 @@ test("regression 10: short follow-up routes via conversation context (Proverbs 3
 });
 
 test("regression 13: multi-persona roleplay lists all named divinities", () => {
-  const hint = formatEmpireRoutingHint("Roleplay Ruth, Lil' Bible, and Hannah.");
+  const hint = formatKingdomRoutingHint("Roleplay Ruth, Lil' Bible, and Hannah.");
   assert.ok(hint);
   assert.match(hint!, /Ruth/);
   assert.match(hint!, /Lil' Bible/);
@@ -157,7 +170,7 @@ test("regression 13: multi-persona roleplay lists all named divinities", () => {
 });
 
 test("regression 12: Rachel church girls routes VEIL + Genesis companions", () => {
-  const plan = planEmpireTools("church girls who still think they're Rachels", {
+  const plan = planKingdomTools("church girls who still think they're Rachels", {
     conversationContext: "leads her toward the vestry door",
   });
   assert.ok(plan.tools.includes("veil_query"));
@@ -166,7 +179,7 @@ test("regression 12: Rachel church girls routes VEIL + Genesis companions", () =
 });
 
 test("regression 11: blueprint corruption beat triggers VEIL search", () => {
-  const plan = planEmpireTools("understanding is a blueprint", {
+  const plan = planKingdomTools("understanding is a blueprint", {
     conversationContext: "Hannah: Corruption Correspondent · Lil' Bible",
   });
   assert.ok(plan.tools.includes("veil_query"));

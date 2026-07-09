@@ -25,6 +25,11 @@ export const COMPANION_VERSE_SETS = {
 
 export const MAX_COMPANION_VERSES = 4;
 
+export type LawQueryHint = {
+  action: "list" | "get" | "search";
+  query?: string;
+};
+
 export interface PhraseCollision {
   id: string;
   pattern: RegExp;
@@ -37,15 +42,19 @@ export interface PhraseCollision {
   tvSearchQuery?: string;
   /** Explicit veil_query search string (topic, title fragment). */
   veilSearchQuery?: string;
+  /** Summarize docs.jexxx.us from RAG context — not a vault contact. */
+  docsHint?: boolean;
+  /** Suggested law_query call for law.jexxx.us policies. */
+  lawQuery?: LawQueryHint;
   note: string;
 }
 
-export interface EmpireRoutingOptions {
+export interface KingdomRoutingOptions {
   /** Recent user/assistant turns — used when the latest message is a short follow-up. */
   conversationContext?: string;
 }
 
-export interface EmpireToolPlan {
+export interface KingdomToolPlan {
   tools: RoutableTool[];
   exclude: RoutableTool[];
   slashHints: string[];
@@ -55,10 +64,37 @@ export interface EmpireToolPlan {
   tvSearchQuery: string | null;
   /** Best veil_query search string for this prompt, if any. */
   veilSearchQuery: string | null;
+  docsHint: boolean;
+  lawQuery: LawQueryHint | null;
   matchedRules: string[];
 }
 
 export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
+  {
+    id: "jexxxus-docs-law",
+    pattern:
+      /\b(?:docs?\s+and\s+law|jexxxus\s+docs?\s+and\s+law|(?:what\s+(?:can you\s+)?tell me|tell me)\s+about\s+docs?\s+and\s+law)\b/i,
+    tools: [],
+    docsHint: true,
+    lawQuery: { action: "list" },
+    note: "JEXXXUS | Docs reference library + law.jexxx.us — never account_query contact lookup.",
+  },
+  {
+    id: "jexxxus-docs",
+    pattern:
+      /\b(?:jexxxus\s*\|\s*docs?|docs\.jexxx\.us|(?:what\s+(?:can you\s+)?tell me|tell me)\s+about\s+(?:the\s+)?docs?|what(?:'s| is)\s+(?:jexxxus\s*\|\s*)?docs?)\b/i,
+    tools: [],
+    docsHint: true,
+    note: "docs.jexxx.us operator/architecture reference — use RAG docs context.",
+  },
+  {
+    id: "jexxxus-law",
+    pattern:
+      /\b(?:jexxxus\s*\|\s*law|law\.jexxx\.us|(?:what\s+(?:can you\s+)?tell me|tell me)\s+about\s+(?:the\s+)?law|what(?:'s| is)\s+(?:jexxxus\s*\|\s*)?law|terms of service|privacy policy|refund policy|dmca policy)\b/i,
+    tools: [],
+    lawQuery: { action: "list" },
+    note: "law.jexxx.us legal policies via law_query.",
+  },
   {
     id: "tv-series-forgive-me-father",
     pattern: /forgive\s*,?\s*me\s*,?\s*father/i,
@@ -199,9 +235,9 @@ const VEIL_SURFACE = /\bveil\b/i;
 const TV_SURFACE = /\b(tv|jexxxus\s*\|\s*tv)\b/i;
 
 /** Merge latest user message with recent transcript for routing/prefetch. */
-export function buildEmpireRoutingText(
+export function buildKingdomRoutingText(
   userPrompt: string,
-  options?: EmpireRoutingOptions,
+  options?: KingdomRoutingOptions,
 ): string {
   const parts = [userPrompt.trim()];
   const ctx = options?.conversationContext?.trim();
@@ -209,7 +245,7 @@ export function buildEmpireRoutingText(
   return parts.join("\n\n");
 }
 
-/** Last N user/assistant lines for empire phrase detection on short follow-ups. */
+/** Last N user/assistant lines for kingdom phrase detection on short follow-ups. */
 export function extractRoutingContextFromHistory(
   messages: Array<{ role: string; content: string }>,
   maxMessages = 8,
@@ -237,7 +273,7 @@ function mergeCompanionVerses(target: Set<string>, verses: readonly string[]): v
 }
 
 /** Resolve tv_query search text from routing plan + prompt. */
-export function inferTvSearchQuery(prompt: string, plan: EmpireToolPlan): string | null {
+export function inferTvSearchQuery(prompt: string, plan: KingdomToolPlan): string | null {
   if (plan.tvSearchQuery) return plan.tvSearchQuery;
   if (/forgive\s*,?\s*me\s*,?\s*father/i.test(prompt)) return "Forgive Me Father";
   if (/\b(mormon\s+girlz)\b/i.test(prompt)) return "Mormon Girlz";
@@ -281,7 +317,7 @@ export function inferThemeCompanionVerses(prompt: string): string[] {
 }
 
 /** Resolve veil_query search text from routing plan + prompt. */
-export function inferVeilSearchQuery(prompt: string, plan: EmpireToolPlan): string | null {
+export function inferVeilSearchQuery(prompt: string, plan: KingdomToolPlan): string | null {
   if (plan.veilSearchQuery) return plan.veilSearchQuery;
   if (/proverbs\s*31/i.test(prompt)) return "Proverbs 31";
   if (/\b(ruth|boaz|naomi)\b/i.test(prompt)) return "Ruth";
@@ -299,20 +335,22 @@ function isCatalogOnlyPrompt(prompt: string): boolean {
   );
 }
 
-/** Plan which empire tools fit a user message (deterministic, testable). */
-export function planEmpireTools(
+/** Plan which kingdom tools fit a user message (deterministic, testable). */
+export function planKingdomTools(
   userPrompt: string,
-  options?: EmpireRoutingOptions,
-): EmpireToolPlan {
+  options?: KingdomRoutingOptions,
+): KingdomToolPlan {
   const tools = new Set<RoutableTool>();
   const exclude = new Set<RoutableTool>();
   const slashHints = new Set<string>();
   const companionVerses = new Set<string>();
   let tvSearchQuery: string | null = null;
   let veilSearchQuery: string | null = null;
+  let docsHint = false;
+  let lawQuery: LawQueryHint | null = null;
   const matchedRules: string[] = [];
 
-  const prompt = buildEmpireRoutingText(userPrompt, options);
+  const prompt = buildKingdomRoutingText(userPrompt, options);
   const hasVerseRef =
     looksLikeVerseReference(prompt) ||
     [...prompt.matchAll(/\b((?:\d+\s+)?[A-Za-z][A-Za-z0-9\s.'-]*?\s+\d+\s*[: ]\s*\d+)\b/g)]
@@ -337,6 +375,8 @@ export function planEmpireTools(
     if (row.veilSearchQuery && !veilSearchQuery) {
       veilSearchQuery = row.veilSearchQuery;
     }
+    if (row.docsHint) docsHint = true;
+    if (row.lawQuery && !lawQuery) lawQuery = row.lawQuery;
   }
 
   if (WATCH_CATEGORY_ON_TV.test(prompt)) {
@@ -422,6 +462,8 @@ export function planEmpireTools(
       companionVerses: [...companionVerses],
       tvSearchQuery: null,
       veilSearchQuery: null,
+      docsHint: false,
+      lawQuery: null,
       matchedRules,
     });
   }
@@ -434,6 +476,8 @@ export function planEmpireTools(
       companionVerses: [...companionVerses],
       tvSearchQuery,
       veilSearchQuery: null,
+      docsHint: false,
+      lawQuery: null,
       matchedRules,
     });
   }
@@ -445,6 +489,8 @@ export function planEmpireTools(
     companionVerses: [...companionVerses],
     tvSearchQuery,
     veilSearchQuery,
+    docsHint,
+    lawQuery,
     matchedRules,
   };
 }
@@ -459,18 +505,41 @@ export function detectNamedDivinities(text: string): string[] {
 }
 
 /** Human-readable block appended to the system prompt for the current user turn. */
-export function formatEmpireRoutingHint(
+export function formatKingdomRoutingHint(
   userPrompt: string,
-  options?: EmpireRoutingOptions,
+  options?: KingdomRoutingOptions,
 ): string | null {
   if (isVaultPrimaryPrompt(userPrompt)) {
     return null;
   }
 
-  const plan = planEmpireTools(userPrompt, options);
-  if (plan.tools.length === 0 && plan.slashHints.length === 0) return null;
+  const plan = planKingdomTools(userPrompt, options);
+  if (
+    plan.tools.length === 0 &&
+    plan.slashHints.length === 0 &&
+    !plan.docsHint &&
+    !plan.lawQuery
+  ) {
+    return null;
+  }
 
   const lines = ["## Routing hint for this message (kingdom/garden content routing)"];
+  if (plan.docsHint || plan.lawQuery) {
+    lines.push(
+      "Do NOT call account_query — Docs and Law are public JEXXXUS surfaces, not BLXCKBOOK contacts.",
+    );
+  }
+  if (plan.docsHint) {
+    lines.push(
+      "JEXXXUS | Docs (docs.jexxx.us) — summarize from Relevant JEXXXUS documentation context below (architecture, CLI, platform).",
+    );
+  }
+  if (plan.lawQuery) {
+    const q = plan.lawQuery.query ? ` query="${plan.lawQuery.query}"` : "";
+    lines.push(
+      `Law (law.jexxx.us) — call law_query action=${plan.lawQuery.action}${q} for Terms, Privacy, Refunds, DMCA.`,
+    );
+  }
   if (plan.tools.length > 0) {
     lines.push(`Prefer tools: ${plan.tools.join(", ")}`);
   }
@@ -496,7 +565,7 @@ export function formatEmpireRoutingHint(
     );
   }
   const personas = detectNamedDivinities(
-    buildEmpireRoutingText(userPrompt, options),
+    buildKingdomRoutingText(userPrompt, options),
   );
   if (personas.length >= 2) {
     lines.push(
@@ -524,7 +593,7 @@ export function formatEmpireRoutingHint(
   return lines.join("\n");
 }
 
-export const EMPIRE_COLLISION_TABLE_EXCERPT = `### Phrase collision quick reference
+export const KINGDOM_COLLISION_TABLE_EXCERPT = `### Phrase collision quick reference
 | Phrase | Tools + companions |
 | Forgive Me Father, Deviante | tv_query search + bible_query (1 John 1:9, Luke 23:34, Psalm 51:1) |
 | Pastor's Wife, Nuns, In Church | tv_query + fitting bible_query verses |
@@ -534,8 +603,10 @@ export const EMPIRE_COLLISION_TABLE_EXCERPT = `### Phrase collision quick refere
 | latest VEIL and TV (catalog) | veil_query list + tv_query list (no scripture unless themed) |
 | database up / doctor | run_doctor |`;
 
-export const EMPIRE_CONTENT_ROUTING = `## Kingdom/Garden content routing (pick every relevant tool)
+export const KINGDOM_CONTENT_ROUTING = `## Kingdom/Garden content routing (pick every relevant tool)
 
+- **Docs (docs.jexxx.us)** — Public reference library (architecture, CLI, platform). Use the RAG documentation context injected below; **never** treat "Docs" as a BLXCKBOOK contact name.
+- **law_query** — Public legal policies on law.jexxx.us (Terms, Privacy, Refunds, DMCA). Never fabricate policy text.
 - **tv_query** — JEXXXUS | TV videos on tv.jexxx.us. Channels, series, tags, titles (Forgive Me Father, Deviante, categories).
 - **veil_query** — VEIL articles on veil.jexxx.us.
 - **bible_query** — Scripture vault. action=query with explicit **Book Chapter:Verse** only (e.g. "1 John 1:9") — never pass video series titles as the query string.
@@ -546,4 +617,4 @@ export const EMPIRE_CONTENT_ROUTING = `## Kingdom/Garden content routing (pick e
 
 If bible_query fails once, do not spam format variants — use the listed Book Ch:V refs only.
 
-${EMPIRE_COLLISION_TABLE_EXCERPT}`;
+${KINGDOM_COLLISION_TABLE_EXCERPT}`;
