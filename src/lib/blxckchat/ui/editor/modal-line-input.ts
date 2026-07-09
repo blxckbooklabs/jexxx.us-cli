@@ -39,7 +39,6 @@ export function isPasteKey(key: BlessedKey): boolean {
     full === "S-C-v" ||
     ((key.meta || key.ctrl) && key.name === "v") ||
     (key.ctrl && key.shift && key.name === "v") ||
-    (key.name === "p" && !key.ctrl && !key.meta) ||
     (key.name === "insert" && Boolean(key.shift))
   );
 }

@@ -138,7 +138,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     inputArea.setContent(input.formatDisplay(inputViewWidth()));
     const count = `${input.getText().length} char${input.getText().length === 1 ? "" : "s"}`;
     const editHint = "⌥←→ word · ⌥⇧←→ select · ⌥⌫ delete word";
-    const pasteHint = secretMode ? "Press P to paste (or ⌘V)" : "⌘V paste";
+    const pasteHint = "⌘V paste";
     setFooter(
       status
         ? `${status} · ${count} · Enter save · Esc cancel`
@@ -152,7 +152,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     const clip = await readClipboardRobust();
     const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
     if (!normalized) {
-      render("Clipboard empty — copy text first, then press P");
+      render("Clipboard empty — copy text first, then ⌘V");
       return;
     }
     insertModalLinePaste(input, normalized);
@@ -238,7 +238,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     el.on("click", () => {
       if (!visible) return;
       focusInput();
-      render("Focused — press P to paste");
+      render("Focused — ⌘V to paste");
     });
   };
 
@@ -271,7 +271,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
         takeOverlayFocus(screen, inputArea);
         startModalCapture();
         visible = true;
-        render(secretMode ? "Ready — press P to paste API key" : undefined);
+        render(secretMode ? "Ready — ⌘V to paste API key" : undefined);
       });
     },
     isVisible() {

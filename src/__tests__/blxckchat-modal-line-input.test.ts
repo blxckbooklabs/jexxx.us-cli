@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   createModalLineInput,
   insertModalLinePaste,
+  isPasteKey,
 } from "../lib/blxckchat/ui/editor/modal-line-input.js";
 
 test("modal line input supports option+shift+word select", () => {
@@ -19,6 +20,14 @@ test("modal line input deletes word with option+backspace", () => {
   const input = createModalLineInput("hello world");
   input.handleKey("", { name: "backspace", meta: true });
   assert.equal(input.getText(), "hello ");
+});
+
+test("letter p inserts text and is not a paste shortcut", () => {
+  assert.equal(isPasteKey({ name: "p" }), false);
+  const input = createModalLineInput("OpenCode ");
+  const result = input.handleKey("p", { name: "p", ch: "p" });
+  assert.equal(result.action, "updated");
+  assert.equal(input.getText(), "OpenCode p");
 });
 
 test("insertModalLinePaste replaces selection", () => {
