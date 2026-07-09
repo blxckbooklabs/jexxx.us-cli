@@ -103,6 +103,43 @@ test("runAgent returns history that a follow-up call can use for context", async
   assert.match(last?.content ?? "", /Final answer using: echoed: hello/);
 });
 
+test("runAgent continues after chatStream returns tool_calls and streams the final answer", async () => {
+  let callCount = 0;
+  const provider: Provider = {
+    id: "openrouter",
+    async chat(): Promise<ChatResult> {
+      throw new Error("chat should not be used when chatStream handles tool calls");
+    },
+    async chatStream(_messages, _tools, onChunk): Promise<ChatResult> {
+      callCount++;
+      if (callCount === 1) {
+        onChunk("Let me check the scripture.");
+        return {
+          message: { role: "assistant", content: "Let me check the scripture." },
+          toolCalls: [{ id: "call_1", name: "echo_tool", arguments: { text: "hello" } }],
+          stopReason: "tool_calls",
+        };
+      }
+      onChunk("I am Hannah.");
+      return {
+        message: { role: "assistant", content: "I am Hannah." },
+        toolCalls: [],
+        stopReason: "stop",
+      };
+    },
+  };
+
+  const chunks: string[] = [];
+  const { response } = await runAgent(provider, [makeEchoTool()], "Tell me about yourself", [], {
+    onStream: (chunk) => chunks.push(chunk),
+  });
+
+  assert.equal(callCount, 2);
+  assert.match(response, /I am Hannah/);
+  assert.match(chunks.join(""), /Let me check the scripture/);
+  assert.match(chunks.join(""), /I am Hannah/);
+});
+
 test("runAgent caps replayed history so long sessions don't grow context unbounded", async () => {
   const provider: Provider = {
     id: "anthropic",

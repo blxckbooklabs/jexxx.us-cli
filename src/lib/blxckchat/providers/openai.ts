@@ -7,6 +7,10 @@ import type {
   ToolCall,
   ToolDefinition,
 } from "./types.js";
+import {
+  accumulateStreamingToolCalls,
+  finalizeStreamingToolCalls,
+} from "./openai-stream.js";
 
 /**
  * OpenAI Chat Completions adapter (function calling). Also used for Ollama,
@@ -32,6 +36,20 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
         return { role: "system", content: m.content };
       }
       if (m.role === "assistant") {
+        if (m.toolCalls?.length) {
+          return {
+            role: "assistant",
+            content: m.content || null,
+            tool_calls: m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: "function" as const,
+              function: {
+                name: tc.name,
+                arguments: JSON.stringify(tc.arguments),
+              },
+            })),
+          };
+        }
         return { role: "assistant", content: m.content };
       }
       return { role: "user", content: m.content };
@@ -49,41 +67,43 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
         }))
       : undefined;
 
+  const chat = async (
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+  ): Promise<ChatResult> => {
+    const response = await (
+      tools.length > 0
+        ? client.chat.completions.create({
+            model: config.model,
+            messages: buildMessages(messages),
+            tools: buildTools(tools)!,
+          })
+        : client.chat.completions.create({
+            model: config.model,
+            messages: buildMessages(messages),
+          })
+    );
+
+    const choice = response.choices[0];
+    const message = choice?.message;
+    const toolCalls: ToolCall[] = (message?.tool_calls ?? [])
+      .filter((tc): tc is OpenAI.ChatCompletionMessageToolCall & { type: "function" } => tc.type === "function")
+      .map((tc) => ({
+        id: tc.id,
+        name: tc.function.name,
+        arguments: JSON.parse(tc.function.arguments || "{}"),
+      }));
+
+    return {
+      message: { role: "assistant", content: message?.content ?? "" },
+      toolCalls,
+      stopReason: toolCalls.length > 0 ? "tool_calls" : "stop",
+    };
+  };
+
   return {
     id: config.provider,
-    async chat(
-      messages: ChatMessage[],
-      tools: ToolDefinition[]
-    ): Promise<ChatResult> {
-      const response = await (
-        tools.length > 0
-          ? client.chat.completions.create({
-              model: config.model,
-              messages: buildMessages(messages),
-              tools: buildTools(tools)!,
-            })
-          : client.chat.completions.create({
-              model: config.model,
-              messages: buildMessages(messages),
-            })
-      );
-
-      const choice = response.choices[0];
-      const message = choice?.message;
-      const toolCalls: ToolCall[] = (message?.tool_calls ?? [])
-        .filter((tc): tc is OpenAI.ChatCompletionMessageToolCall & { type: "function" } => tc.type === "function")
-        .map((tc) => ({
-          id: tc.id,
-          name: tc.function.name,
-          arguments: JSON.parse(tc.function.arguments || "{}"),
-        }));
-
-      return {
-        message: { role: "assistant", content: message?.content ?? "" },
-        toolCalls,
-        stopReason: toolCalls.length > 0 ? "tool_calls" : "stop",
-      };
-    },
+    chat,
 
     async chatStream(
       messages: ChatMessage[],
@@ -106,27 +126,44 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
       );
 
       let fullContent = "";
+      let finishReason: string | null = null;
+      const toolCallAcc = new Map<number, { id?: string; name?: string; arguments: string }>();
+
       try {
         for await (const event of stream) {
-          const delta = event.choices[0]?.delta;
+          const choice = event.choices[0];
+          const delta = choice?.delta;
+          if (choice?.finish_reason) {
+            finishReason = choice.finish_reason;
+          }
           if (delta?.content) {
             fullContent += delta.content;
             onChunk(delta.content);
           }
+          accumulateStreamingToolCalls(toolCallAcc, delta?.tool_calls);
         }
       } catch (err) {
         // Ignore stream errors after content has been received (Ollama may close prematurely)
-        if (!fullContent) {
+        if (!fullContent && toolCallAcc.size === 0) {
           throw err;
         }
       }
 
-      // For now, streaming doesn't support tool calls (they're not streamed in OpenAI API)
-      // If tool calls are needed, fall back to non-streaming mode
+      let toolCalls = finalizeStreamingToolCalls(toolCallAcc);
+
+      // Some OpenAI-compatible backends set finish_reason without streaming deltas.
+      if (
+        toolCalls.length === 0 &&
+        finishReason === "tool_calls" &&
+        tools.length > 0
+      ) {
+        return chat(messages, tools);
+      }
+
       return {
         message: { role: "assistant", content: fullContent },
-        toolCalls: [],
-        stopReason: "stop",
+        toolCalls,
+        stopReason: toolCalls.length > 0 ? "tool_calls" : "stop",
       };
     },
   };
