@@ -1,5 +1,6 @@
 import blessed from "blessed";
 
+import { bindFocusedKey } from "../editor/focused-key.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 import { stepListIndex } from "./slash-popup.js";
@@ -176,16 +177,6 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
 
   list.on("set items", () => wireAllItems());
 
-  list.key(["up", "k"], () => {
-    highlightIndex(stepListIndex(selectedIndex, -1, filteredItems.length));
-  });
-
-  list.key(["down", "j"], () => {
-    highlightIndex(stepListIndex(selectedIndex, 1, filteredItems.length));
-  });
-
-  list.key(["enter", "C-m"], () => pickIndex(selectedIndex));
-
   const cancel = (): void => {
     onCancelHandler?.();
     close();
@@ -195,14 +186,22 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     highlightIndex(stepListIndex(selectedIndex, delta, filteredItems.length));
   };
 
-  filterBox.key(["escape", "C-c"], cancel);
-  list.key(["escape", "C-c", "q"], cancel);
+  const whenVisible = (handler: () => void): (() => void) => () => {
+    if (!visible) return;
+    handler();
+  };
 
-  filterBox.key(["up", "k"], () => navigateList(-1));
-  filterBox.key(["down", "j"], () => navigateList(1));
-  filterBox.key(["enter", "C-m"], () => pickIndex(selectedIndex));
+  // Blessed element.key() is program-global — gate focus and visibility.
+  bindFocusedKey(screen, list, ["up", "k"], whenVisible(() => navigateList(-1)));
+  bindFocusedKey(screen, list, ["down", "j"], whenVisible(() => navigateList(1)));
+  bindFocusedKey(screen, list, ["enter", "C-m"], whenVisible(() => pickIndex(selectedIndex)));
+  bindFocusedKey(screen, list, ["escape", "C-c", "q"], whenVisible(cancel));
+  bindFocusedKey(screen, list, ["tab"], whenVisible(() => filterBox.focus()));
 
-  list.key(["tab"], () => filterBox.focus());
+  bindFocusedKey(screen, filterBox, ["up", "k"], whenVisible(() => navigateList(-1)));
+  bindFocusedKey(screen, filterBox, ["down", "j"], whenVisible(() => navigateList(1)));
+  bindFocusedKey(screen, filterBox, ["enter", "C-m"], whenVisible(() => pickIndex(selectedIndex)));
+  bindFocusedKey(screen, filterBox, ["escape", "C-c"], whenVisible(cancel));
 
   filterBox.on("keypress", (_ch, key) => {
     if (key.name === "tab") {

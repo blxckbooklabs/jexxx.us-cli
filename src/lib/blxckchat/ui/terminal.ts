@@ -19,6 +19,7 @@ import {
 import { THEME } from "./theme.js";
 import { createMessageBox } from "./components/message-box.js";
 import { createInputBox } from "./components/input-box.js";
+import { bindFocusedKey } from "./editor/focused-key.js";
 import { createStatusBar } from "./components/status-bar.js";
 import { createSlashPopup } from "./components/slash-popup.js";
 import { createSearchOverlay } from "./components/search-overlay.js";
@@ -641,11 +642,11 @@ export async function startTerminalChat(
     messageBox.scrollToBottom();
     updateScrollStatus();
   });
-  messageBox.element.key(["up"], () => {
+  bindFocusedKey(screen, messageBox.element, ["up"], () => {
     messageBox.scrollUp();
     updateScrollStatus();
   });
-  messageBox.element.key(["down"], () => {
+  bindFocusedKey(screen, messageBox.element, ["down"], () => {
     messageBox.scrollDown();
     updateScrollStatus();
   });

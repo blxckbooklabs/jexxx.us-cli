@@ -7,6 +7,7 @@ import {
   type SlashSuggestion,
 } from "../slash/autocomplete.js";
 import { attachBlessedLineEditor } from "../editor/blessed-line-editor.js";
+import { bindFocusedKey } from "../editor/focused-key.js";
 import { frameTransmitInput } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
@@ -130,14 +131,6 @@ export function createInputBox(
         notify();
       });
     },
-    onArrowKey: (delta) => {
-      if (!options.slashPopup?.isVisible() || slashSuggestions.length === 0) {
-        return false;
-      }
-      options.slashPopup.moveSelection(delta, slashSuggestions.length);
-      notify();
-      return true;
-    },
   });
 
   const applySlashSuggestionAt = (idx: number): boolean => {
@@ -232,9 +225,12 @@ export function createInputBox(
     input.key(["C-g"], () => options.onOpenExternalEditor!());
   }
 
-  input.key("up", () => {
-    // Slash popup ↑/↓ is handled once in blessed-line-editor onArrowKey (avoid double-step).
-    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) return;
+  bindFocusedKey(screen, input, "up", () => {
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
+      options.slashPopup.moveSelection(-1, slashSuggestions.length);
+      notify();
+      return;
+    }
     if (history.length === 0) return;
     if (historyIndex === history.length) {
       draft = lineEditor.getText();
@@ -248,8 +244,12 @@ export function createInputBox(
     }
   });
 
-  input.key("down", () => {
-    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) return;
+  bindFocusedKey(screen, input, "down", () => {
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
+      options.slashPopup.moveSelection(1, slashSuggestions.length);
+      notify();
+      return;
+    }
     if (history.length === 0) return;
     if (historyIndex < history.length - 1) {
       historyIndex++;
