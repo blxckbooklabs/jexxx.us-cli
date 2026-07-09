@@ -18,6 +18,7 @@ export const COMPANION_VERSE_SETS = {
   crucifixion: ["Luke 23:34", "Matthew 27:46"],
   adultery: ["Proverbs 6:32", "Hebrews 13:4"],
   church: ["1 Corinthians 6:19", "Ephesians 5:23"],
+  proverbs31: ["Proverbs 31:10", "Proverbs 31:30", "Proverbs 5:3"],
 } as const;
 
 export const MAX_COMPANION_VERSES = 4;
@@ -32,7 +33,14 @@ export interface PhraseCollision {
   companionVerses?: readonly string[];
   /** Explicit tv_query search string (series, tag, category). */
   tvSearchQuery?: string;
+  /** Explicit veil_query search string (topic, title fragment). */
+  veilSearchQuery?: string;
   note: string;
+}
+
+export interface EmpireRoutingOptions {
+  /** Recent user/assistant turns — used when the latest message is a short follow-up. */
+  conversationContext?: string;
 }
 
 export interface EmpireToolPlan {
@@ -43,6 +51,8 @@ export interface EmpireToolPlan {
   companionVerses: string[];
   /** Best tv_query search string for this prompt, if any. */
   tvSearchQuery: string | null;
+  /** Best veil_query search string for this prompt, if any. */
+  veilSearchQuery: string | null;
   matchedRules: string[];
 }
 
@@ -84,8 +94,40 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
     note: "Pastor's wife across VEIL + TV + clergy/adultery verses.",
   },
   {
+    id: "scripture-proverbs-31",
+    pattern: /proverbs\s*31/i,
+    tools: ["veil_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.proverbs31,
+    veilSearchQuery: "Proverbs 31",
+    note: "Proverbs 31 bookmark/theme — VEIL + scripture companions.",
+  },
+  {
+    id: "veil-church-girls",
+    pattern: /\b(church\s+girl|churchy\s+girl|good\s+church\s+girl)\b/i,
+    tools: ["veil_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.church,
+    veilSearchQuery: "church girl",
+    note: "Church girl VEIL theme + church scripture.",
+  },
+  {
+    id: "veil-draft-article",
+    pattern:
+      /\b(read the draft|unpublished (?:piece|article|post)|draft (?:on|article|piece)|number\s+\d+.*(?:article|piece|post))\b/i,
+    tools: ["veil_query"],
+    veilSearchQuery: "church girl",
+    note: "Character offers a VEIL draft — search real articles.",
+  },
+  {
+    id: "corruption-correspondent",
+    pattern: /\b(corruption correspondent|lil'?\s*bible|keep the altar warm|blueprint)\b/i,
+    tools: ["veil_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.confession,
+    veilSearchQuery: "corruption",
+    note: "Hannah / Lil' Bible corruption beat — VEIL + confession verses.",
+  },
+  {
     id: "persona-biblical-women",
-    pattern: /\b(jezebel|delilah|bathsheba|hannah|mary\s+magdalene|bithiah)\b/i,
+    pattern: /\b(jezebel|delilah|bathsheba|mary\s+magdalene|bithiah)\b/i,
     tools: ["veil_query", "bible_query"],
     companionVerses: COMPANION_VERSE_SETS.jezebel,
     slashHints: ["/divinities"],
@@ -139,6 +181,29 @@ const WATCH_CATEGORY_ON_TV = /\b(nuns?|category)\b.*\b(tv|jexxxus\s*\|\s*tv)\b/i
 const VEIL_SURFACE = /\bveil\b/i;
 const TV_SURFACE = /\b(tv|jexxxus\s*\|\s*tv)\b/i;
 
+/** Merge latest user message with recent transcript for routing/prefetch. */
+export function buildEmpireRoutingText(
+  userPrompt: string,
+  options?: EmpireRoutingOptions,
+): string {
+  const parts = [userPrompt.trim()];
+  const ctx = options?.conversationContext?.trim();
+  if (ctx) parts.push(ctx);
+  return parts.join("\n\n");
+}
+
+/** Last N user/assistant lines for empire phrase detection on short follow-ups. */
+export function extractRoutingContextFromHistory(
+  messages: Array<{ role: string; content: string }>,
+  maxMessages = 8,
+): string {
+  return messages
+    .slice(-maxMessages)
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => m.content)
+    .join("\n\n");
+}
+
 function addTools(set: Set<RoutableTool>, tools: RoutableTool[]): void {
   for (const t of tools) set.add(t);
 }
@@ -186,10 +251,23 @@ export function inferThemeCompanionVerses(prompt: string): string[] {
   if (/\b(nuns?|in\s+church|church)\b/i.test(prompt)) {
     mergeCompanionVerses(verses, COMPANION_VERSE_SETS.church);
   }
+  if (/proverbs\s*31/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.proverbs31);
+  }
   if (/\b(corruption|confess)\b/i.test(prompt)) {
     mergeCompanionVerses(verses, COMPANION_VERSE_SETS.confession);
   }
   return [...verses].slice(0, MAX_COMPANION_VERSES);
+}
+
+/** Resolve veil_query search text from routing plan + prompt. */
+export function inferVeilSearchQuery(prompt: string, plan: EmpireToolPlan): string | null {
+  if (plan.veilSearchQuery) return plan.veilSearchQuery;
+  if (/proverbs\s*31/i.test(prompt)) return "Proverbs 31";
+  if (/\b(church\s+girl|churchy)\b/i.test(prompt)) return "church girl";
+  if (/\b(corruption|confession|altar)\b/i.test(prompt)) return "corruption";
+  if (/\bpastor'?s?\s+wife\b/i.test(prompt)) return "pastor's wife";
+  return null;
 }
 
 function isCatalogOnlyPrompt(prompt: string): boolean {
@@ -200,15 +278,19 @@ function isCatalogOnlyPrompt(prompt: string): boolean {
 }
 
 /** Plan which empire tools fit a user message (deterministic, testable). */
-export function planEmpireTools(userPrompt: string): EmpireToolPlan {
+export function planEmpireTools(
+  userPrompt: string,
+  options?: EmpireRoutingOptions,
+): EmpireToolPlan {
   const tools = new Set<RoutableTool>();
   const exclude = new Set<RoutableTool>();
   const slashHints = new Set<string>();
   const companionVerses = new Set<string>();
   let tvSearchQuery: string | null = null;
+  let veilSearchQuery: string | null = null;
   const matchedRules: string[] = [];
 
-  const prompt = userPrompt.trim();
+  const prompt = buildEmpireRoutingText(userPrompt, options);
   const hasVerseRef =
     looksLikeVerseReference(prompt) ||
     [...prompt.matchAll(/\b((?:\d+\s+)?[A-Za-z][A-Za-z0-9\s.'-]*?\s+\d+\s*[: ]\s*\d+)\b/g)]
@@ -227,8 +309,11 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     if (row.companionVerses) {
       mergeCompanionVerses(companionVerses, row.companionVerses);
     }
-    if (row.tvSearchQuery) {
+    if (row.tvSearchQuery && !tvSearchQuery) {
       tvSearchQuery = row.tvSearchQuery;
+    }
+    if (row.veilSearchQuery && !veilSearchQuery) {
+      veilSearchQuery = row.veilSearchQuery;
     }
   }
 
@@ -314,6 +399,19 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
       slashHints: [...slashHints],
       companionVerses: [...companionVerses],
       tvSearchQuery: null,
+      veilSearchQuery: null,
+      matchedRules,
+    });
+  }
+
+  if (!veilSearchQuery && tools.has("veil_query")) {
+    veilSearchQuery = inferVeilSearchQuery(prompt, {
+      tools: [...tools],
+      exclude: [...exclude],
+      slashHints: [...slashHints],
+      companionVerses: [...companionVerses],
+      tvSearchQuery,
+      veilSearchQuery: null,
       matchedRules,
     });
   }
@@ -324,13 +422,17 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     slashHints: [...slashHints],
     companionVerses: [...companionVerses],
     tvSearchQuery,
+    veilSearchQuery,
     matchedRules,
   };
 }
 
 /** Human-readable block appended to the system prompt for the current user turn. */
-export function formatEmpireRoutingHint(userPrompt: string): string | null {
-  const plan = planEmpireTools(userPrompt);
+export function formatEmpireRoutingHint(
+  userPrompt: string,
+  options?: EmpireRoutingOptions,
+): string | null {
+  const plan = planEmpireTools(userPrompt, options);
   if (plan.tools.length === 0 && plan.slashHints.length === 0) return null;
 
   const lines = ["## Routing hint for this message (empire collision table)"];
@@ -346,6 +448,16 @@ export function formatEmpireRoutingHint(userPrompt: string): string | null {
   if (plan.tvSearchQuery && plan.tools.includes("tv_query")) {
     lines.push(
       `TV search — call tv_query action=search query="${plan.tvSearchQuery}" (not action=list).`,
+    );
+  }
+  if (plan.veilSearchQuery && plan.tools.includes("veil_query")) {
+    lines.push(
+      `VEIL search — call veil_query action=search query="${plan.veilSearchQuery}" (not action=list).`,
+    );
+  }
+  if (options?.conversationContext?.trim()) {
+    lines.push(
+      "Routing includes recent conversation context — use tools even during persona roleplay when scripture, drafts, or VEIL themes appear.",
     );
   }
   if (plan.companionVerses.length > 0) {
@@ -385,7 +497,7 @@ export const EMPIRE_CONTENT_ROUTING = `## Empire content routing (pick every rel
 - **veil_query** — VEIL articles on veil.jexxx.us.
 - **bible_query** — Scripture vault. action=query with explicit **Book Chapter:Verse** only (e.g. "1 John 1:9") — never pass video series titles as the query string.
 
-**Empire synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links.
+**Empire synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, Proverbs 31, church girl, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links. During **persona roleplay**, still call tools when the scene cites scripture bookmarks, VEIL drafts/articles, or TV sacraments — cite real catalog URLs in dialogue; do not invent article numbers without veil_query.
 
 **URL rule (strict):** Copy https://tv.jexxx.us/video/... and https://veil.jexxx.us/articles/... links **exactly** from tool or pre-fetched output — **one URL per line**, never glue two URLs together. Never use wv.jexxx.us, never insert spaces inside URLs or slugs, never invent paths.
 

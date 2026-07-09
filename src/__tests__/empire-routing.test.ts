@@ -135,3 +135,22 @@ test("formatEmpireRoutingHint returns null for unrelated prompts", () => {
 test("COMPANION_VERSE_SETS forgiveness includes confession verse", () => {
   assert.ok(COMPANION_VERSE_SETS.forgiveness.includes("1 John 1:9"));
 });
+
+test("regression 10: short follow-up routes via conversation context (Proverbs 31)", () => {
+  const plan = planEmpireTools("keep going", {
+    conversationContext:
+      "Lil' Bible: the blonde with the Proverbs 31 bookmark. Hannah: read the draft on the way to her car.",
+  });
+  assert.ok(plan.tools.includes("veil_query"));
+  assert.ok(plan.tools.includes("bible_query"));
+  assert.ok(plan.companionVerses.some((v) => v.startsWith("Proverbs 31")));
+  assert.equal(plan.veilSearchQuery, "Proverbs 31");
+});
+
+test("regression 11: blueprint corruption beat triggers VEIL search", () => {
+  const plan = planEmpireTools("understanding is a blueprint", {
+    conversationContext: "Hannah: Corruption Correspondent · Lil' Bible",
+  });
+  assert.ok(plan.tools.includes("veil_query"));
+  assert.equal(plan.veilSearchQuery, "corruption");
+});

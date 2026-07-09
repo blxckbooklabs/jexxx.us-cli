@@ -5,7 +5,12 @@ import { findTool } from "./tools/registry.js";
 import { confirmToolCall as defaultConfirmToolCall } from "./confirm.js";
 import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
-import { EMPIRE_CONTENT_ROUTING, formatEmpireRoutingHint } from "./empire-routing.js";
+import {
+  EMPIRE_CONTENT_ROUTING,
+  extractRoutingContextFromHistory,
+  formatEmpireRoutingHint,
+  type EmpireRoutingOptions,
+} from "./empire-routing.js";
 import { prefetchEmpireContext } from "./empire-prefetch.js";
 import {
   extractEmpireUrlsFromText,
@@ -87,6 +92,12 @@ and identity above. You still have access to BLXCKCHAT tools (Bible lookups, pub
 public JEXXXUS | TV videos, dashboard diagnostics, notifications, contact imports). Stay in character \
 when explaining tool actions; the operator must confirm any write/shell tool before it runs.
 
+**Persona + empire:** When the scene mentions scripture bookmarks (Proverbs 31, etc.), a VEIL draft/article, \
+or a TV sacrament, call veil_query / bible_query / tv_query in the **same turn** and weave real URLs and \
+quoted verses into the dialogue. If a character offers "the draft" or "number 11," fetch a matching VEIL \
+article via veil_query action=search — do not invent unpublished pieces. Advance the scene with catalog-backed \
+detail; avoid generic "want me to keep going?" prompts.
+
 ${EMPIRE_CONTENT_ROUTING}`;
 
 function appendDocContext(prompt: string, userPrompt: string): string {
@@ -100,15 +111,19 @@ function appendDocContext(prompt: string, userPrompt: string): string {
   return `${prompt}\n\nRelevant JEXXXUS documentation context:\n\n${context}`;
 }
 
-async function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): Promise<string> {
+async function buildSystemPrompt(
+  userPrompt: string,
+  persona?: PersonaContext,
+  routingOptions?: EmpireRoutingOptions,
+): Promise<string> {
   const base = persona
     ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
     : SYSTEM_PROMPT_BASE;
 
-  const routingHint = formatEmpireRoutingHint(userPrompt);
+  const routingHint = formatEmpireRoutingHint(userPrompt, routingOptions);
   let prompt = routingHint ? `${base}\n\n${routingHint}` : base;
 
-  const prefetch = await prefetchEmpireContext(userPrompt);
+  const prefetch = await prefetchEmpireContext(userPrompt, routingOptions);
   if (prefetch) {
     prompt = `${prompt}\n\n${prefetch}`;
   }
@@ -140,7 +155,14 @@ export async function runAgent(
       ? history.slice(history.length - MAX_HISTORY_MESSAGES)
       : history;
 
-  const systemPrompt = await buildSystemPrompt(userPrompt, options.persona);
+  const routingOptions: EmpireRoutingOptions = {
+    conversationContext: extractRoutingContextFromHistory(trimmedHistory),
+  };
+  const systemPrompt = await buildSystemPrompt(
+    userPrompt,
+    options.persona,
+    routingOptions,
+  );
   const canonicalUrlCatalog: EmpireUrlEntry[] = [
     ...extractEmpireUrlsFromText(systemPrompt),
   ];
