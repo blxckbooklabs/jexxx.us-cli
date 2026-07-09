@@ -15,6 +15,11 @@ import { framePanel, wrapWelcomeBannerBlessed } from "../renderer/plain-text.js"
 import { isBlessedMouseEnabled } from "../tty.js";
 import { TAG, THEME } from "../theme.js";
 import { centerHeroVertically } from "./jexxxus-hero.js";
+import {
+  isNearBottom as isNearBottomLines,
+  scrollPercent as scrollPercentFromLines,
+  scrollPercentAfterContent,
+} from "./scroll-state.js";
 
 function highlightSearch(text: string, query: string): string {
   if (!query) return text;
@@ -97,6 +102,7 @@ export function createMessageBox(
   let focusedThinkingIndex: number | null = null;
   let searchQuery = "";
   let pinnedToBottom = true;
+  let blessedContentCache: string | null = null;
 
   const box = blessed.box({
     parent: screen,
@@ -121,33 +127,40 @@ export function createMessageBox(
     padding: { left: 1, right: 1, top: 0, bottom: 1 },
   });
 
-  const computeScrollPercent = (): number => {
-    const { scroll, height, content } = getScrollMetrics();
-    const maxScroll = Math.max(0, content - height);
-    if (maxScroll <= 0) return 100;
-    return Math.round(Math.min(100, Math.max(0, (scroll / maxScroll) * 100)));
+  const getViewportHeight = (): number => {
+    const inner = (box as { iheight?: number }).iheight ?? 0;
+    return Math.max(1, ((box.height as number) || 1) - inner);
   };
 
-  const isNearBottom = (): boolean => {
+  const getScrollMetrics = (): { scroll: number; height: number; content: number } => ({
+    scroll: box.getScroll() ?? 0,
+    height: getViewportHeight(),
+    content: box.getScrollHeight(),
+  });
+
+  const readScrollPercent = (): number => {
     const { scroll, height, content } = getScrollMetrics();
-    return scroll + height >= content - SCROLL_PIN_THRESHOLD;
+    return scrollPercentFromLines(scroll, height, content);
   };
+
+  const syncPinnedFromScroll = (): void => {
+    const { scroll, height, content } = getScrollMetrics();
+    pinnedToBottom = isNearBottomLines(scroll, height, content, SCROLL_PIN_THRESHOLD);
+  };
+
+  const computeScrollPercent = (): number => readScrollPercent();
 
   const emitScrollChange = (): void => {
     options.onScrollChange?.({
-      pinnedToBottom: pinnedToBottom && isNearBottom(),
+      pinnedToBottom,
       percent: computeScrollPercent(),
     });
   };
 
-  const applyScrollAfterContent = (savedScroll: number): void => {
-    if (pinnedToBottom || isNearBottom()) {
-      box.setScrollPerc(100);
-      pinnedToBottom = true;
-    } else {
-      box.setScroll(savedScroll);
-      pinnedToBottom = false;
-    }
+  const applyScrollAfterContent = (savedPercent: number): void => {
+    const target = scrollPercentAfterContent(pinnedToBottom, savedPercent);
+    box.setScrollPerc(target);
+    syncPinnedFromScroll();
     screen.render();
     emitScrollChange();
   };
@@ -213,11 +226,15 @@ export function createMessageBox(
     return parts.join("\n");
   };
 
-  const getScrollMetrics = (): { scroll: number; height: number; content: number } => {
-    const scroll = box.getScroll() ?? 0;
-    const height = Math.max(1, (box.height as number) || 1);
-    const contentLines = Math.max(height, renderBlessedContent().split("\n").length);
-    return { scroll, height, content: contentLines };
+  const invalidateBlessedCache = (): void => {
+    blessedContentCache = null;
+  };
+
+  const getBlessedContent = (): string => {
+    if (blessedContentCache === null) {
+      blessedContentCache = renderBlessedContent();
+    }
+    return blessedContentCache;
   };
 
   const renderPlainContent = (): string => {
@@ -268,24 +285,22 @@ export function createMessageBox(
   };
 
   const refreshContent = (forceBottom = false): void => {
-    const savedScroll = box.getScroll() ?? 0;
-    box.setContent(renderBlessedContent());
+    const savedPercent = readScrollPercent();
+    invalidateBlessedCache();
+    box.setContent(getBlessedContent());
     if (forceBottom) {
       pinnedToBottom = true;
       box.setScrollPerc(100);
+      screen.render();
+      emitScrollChange();
     } else {
-      applyScrollAfterContent(savedScroll);
+      applyScrollAfterContent(savedPercent);
     }
     notify();
   };
 
   const rebuild = (): void => {
     refreshContent(false);
-  };
-
-  const markScrolled = (): void => {
-    pinnedToBottom = isNearBottom();
-    emitScrollChange();
   };
 
   const isScrollbarColumn = (data: { x: number }): boolean => {
@@ -302,31 +317,19 @@ export function createMessageBox(
     } else {
       box.focus();
     }
-    setImmediate(() => {
-      markScrolled();
-      screen.render();
-    });
   });
 
-  box.on("wheeldown", () => {
-    box.scroll(3);
-    pinnedToBottom = false;
-    screen.render();
-    markScrolled();
-  });
-
-  box.on("wheelup", () => {
-    box.scroll(-3);
-    pinnedToBottom = isNearBottom();
-    screen.render();
-    markScrolled();
+  // Blessed handles wheel + scrollbar drag when mouse is enabled; track position only.
+  box.on("scroll", () => {
+    syncPinnedFromScroll();
+    emitScrollChange();
   });
 
   const scrollBy = (delta: number): void => {
     box.scroll(delta);
-    pinnedToBottom = isNearBottom();
+    syncPinnedFromScroll();
     screen.render();
-    markScrolled();
+    emitScrollChange();
   };
 
   const dismissHero = (): boolean => {
@@ -357,6 +360,7 @@ export function createMessageBox(
       refreshContent(true);
     },
     appendAssistantStart() {
+      invalidateBlessedCache();
       blocks.push({ type: "assistant", content: "", assistantRaw: "", thinkingBlocks: [] });
       return blocks.length - 1;
     },
@@ -365,13 +369,11 @@ export function createMessageBox(
       if (block?.type === "assistant") {
         block.content = partial;
         block.assistantRaw = rawPlain ?? partial;
-        const savedScroll = box.getScroll() ?? 0;
-        box.setContent(renderBlessedContent());
-        if (pinnedToBottom) {
-          box.setScrollPerc(100);
-        } else {
-          box.setScroll(savedScroll);
-        }
+        const savedPercent = pinnedToBottom ? 100 : readScrollPercent();
+        invalidateBlessedCache();
+        box.setContent(getBlessedContent());
+        box.setScrollPerc(scrollPercentAfterContent(pinnedToBottom, savedPercent));
+        syncPinnedFromScroll();
         screen.render();
         emitScrollChange();
         notify();
@@ -430,13 +432,15 @@ export function createMessageBox(
       emitScrollChange();
     },
     getScrollState(): ScrollState {
+      syncPinnedFromScroll();
       return {
-        pinnedToBottom: pinnedToBottom && isNearBottom(),
+        pinnedToBottom,
         percent: computeScrollPercent(),
       };
     },
     isPinnedToBottom() {
-      return pinnedToBottom && isNearBottom();
+      syncPinnedFromScroll();
+      return pinnedToBottom;
     },
     getThinkingBlocks() {
       return allThinkingBlocks();

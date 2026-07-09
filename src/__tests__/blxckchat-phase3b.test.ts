@@ -54,12 +54,12 @@ test("branchUndo returns false when session is empty", () => {
   assert.equal(branchUndo(session), false);
 });
 
-test("isBlessedMouseEnabled is off unless BLXCKCHAT_MOUSE is set", () => {
+test("isBlessedMouseEnabled is on by default and BLXCKCHAT_MOUSE=0 disables", () => {
   const prev = process.env.BLXCKCHAT_MOUSE;
   delete process.env.BLXCKCHAT_MOUSE;
-  assert.equal(isBlessedMouseEnabled(), false);
-  process.env.BLXCKCHAT_MOUSE = "1";
   assert.equal(isBlessedMouseEnabled(), true);
+  process.env.BLXCKCHAT_MOUSE = "0";
+  assert.equal(isBlessedMouseEnabled(), false);
   if (prev === undefined) delete process.env.BLXCKCHAT_MOUSE;
   else process.env.BLXCKCHAT_MOUSE = prev;
 });
