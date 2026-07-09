@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "start": "ts-node src/index.ts",
-    "test": "npm run build && node --test dist/__tests__/*.test.js"
+    "test": "npm run build && node --test dist/__tests__/*.test.js",
+    "smoke:rls": "npm run build && node dist/scripts/rls-smoke-test.js"
   },
   "repository": {
     "type": "git",
