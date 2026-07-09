@@ -233,11 +233,8 @@ export function createInputBox(
   }
 
   input.key("up", () => {
-    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
-      options.slashPopup.moveSelection(-1, slashSuggestions.length);
-      notify();
-      return;
-    }
+    // Slash popup ↑/↓ is handled once in blessed-line-editor onArrowKey (avoid double-step).
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) return;
     if (history.length === 0) return;
     if (historyIndex === history.length) {
       draft = lineEditor.getText();
@@ -252,11 +249,7 @@ export function createInputBox(
   });
 
   input.key("down", () => {
-    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
-      options.slashPopup.moveSelection(1, slashSuggestions.length);
-      notify();
-      return;
-    }
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) return;
     if (history.length === 0) return;
     if (historyIndex < history.length - 1) {
       historyIndex++;

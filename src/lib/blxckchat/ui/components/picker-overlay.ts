@@ -91,10 +91,10 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     border: { type: "line" },
     label: " items ",
     tags: true,
-    keys: true,
+    keys: false,
     mouse: mouseEnabled,
     interactive: true,
-    vi: true,
+    vi: false,
     itemHoverEffects: { bg: THEME.pink, fg: THEME.text, bold: true },
     style: {
       fg: THEME.text,
