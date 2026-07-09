@@ -616,6 +616,7 @@ blxckchatCmd
     // terminals. One-shot mode above stays intentionally stateless.
     await startInteractiveChat(provider, tools, {
       providerLabel: `${storedConfig.provider}/${storedConfig.model}`,
+      storedConfig,
     });
   });
 

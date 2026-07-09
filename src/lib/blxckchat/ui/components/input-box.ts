@@ -1,15 +1,27 @@
 import blessed from "blessed";
 
+import type { SlashPopupHandle } from "./slash-popup.js";
+import { applySuggestion } from "./slash-popup.js";
+import {
+  detectSlashInputMode,
+  type SlashSuggestion,
+} from "../slash/autocomplete.js";
+
 export interface InputBoxHandle {
   element: blessed.Widgets.TextboxElement;
   focus: () => void;
   clear: () => void;
+  setValue: (value: string) => void;
+  getValue: () => string;
   getHistory: () => string[];
   getPlainText: () => string;
+  hideSlashPopup: () => void;
 }
 
 export interface InputBoxOptions {
   onUpdate?: () => void;
+  slashPopup?: SlashPopupHandle;
+  getSlashSuggestions?: (value: string) => Promise<SlashSuggestion[]>;
 }
 
 export function createInputBox(
@@ -20,6 +32,8 @@ export function createInputBox(
   const history: string[] = [];
   let historyIndex = -1;
   let draft = "";
+  let slashSuggestions: SlashSuggestion[] = [];
+  let slashDebounce: ReturnType<typeof setTimeout> | null = null;
 
   const input = blessed.textbox({
     parent: screen,
@@ -46,7 +60,55 @@ export function createInputBox(
     options.onUpdate?.();
   };
 
+  const hideSlashPopup = (): void => {
+    options.slashPopup?.hide();
+    slashSuggestions = [];
+  };
+
+  const refreshSlashSuggestions = (value: string): void => {
+    if (!options.getSlashSuggestions || !options.slashPopup) return;
+
+    const { mode } = detectSlashInputMode(value);
+    if (mode === "none") {
+      hideSlashPopup();
+      return;
+    }
+
+    if (slashDebounce) clearTimeout(slashDebounce);
+    slashDebounce = setTimeout(() => {
+      void options.getSlashSuggestions!(value).then((suggestions) => {
+        slashSuggestions = suggestions;
+        if (suggestions.length > 0) {
+          options.slashPopup!.show(suggestions, 0);
+        } else {
+          hideSlashPopup();
+        }
+      });
+    }, 50);
+  };
+
+  const applySelectedSuggestion = (): boolean => {
+    if (!options.slashPopup?.isVisible() || slashSuggestions.length === 0) {
+      return false;
+    }
+    const idx = options.slashPopup.getSelectedIndex();
+    const suggestion = slashSuggestions[idx];
+    if (!suggestion) return false;
+
+    const value = input.getValue();
+    const { mode } = detectSlashInputMode(value);
+    if (mode === "none") return false;
+
+    const next = applySuggestion(value, suggestion, mode);
+    input.setValue(next);
+    hideSlashPopup();
+    screen.render();
+    notify();
+    return true;
+  };
+
   input.on("submit", (value: string) => {
+    hideSlashPopup();
     const trimmed = value.trim();
     if (trimmed) {
       history.push(trimmed);
@@ -60,10 +122,19 @@ export function createInputBox(
   });
 
   input.on("keypress", () => {
+    refreshSlashSuggestions(input.getValue());
     notify();
   });
 
+  input.key("tab", () => {
+    if (applySelectedSuggestion()) return;
+  });
+
   input.key("up", () => {
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
+      options.slashPopup.moveSelection(-1, slashSuggestions.length);
+      return;
+    }
     if (history.length === 0) return;
     if (historyIndex === history.length) {
       draft = input.getValue();
@@ -71,12 +142,17 @@ export function createInputBox(
     if (historyIndex > 0) {
       historyIndex--;
       input.setValue(history[historyIndex] ?? "");
+      hideSlashPopup();
       screen.render();
       notify();
     }
   });
 
   input.key("down", () => {
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
+      options.slashPopup.moveSelection(1, slashSuggestions.length);
+      return;
+    }
     if (history.length === 0) return;
     if (historyIndex < history.length - 1) {
       historyIndex++;
@@ -85,6 +161,7 @@ export function createInputBox(
       historyIndex = history.length;
       input.setValue(draft);
     }
+    hideSlashPopup();
     screen.render();
     notify();
   });
@@ -105,11 +182,22 @@ export function createInputBox(
       input.clearValue();
       draft = "";
       historyIndex = history.length;
+      hideSlashPopup();
       notify();
+    },
+    setValue(value: string) {
+      input.setValue(value);
+      refreshSlashSuggestions(value);
+      screen.render();
+      notify();
+    },
+    getValue() {
+      return input.getValue();
     },
     getHistory() {
       return [...history];
     },
     getPlainText,
+    hideSlashPopup,
   };
 }

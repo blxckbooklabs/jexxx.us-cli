@@ -4,9 +4,14 @@ import type { Provider } from "./providers/types.js";
 import type { BlxckchatTool } from "./tools/types.js";
 import { runAgent } from "./agent-loop.js";
 import type { ChatMessage } from "./providers/types.js";
+import type { StoredProviderConfig } from "./config.js";
+import { dispatchSlashCommand, isSlashCommand } from "./ui/slash/handler.js";
+import { formatSlashHelp } from "./ui/slash/registry.js";
+import { createSession } from "./ui/session/session-store.js";
 
 export interface InteractiveChatOptions {
   providerLabel?: string;
+  storedConfig: StoredProviderConfig;
 }
 
 const MIN_TERMINAL_COLS = 40;
@@ -15,14 +20,18 @@ async function startReadlineFallback(
   provider: Provider,
   tools: BlxckchatTool[],
   providerLabel: string,
+  storedConfig: StoredProviderConfig,
 ): Promise<void> {
   console.log(
     chalk.cyan(
-      `[BLXCKCHAT] Interactive mode (readline fallback) — ${providerLabel}. Type /exit to quit, /reset to clear.\n`,
+      `[BLXCKCHAT] Interactive mode (readline fallback) — ${providerLabel}. Type /help for commands.\n`,
     ),
   );
+  console.log(chalk.dim(formatSlashHelp()));
 
-  let conversationHistory: ChatMessage[] = [];
+  const session = createSession();
+  let activeConfig = { ...storedConfig };
+  let activeProvider = provider;
 
   const readline = await import("readline");
   const rl = readline.createInterface({
@@ -38,13 +47,34 @@ async function startReadlineFallback(
       rl.close();
       return;
     }
-    if (trimmed === "/reset") {
-      conversationHistory = [];
-      console.log(chalk.dim("\n[BLXCKCHAT] Conversation history cleared.\n"));
+    if (!trimmed) {
       rl.prompt();
       return;
     }
-    if (!trimmed) {
+
+    if (isSlashCommand(trimmed)) {
+      const result = await dispatchSlashCommand(trimmed, {
+        session,
+        activeConfig,
+        toolCount: tools.length,
+        setActiveConfig: (config, nextProvider) => {
+          activeConfig = config;
+          activeProvider = nextProvider;
+          console.log(
+            chalk.cyan(
+              `\n[BLXCKCHAT] Now using ${config.provider}/${config.model}\n`,
+            ),
+          );
+        },
+        copySnapshot: async () => ({ path: "", copied: false }),
+      });
+      for (const msg of result.messages) {
+        console.log(chalk.dim(`\n${msg}\n`));
+      }
+      if (result.exit) {
+        rl.close();
+        return;
+      }
       rl.prompt();
       return;
     }
@@ -52,13 +82,13 @@ async function startReadlineFallback(
     try {
       process.stdout.write(chalk.white("\nblxckchat> "));
       const { response, history } = await runAgent(
-        provider,
+        activeProvider,
         tools,
         trimmed,
-        conversationHistory,
+        session.conversationHistory,
       );
-      conversationHistory = history;
-      if (!provider.chatStream) {
+      session.conversationHistory = history;
+      if (!activeProvider.chatStream) {
         console.log(response);
       }
       console.log();
@@ -83,7 +113,7 @@ async function startReadlineFallback(
 export async function startInteractiveChat(
   provider: Provider,
   tools: BlxckchatTool[],
-  options: InteractiveChatOptions = {},
+  options: InteractiveChatOptions,
 ): Promise<void> {
   const cols = process.stdout.columns ?? 80;
   const providerLabel = options.providerLabel ?? "BLXCKCHAT";
@@ -92,7 +122,7 @@ export async function startInteractiveChat(
     console.error(
       chalk.yellow("[BLXCKCHAT] Non-TTY stdout — using readline fallback."),
     );
-    await startReadlineFallback(provider, tools, providerLabel);
+    await startReadlineFallback(provider, tools, providerLabel, options.storedConfig);
     return;
   }
 
@@ -102,7 +132,7 @@ export async function startInteractiveChat(
         `[BLXCKCHAT] Terminal too narrow (${cols} cols, need ${MIN_TERMINAL_COLS}+). Using readline fallback.`,
       ),
     );
-    await startReadlineFallback(provider, tools, providerLabel);
+    await startReadlineFallback(provider, tools, providerLabel, options.storedConfig);
     return;
   }
 
@@ -110,5 +140,6 @@ export async function startInteractiveChat(
   await startTerminalChat(provider, tools, {
     providerLabel,
     toolCount: tools.length,
+    storedConfig: options.storedConfig,
   });
 }

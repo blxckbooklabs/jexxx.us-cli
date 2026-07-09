@@ -3,12 +3,16 @@ import blessed from "blessed";
 import { runAgent } from "../agent-loop.js";
 import type { Provider } from "../providers/types.js";
 import type { BlxckchatTool } from "../tools/types.js";
+import type { StoredProviderConfig } from "../config.js";
 import { loadCredentials } from "../../auth.js";
+import { resolveProvider } from "../providers/registry.js";
+import { listModelOptions } from "../providers/models.js";
 
 import { createTopBar } from "./components/top-bar.js";
 import { createMessageBox } from "./components/message-box.js";
 import { createInputBox } from "./components/input-box.js";
 import { createStatusBar } from "./components/status-bar.js";
+import { createSlashPopup } from "./components/slash-popup.js";
 import {
   createSession,
   addUserMessage,
@@ -27,10 +31,14 @@ import {
   getSnapshotPath,
   writeSnapshot,
 } from "./session/tui-snapshot.js";
+import { getSlashSuggestions } from "./slash/autocomplete.js";
+import { dispatchSlashCommand, isSlashCommand } from "./slash/handler.js";
+import { formatSlashHelp } from "./slash/registry.js";
 
 export interface TerminalChatOptions {
   providerLabel?: string;
   toolCount?: number;
+  storedConfig: StoredProviderConfig;
 }
 
 function createBlessedConfirm(
@@ -83,7 +91,7 @@ function createBlessedConfirm(
 export async function startTerminalChat(
   provider: Provider,
   tools: BlxckchatTool[],
-  options: TerminalChatOptions = {},
+  options: TerminalChatOptions,
 ): Promise<void> {
   const screen = blessed.screen({
     smartCSR: true,
@@ -96,10 +104,16 @@ export async function startTerminalChat(
   const toolCount = options.toolCount ?? tools.length;
   const authEmail = creds?.email ?? "not authenticated";
 
+  let activeConfig: StoredProviderConfig = { ...options.storedConfig };
+  let activeProvider: Provider = provider;
+
   let topBar!: ReturnType<typeof createTopBar>;
   let messageBox!: ReturnType<typeof createMessageBox>;
   let statusBar!: ReturnType<typeof createStatusBar>;
   let inputBox!: ReturnType<typeof createInputBox>;
+  const slashPopup = createSlashPopup(screen);
+
+  let cachedModelOptions = await listModelOptions(activeConfig);
 
   const syncSnapshot = (): void => {
     const snapshot = buildTuISnapshot({
@@ -129,6 +143,15 @@ export async function startTerminalChat(
     syncSnapshot();
   };
 
+  const setActiveConfig = (config: StoredProviderConfig, nextProvider: Provider): void => {
+    activeConfig = config;
+    activeProvider = nextProvider;
+    topBar.setSubtitle(`${config.provider}/${config.model}`);
+    void listModelOptions(activeConfig).then((opts) => {
+      cachedModelOptions = opts;
+    });
+  };
+
   topBar = createTopBar(screen, { onUpdate: onSnapshotUpdate });
   messageBox = createMessageBox(screen, { onUpdate: onSnapshotUpdate });
   statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
@@ -142,35 +165,24 @@ export async function startTerminalChat(
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    if (trimmed === "/exit" || trimmed === "/quit") {
-      screen.destroy();
-      process.exit(0);
-    }
+    inputBox.hideSlashPopup();
 
-    if (trimmed === "/reset") {
-      session.conversationHistory = [];
-      session.messages = [];
-      session.toolResults = [];
-      session.thinkingBlocks = [];
-      messageBox.appendSystem("Conversation history cleared.");
-      statusBar.setMessage("History cleared — type a new message");
-      return;
-    }
-
-    if (trimmed === "/copy") {
-      const { path, copied } = await copySnapshot();
-      const hint = copied
-        ? "TUI copied to clipboard"
-        : `TUI snapshot written (clipboard unavailable)`;
-      statusBar.setMessage(`${hint} — ${path}`);
-      messageBox.appendSystem(`${hint}: ${path}`);
-      return;
-    }
-
-    if (trimmed === "/help") {
-      messageBox.appendSystem(
-        "Commands: /help, /reset, /copy, /exit. Shortcuts: Ctrl+C/Q/Esc exit, Ctrl+S save, Ctrl+Y copy, Space toggle thinking, ↑↓ scroll.",
-      );
+    if (isSlashCommand(trimmed)) {
+      const result = await dispatchSlashCommand(trimmed, {
+        session,
+        activeConfig,
+        toolCount,
+        setActiveConfig,
+        copySnapshot,
+      });
+      for (const msg of result.messages) {
+        messageBox.appendSystem(msg);
+      }
+      if (result.exit) {
+        screen.destroy();
+        process.exit(0);
+      }
+      statusBar.setMessage("Ready — type / for commands");
       return;
     }
 
@@ -196,12 +208,12 @@ export async function startTerminalChat(
       if (entry) {
         messageBox.appendTools([entry]);
       }
-      statusBar.setMessage("Ready — Ctrl+Y copy TUI · Ctrl+S save session");
+      statusBar.setMessage("Ready — type / for commands");
     };
 
     try {
       const { response, history } = await runAgent(
-        provider,
+        activeProvider,
         tools,
         trimmed,
         session.conversationHistory,
@@ -244,9 +256,21 @@ export async function startTerminalChat(
     }
   };
 
-  inputBox = createInputBox(screen, (line) => {
-    void handleSubmit(line);
-  }, { onUpdate: onSnapshotUpdate });
+  inputBox = createInputBox(
+    screen,
+    (line) => {
+      void handleSubmit(line);
+    },
+    {
+      onUpdate: onSnapshotUpdate,
+      slashPopup,
+      getSlashSuggestions: (value) =>
+        getSlashSuggestions(value, {
+          activeConfig,
+          modelOptions: cachedModelOptions,
+        }),
+    },
+  );
 
   inputBox.element.on("focus", () => {
     inputHasFocus = true;
@@ -256,12 +280,13 @@ export async function startTerminalChat(
   });
 
   messageBox.appendWelcome(buildWelcomeBannerPlain(authEmail, toolCount));
-  topBar.setSubtitle(options.providerLabel ?? "Interactive mode");
+  topBar.setSubtitle(options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`);
 
   const snapshotPath = getSnapshotPath();
   statusBar.setMessage(
-    `Snapshot: ${snapshotPath} · Ctrl+Y or /copy to copy full TUI`,
+    `Type / for commands · snapshot: ${snapshotPath}`,
   );
+  messageBox.appendSystem(formatSlashHelp());
   syncSnapshot();
 
   screen.key(["escape", "q", "C-c"], () => {
@@ -279,11 +304,15 @@ export async function startTerminalChat(
     const { path, copied } = await copySnapshot();
     const hint = copied ? "TUI copied to clipboard" : `Snapshot: ${path}`;
     statusBar.setMessage(hint);
-    messageBox.appendSystem(copied ? `TUI copied to clipboard (${path})` : `TUI snapshot: ${path}`);
+    messageBox.appendSystem(
+      copied ? `TUI copied to clipboard (${path})` : `TUI snapshot: ${path}`,
+    );
   });
 
   screen.key(["space"], () => {
-    messageBox.toggleFocusedThinking();
+    if (!inputHasFocus) {
+      messageBox.toggleFocusedThinking();
+    }
   });
 
   screen.key(["up"], () => {

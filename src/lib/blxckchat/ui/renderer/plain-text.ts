@@ -13,7 +13,7 @@ export function buildWelcomeBannerPlain(authEmail: string, toolCount: number): s
     `  BLXCKCHAT loaded with ${toolCount} tools.`,
     "",
     "  Type a message to begin, or",
-    "  /help for commands.",
+    "  /help or /model for commands.",
   ];
   const width = 42;
   const lines = [
