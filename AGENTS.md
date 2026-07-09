@@ -52,6 +52,9 @@ Owned by the JEXXXUS platform / tooling team.
 - `jexxxus import --target nxt` must write to `public.vessels` schema.
 - Vault operator docs live in `jexxx.us-obsidian/CLI/`; public mirror in
   `docs.jexxx.us/src/content/jexxxus-cli.md`. Keep both aligned.
+- BLXCKCHAT `/divinities` loads personas from `jexxx.us-obsidian/Divinities`
+  (`DIVINITIES_VAULT_PATH` override). Persona extracts inject the system prompt;
+  RAG docs index remains `docs.jexxx.us` only.
 
 ## 6. Child DOX Index
 

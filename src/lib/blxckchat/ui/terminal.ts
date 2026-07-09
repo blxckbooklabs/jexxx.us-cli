@@ -49,8 +49,10 @@ import { dispatchSlashCommand, isSlashCommand, parseSlashInput } from "./slash/h
 
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
+import { createDivinityPickerOverlay } from "./components/divinity-picker-overlay.js";
 import { createModelPickerOverlay } from "./components/model-picker-overlay.js";
 import { createProviderOverlay } from "./components/provider-overlay.js";
+import { getDivinityPersonaById } from "../divinities/source.js";
 import { MessageQueue } from "./message-queue.js";
 import { openExternalEditor } from "./external-editor.js";
 import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
@@ -166,6 +168,7 @@ export async function startTerminalChat(
 
   let modelPickerOverlay!: ReturnType<typeof createModelPickerOverlay>;
   let providerOverlay!: ReturnType<typeof createProviderOverlay>;
+  let divinityPickerOverlay!: ReturnType<typeof createDivinityPickerOverlay>;
 
   let isProcessing = false;
   let abortController: AbortController | null = null;
@@ -186,6 +189,11 @@ export async function startTerminalChat(
     );
   };
 
+  const onDivinityChatCleared = (): void => {
+    messageBox.clearChat();
+    showIdleHero();
+  };
+
   const runSlash = async (command: string): Promise<void> => {
     const parsed = parseSlashInput(command);
     const result = await dispatchSlashCommand(command, {
@@ -196,7 +204,9 @@ export async function startTerminalChat(
       copySnapshot,
       openModelPicker: () => modelPickerOverlay.open(),
       openProviderPicker: () => providerOverlay.open(),
+      openDivinityPicker: () => divinityPickerOverlay.open(),
       setupProvider: (catalogId) => providerOverlay.setup(catalogId),
+      onDivinityActivated: onDivinityChatCleared,
     });
     if (parsed.command === "reset") {
       messageBox.clearChat();
@@ -312,6 +322,17 @@ export async function startTerminalChat(
     },
   });
 
+  divinityPickerOverlay = createDivinityPickerOverlay(screen, {
+    session,
+    getActiveDivinityId: () => session.activeDivinity?.id ?? null,
+    onChatCleared: onDivinityChatCleared,
+    onActivated: (message) => {
+      messageBox.appendSystem(message);
+      statusBar.setMessage(message.split("\n")[0] ?? message);
+      inputBox.focus();
+    },
+  });
+
   const maybeAutosave = (): void => {
     if (shouldAutosave(session.messages.length)) {
       const path = autosaveSession(session);
@@ -350,6 +371,15 @@ export async function startTerminalChat(
       statusBar.setMessage("Ready — ? for hotkeys · / for commands");
     };
 
+    const activeDivinity = session.activeDivinity;
+    const personaRecord = activeDivinity
+      ? getDivinityPersonaById(activeDivinity.id)
+      : null;
+    const persona =
+      personaRecord && activeDivinity
+        ? { name: activeDivinity.name, systemPrompt: personaRecord.systemPrompt }
+        : undefined;
+
     try {
       const { response, history } = await runAgent(
         activeProvider,
@@ -357,6 +387,7 @@ export async function startTerminalChat(
         trimmed,
         session.conversationHistory,
         {
+          ...(persona ? { persona } : {}),
           signal: abortController.signal,
           onStream: (chunk) => {
             streamBuffer.append(chunk);
@@ -586,6 +617,11 @@ export async function startTerminalChat(
     }
     if (providerOverlay.isVisible()) {
       providerOverlay.close();
+      inputBox.focus();
+      return true;
+    }
+    if (divinityPickerOverlay.isVisible()) {
+      divinityPickerOverlay.close();
       inputBox.focus();
       return true;
     }

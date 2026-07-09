@@ -8,6 +8,7 @@ import {
   resolveSlashCommandName,
   type SlashCommandDef,
 } from "./registry.js";
+import { listDivinityPersonas } from "../../divinities/source.js";
 import { fuzzyFilter } from "./fuzzy.js";
 
 export interface SlashSuggestion {
@@ -112,6 +113,32 @@ export async function getArgumentSuggestions(
     }));
 
     return [...savedSuggestions, ...connectSuggestions];
+  }
+
+  if (
+    commandName === "divinities" ||
+    commandName === "divinity" ||
+    commandName === "persona" ||
+    commandName === "personas"
+  ) {
+    const personas = listDivinityPersonas();
+    const base: SlashSuggestion[] = [
+      { value: "clear", label: "clear", description: "Return to BLXCKCHAT default agent" },
+    ];
+    const filtered = fuzzyFilter(
+      personas,
+      argFilter,
+      (p) => `${p.name} ${p.id} ${p.role ?? ""} ${p.pillar ?? ""}`,
+      12,
+    );
+    return [
+      ...base,
+      ...filtered.map((p) => ({
+        value: p.name,
+        label: p.name,
+        description: [p.role, p.pillar].filter(Boolean).join(" · ") || p.id,
+      })),
+    ];
   }
 
   return [];

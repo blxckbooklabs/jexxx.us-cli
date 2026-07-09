@@ -3,6 +3,7 @@ import chalk from "chalk";
 import type { Provider } from "./providers/types.js";
 import type { BlxckchatTool } from "./tools/types.js";
 import { runAgent } from "./agent-loop.js";
+import { getDivinityPersonaById } from "./divinities/source.js";
 import type { StoredProviderConfig } from "./config.js";
 import { dispatchSlashCommand, isSlashCommand } from "./ui/slash/handler.js";
 import { formatSlashHelp } from "./ui/slash/registry.js";
@@ -92,6 +93,9 @@ async function startReadlineFallback(
           );
         },
         copySnapshot: async () => ({ path: "", copied: false }),
+        onDivinityActivated: () => {
+          console.log(chalk.dim("\n[BLXCKCHAT] Divinity switched — chat history cleared.\n"));
+        },
       });
       for (const msg of result.messages) {
         console.log(chalk.dim(`\n${msg}\n`));
@@ -106,11 +110,19 @@ async function startReadlineFallback(
 
     try {
       process.stdout.write(chalk.white("\nblxckchat> "));
+      const divinity = session.activeDivinity;
+      const personaRecord = divinity ? getDivinityPersonaById(divinity.id) : null;
+      const persona =
+        personaRecord && divinity
+          ? { name: divinity.name, systemPrompt: personaRecord.systemPrompt }
+          : undefined;
+
       const { response, history } = await runAgent(
         activeProvider,
         tools,
         trimmed,
         session.conversationHistory,
+        persona ? { persona } : {},
       );
       session.conversationHistory = history;
       if (!activeProvider.chatStream) {

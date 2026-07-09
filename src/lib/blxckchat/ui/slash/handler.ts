@@ -12,6 +12,16 @@ import { findModelMatch, listModelOptions } from "../../providers/models.js";
 import type { TerminalSession } from "../session/session-store.js";
 import { exportSessionToFile } from "../session/session-store.js";
 import {
+  activateDivinityPersona,
+  clearActiveDivinity,
+  formatDivinityActivationMessage,
+  formatDivinityClearedMessage,
+} from "../../divinities/session.js";
+import {
+  findDivinityPersona,
+  listDivinityPersonas,
+} from "../../divinities/source.js";
+import {
   formatSlashHelp,
   resolveSlashCommandName,
 } from "./registry.js";
@@ -24,7 +34,9 @@ export interface SlashHandlerState {
   copySnapshot: () => Promise<{ path: string; copied: boolean }>;
   openModelPicker?: () => void | Promise<void>;
   openProviderPicker?: () => void | Promise<void>;
+  openDivinityPicker?: () => void | Promise<void>;
   setupProvider?: (catalogId: string) => Promise<void>;
+  onDivinityActivated?: () => void;
 }
 
 export interface SlashResult {
@@ -169,16 +181,80 @@ async function handleProvider(
 
 function handleSession(state: SlashHandlerState): SlashResult {
   const { session, activeConfig, toolCount } = state;
-  return {
-    handled: true,
-    messages: [
-      `Provider: ${activeConfig.name} (${activeConfig.provider}/${activeConfig.model})`,
-      `Messages: ${session.messages.length}`,
-      `Tool results: ${session.toolResults.length}`,
-      `History turns: ${session.conversationHistory.length}`,
-      `Tools loaded: ${toolCount}`,
-    ],
-  };
+  const divinity = session.activeDivinity;
+  const lines = [
+    `Provider: ${activeConfig.name} (${activeConfig.provider}/${activeConfig.model})`,
+    `Messages: ${session.messages.length}`,
+    `Tool results: ${session.toolResults.length}`,
+    `History turns: ${session.conversationHistory.length}`,
+    `Tools loaded: ${toolCount}`,
+  ];
+  if (divinity) {
+    const role = divinity.role ? ` · ${divinity.role}` : "";
+    const pillar = divinity.pillar ? ` · ${divinity.pillar}` : "";
+    lines.push(`Divinity: ${divinity.name}${role}${pillar}`);
+  } else {
+    lines.push("Divinity: (none — BLXCKCHAT default)");
+  }
+  return { handled: true, messages: lines };
+}
+
+async function handleDivinities(
+  args: string,
+  state: SlashHandlerState,
+): Promise<SlashResult> {
+  const trimmed = args.trim().toLowerCase();
+
+  if (!args) {
+    if (state.openDivinityPicker) {
+      state.openDivinityPicker();
+      return { handled: true, messages: [], deferInputFocus: true };
+    }
+    const personas = listDivinityPersonas();
+    if (personas.length === 0) {
+      return {
+        handled: true,
+        messages: [
+          "No Divinities vault found.",
+          "Set DIVINITIES_VAULT_PATH to jexxx.us-obsidian/Divinities",
+        ],
+      };
+    }
+    const lines = [
+      `Divinities loaded: ${personas.length} personas`,
+      "Use /divinities to open picker, or /divinities <name>",
+      "",
+    ];
+    for (const p of personas.slice(0, 16)) {
+      const role = p.role ? ` — ${p.role}` : "";
+      lines.push(`  ${p.name}${role}`);
+    }
+    if (personas.length > 16) {
+      lines.push(`  … and ${personas.length - 16} more`);
+    }
+    return { handled: true, messages: lines };
+  }
+
+  if (trimmed === "clear" || trimmed === "off" || trimmed === "none") {
+    clearActiveDivinity(state.session);
+    state.onDivinityActivated?.();
+    return { handled: true, messages: [formatDivinityClearedMessage()] };
+  }
+
+  const match = findDivinityPersona(args);
+  if (!match) {
+    return {
+      handled: true,
+      messages: [
+        `No divinity match for "${args}".`,
+        "Try /divinities to browse, or /divinities clear to reset.",
+      ],
+    };
+  }
+
+  activateDivinityPersona(state.session, match);
+  state.onDivinityActivated?.();
+  return { handled: true, messages: [formatDivinityActivationMessage(match)] };
 }
 
 export async function dispatchSlashCommand(
@@ -232,6 +308,9 @@ export async function dispatchSlashCommand(
 
     case "session":
       return handleSession(state);
+
+    case "divinities":
+      return handleDivinities(args, state);
 
     default:
       return {

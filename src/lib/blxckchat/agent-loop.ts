@@ -21,7 +21,14 @@ function assertNotAborted(signal?: AbortSignal): void {
   }
 }
 
+export interface PersonaContext {
+  name: string;
+  systemPrompt: string;
+}
+
 export interface RunAgentOptions {
+  /** Obsidian Divinities persona override (from /divinities). */
+  persona?: PersonaContext;
   /** Abort an in-flight turn (Esc during streaming/tools). */
   signal?: AbortSignal;
   /** Route streamed tokens to the terminal UI instead of stdout. */
@@ -64,15 +71,24 @@ export interface AgentTurnResult {
   history: ChatMessage[];
 }
 
-function buildSystemPrompt(userPrompt: string): string {
+const PERSONA_CLI_BRIDGE = `You are operating inside the JEXXXUS CLI (BLXCKCHAT). Retain your persona voice \
+and identity above. You still have access to BLXCKCHAT tools (Bible lookups, dashboard diagnostics, \
+notifications, contact imports). Stay in character when explaining tool actions; the operator must \
+confirm any write/shell tool before it runs.`;
+
+function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): string {
+  const base = persona
+    ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
+    : SYSTEM_PROMPT_BASE;
+
   const docChunks = searchDocs(userPrompt, 5);
-  if (docChunks.length === 0) return SYSTEM_PROMPT_BASE;
+  if (docChunks.length === 0) return base;
 
   const context = docChunks
     .map((c) => `### ${c.source} — ${c.heading}\n${c.text}`)
     .join("\n\n");
 
-  return `${SYSTEM_PROMPT_BASE}\n\nRelevant JEXXXUS documentation context:\n\n${context}`;
+  return `${base}\n\nRelevant JEXXXUS documentation context:\n\n${context}`;
 }
 
 /**
@@ -99,7 +115,7 @@ export async function runAgent(
       ? history.slice(history.length - MAX_HISTORY_MESSAGES)
       : history;
 
-  const systemPrompt = buildSystemPrompt(userPrompt);
+  const systemPrompt = buildSystemPrompt(userPrompt, options.persona);
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     ...trimmedHistory,

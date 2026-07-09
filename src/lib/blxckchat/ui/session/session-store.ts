@@ -27,11 +27,20 @@ export interface ThinkingBlock {
   collapsed: boolean;
 }
 
+export interface ActiveDivinityRef {
+  id: string;
+  name: string;
+  role?: string;
+  pillar?: string;
+}
+
 export interface TerminalSession {
   messages: TerminalMessage[];
   toolResults: ToolResult[];
   thinkingBlocks: ThinkingBlock[];
   conversationHistory: ChatMessage[];
+  /** Active Obsidian Divinities persona, when /divinities is engaged. */
+  activeDivinity?: ActiveDivinityRef | null;
 }
 
 export function createSession(): TerminalSession {
@@ -40,6 +49,7 @@ export function createSession(): TerminalSession {
     toolResults: [],
     thinkingBlocks: [],
     conversationHistory: [],
+    activeDivinity: null,
   };
 }
 
@@ -114,6 +124,7 @@ export function exportSessionToFile(session: TerminalSession, filePath?: string)
     })),
     thinkingBlocks: session.thinkingBlocks,
     conversationHistory: session.conversationHistory,
+    activeDivinity: session.activeDivinity ?? null,
   };
   fs.writeFileSync(target, JSON.stringify(payload, null, 2), { mode: 0o600 });
   return target;

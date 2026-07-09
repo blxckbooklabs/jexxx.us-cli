@@ -31,6 +31,7 @@ export interface PersistedSessionPayload {
   }>;
   thinkingBlocks: TerminalSession["thinkingBlocks"];
   conversationHistory: TerminalSession["conversationHistory"];
+  activeDivinity?: TerminalSession["activeDivinity"];
 }
 
 export function loadAutosaveSession(): TerminalSession | null {
@@ -50,6 +51,7 @@ export function loadAutosaveSession(): TerminalSession | null {
       })),
       thinkingBlocks: data.thinkingBlocks ?? [],
       conversationHistory: data.conversationHistory ?? [],
+      activeDivinity: data.activeDivinity ?? null,
     };
   } catch {
     return null;

@@ -14,6 +14,12 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
     description: "Switch profile or add provider (BYOK catalog + API key)",
     argumentHint: "<name-or-catalog-id>",
   },
+  {
+    name: "divinities",
+    aliases: ["divinity", "persona", "personas"],
+    description: "Pick an Obsidian Divinities persona to embody in chat",
+    argumentHint: "<name> | clear",
+  },
   { name: "session", aliases: ["status"], description: "Show session stats and active provider" },
   { name: "copy", description: "Copy full TUI snapshot to clipboard" },
   { name: "save", aliases: ["export"], description: "Export session to JSON" },
