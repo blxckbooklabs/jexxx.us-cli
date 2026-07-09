@@ -66,6 +66,7 @@ Owned by the JEXXXUS platform / tooling team.
   `feed.xml`). Outbound fetch is host-locked to `tv.jexxx.us` (or localhost dev). Never exposes
   `embed_url`/stream URLs, Supabase, or internal Obsidian TV docs. Env: `TV_CONTENT_PATH`,
   `TV_PUBLIC_BASE_URL`.
+- BLXCKCHAT `lib/bible.ts` `findBook()` normalizes numbered book names (`1 Samuel` ↔ vault folder `09-1Samuel`).
 - BLXCKCHAT empire routing (`src/lib/blxckchat/empire-routing.ts`) plans multi-tool replies:
   thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) and `tvSearchQuery`
   (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `empire-prefetch.ts`

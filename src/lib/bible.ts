@@ -178,19 +178,27 @@ export function getChapter(
   return verses.map((verseFile) => getVerse(section, book, chapter, verseFile));
 }
 
+/** Normalize book names for vault folder lookup ("1 Samuel" → "1samuel", "1Samuel" → "1samuel"). */
+export function normalizeBookLookupKey(bookName: string): string {
+  return bookName
+    .toLowerCase()
+    .replace(/^\d{2}-/, "")
+    .replace(/['.]/g, "")
+    .replace(/\s+/g, "");
+}
+
 export function findBook(bookName: string): {
   section: string;
   book: string;
 } | null {
   const sections = getBibleSections();
-  const lowerBookName = bookName.toLowerCase();
+  const queryKey = normalizeBookLookupKey(bookName);
 
   for (const section of sections) {
     const books = getBibleBooks(section);
     for (const book of books) {
-      // Extract book name from folder (e.g., "01-Genesis" → "Genesis")
       const cleanName = book.replace(/^\d{2}-/, "");
-      if (cleanName.toLowerCase() === lowerBookName) {
+      if (normalizeBookLookupKey(cleanName) === queryKey) {
         return { section, book };
       }
     }
