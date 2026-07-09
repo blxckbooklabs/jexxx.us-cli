@@ -30,9 +30,14 @@ export interface MessageBlock {
   type: "welcome" | "user" | "assistant" | "tool" | "error" | "system";
   content: string;
   thinkingBlocks?: ThinkingBlock[];
-  /** Raw assistant text for plain-text snapshot (pre-markdown). */
   assistantRaw?: string;
   toolEntries?: ToolResult[];
+}
+
+export interface ScrollState {
+  pinnedToBottom: boolean;
+  /** 0 = top, 100 = bottom */
+  percent: number;
 }
 
 export interface MessageBoxHandle {
@@ -55,6 +60,8 @@ export interface MessageBoxHandle {
   scrollPageDown: () => void;
   scrollToTop: () => void;
   scrollToBottom: () => void;
+  getScrollState: () => ScrollState;
+  isPinnedToBottom: () => boolean;
   getThinkingBlocks: () => ThinkingBlock[];
   toggleFocusedThinking: () => void;
   toggleAllThinking: () => void;
@@ -69,7 +76,10 @@ export interface MessageBoxHandle {
 
 export interface MessageBoxOptions {
   onUpdate?: () => void;
+  onScrollChange?: (state: ScrollState) => void;
 }
+
+const SCROLL_PIN_THRESHOLD = 3;
 
 export function createMessageBox(
   screen: blessed.Widgets.Screen,
@@ -78,6 +88,7 @@ export function createMessageBox(
   const blocks: MessageBlock[] = [];
   let focusedThinkingIndex: number | null = null;
   let searchQuery = "";
+  let pinnedToBottom = true;
 
   const box = blessed.box({
     parent: screen,
@@ -87,7 +98,7 @@ export function createMessageBox(
     bottom: 4,
     tags: true,
     scrollable: true,
-    alwaysScroll: true,
+    alwaysScroll: false,
     scrollbar: {
       ch: "▌",
       style: { bg: THEME.pink },
@@ -102,6 +113,37 @@ export function createMessageBox(
     padding: { left: 1, right: 1, top: 0, bottom: 1 },
   });
 
+  const computeScrollPercent = (): number => {
+    const { scroll, height, content } = getScrollMetrics();
+    const maxScroll = Math.max(0, content - height);
+    if (maxScroll <= 0) return 100;
+    return Math.round(Math.min(100, Math.max(0, (scroll / maxScroll) * 100)));
+  };
+
+  const isNearBottom = (): boolean => {
+    const { scroll, height, content } = getScrollMetrics();
+    return scroll + height >= content - SCROLL_PIN_THRESHOLD;
+  };
+
+  const emitScrollChange = (): void => {
+    options.onScrollChange?.({
+      pinnedToBottom: pinnedToBottom && isNearBottom(),
+      percent: computeScrollPercent(),
+    });
+  };
+
+  const applyScrollAfterContent = (savedScroll: number): void => {
+    if (pinnedToBottom || isNearBottom()) {
+      box.setScrollPerc(100);
+      pinnedToBottom = true;
+    } else {
+      box.setScroll(savedScroll);
+      pinnedToBottom = false;
+    }
+    screen.render();
+    emitScrollChange();
+  };
+
   const allThinkingBlocks = (): ThinkingBlock[] =>
     blocks.flatMap((b) => b.thinkingBlocks ?? []);
 
@@ -109,7 +151,12 @@ export function createMessageBox(
     const parts: string[] = [];
     let thinkIdx = 0;
 
-    for (const block of blocks) {
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      if (!block) continue;
+      if (i > 0 && (block.type === "user" || block.type === "welcome")) {
+        parts.push(`${TAG.dim}${"·".repeat(12)}${TAG.dimEnd}\n`);
+      }
       switch (block.type) {
         case "welcome":
           parts.push(wrapWelcomeBannerBlessed(block.content));
@@ -143,12 +190,19 @@ export function createMessageBox(
           break;
         case "system":
           parts.push(
-            `${highlightSearch(`${TAG.dim}░ ${TAG.dimEnd}${TAG.muted}${block.content}${TAG.mutedEnd}`, searchQuery)}\n`,
+            `${highlightSearch(`${TAG.dim}┌ ${TAG.dimEnd}${TAG.muted}${block.content}${TAG.mutedEnd}${TAG.dim} ┐${TAG.dimEnd}`, searchQuery)}\n`,
           );
           break;
       }
     }
     return parts.join("\n");
+  };
+
+  const getScrollMetrics = (): { scroll: number; height: number; content: number } => {
+    const scroll = box.getScroll() ?? 0;
+    const height = Math.max(1, (box.height as number) || 1);
+    const contentLines = Math.max(height, renderBlessedContent().split("\n").length);
+    return { scroll, height, content: contentLines };
   };
 
   const renderPlainContent = (): string => {
@@ -195,11 +249,46 @@ export function createMessageBox(
     options.onUpdate?.();
   };
 
-  const rebuild = (): void => {
+  const refreshContent = (forceBottom = false): void => {
+    const savedScroll = box.getScroll() ?? 0;
     box.setContent(renderBlessedContent());
-    box.setScrollPerc(100);
-    screen.render();
+    if (forceBottom) {
+      pinnedToBottom = true;
+      box.setScrollPerc(100);
+    } else {
+      applyScrollAfterContent(savedScroll);
+    }
     notify();
+  };
+
+  const rebuild = (): void => {
+    refreshContent(false);
+  };
+
+  const markScrolled = (): void => {
+    pinnedToBottom = isNearBottom();
+    emitScrollChange();
+  };
+
+  box.on("wheeldown", () => {
+    box.scroll(3);
+    pinnedToBottom = false;
+    screen.render();
+    markScrolled();
+  });
+
+  box.on("wheelup", () => {
+    box.scroll(-3);
+    pinnedToBottom = isNearBottom();
+    screen.render();
+    markScrolled();
+  });
+
+  const scrollBy = (delta: number): void => {
+    box.scroll(delta);
+    pinnedToBottom = isNearBottom();
+    screen.render();
+    markScrolled();
   };
 
   return {
@@ -210,7 +299,7 @@ export function createMessageBox(
     },
     appendUser(text: string) {
       blocks.push({ type: "user", content: text });
-      rebuild();
+      refreshContent(true);
     },
     appendAssistantStart() {
       blocks.push({ type: "assistant", content: "", assistantRaw: "", thinkingBlocks: [] });
@@ -221,9 +310,15 @@ export function createMessageBox(
       if (block?.type === "assistant") {
         block.content = partial;
         block.assistantRaw = rawPlain ?? partial;
+        const savedScroll = box.getScroll() ?? 0;
         box.setContent(renderBlessedContent());
-        box.setScrollPerc(100);
+        if (pinnedToBottom) {
+          box.setScrollPerc(100);
+        } else {
+          box.setScroll(savedScroll);
+        }
         screen.render();
+        emitScrollChange();
         notify();
       }
     },
@@ -254,30 +349,39 @@ export function createMessageBox(
       rebuild();
     },
     scrollUp() {
-      box.scroll(-3);
-      screen.render();
+      scrollBy(-3);
     },
     scrollDown() {
-      box.scroll(3);
-      screen.render();
+      scrollBy(3);
     },
     scrollPageUp() {
       const page = Math.max(5, ((box.height as number) || 12) - 2);
-      box.scroll(-page);
-      screen.render();
+      scrollBy(-page);
     },
     scrollPageDown() {
       const page = Math.max(5, ((box.height as number) || 12) - 2);
-      box.scroll(page);
-      screen.render();
+      scrollBy(page);
     },
     scrollToTop() {
       box.setScroll(0);
+      pinnedToBottom = false;
       screen.render();
+      emitScrollChange();
     },
     scrollToBottom() {
       box.setScrollPerc(100);
+      pinnedToBottom = true;
       screen.render();
+      emitScrollChange();
+    },
+    getScrollState(): ScrollState {
+      return {
+        pinnedToBottom: pinnedToBottom && isNearBottom(),
+        percent: computeScrollPercent(),
+      };
+    },
+    isPinnedToBottom() {
+      return pinnedToBottom && isNearBottom();
     },
     getThinkingBlocks() {
       return allThinkingBlocks();
@@ -358,7 +462,7 @@ export function createMessageBox(
           toolEntries: [t],
         });
       }
-      rebuild();
+      refreshContent(true);
     },
     rebuild,
   };

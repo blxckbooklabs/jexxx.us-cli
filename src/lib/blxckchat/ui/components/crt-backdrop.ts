@@ -1,10 +1,10 @@
 import blessed from "blessed";
 
-import { THEME, glitchNoise, TAG } from "../theme.js";
+import { THEME } from "../theme.js";
 
 export interface CrtBackdropHandle {
   element: blessed.Widgets.BoxElement;
-  setGlitchSeed: (seed: number) => void;
+  setGlitchSeed: (_seed: number) => void;
 }
 
 export interface CrtBackdropOptions {
@@ -17,8 +17,6 @@ export function createCrtBackdrop(
   screen: blessed.Widgets.Screen,
   options: CrtBackdropOptions,
 ): CrtBackdropHandle {
-  let seed = 0;
-
   const frame = blessed.box({
     parent: screen,
     top: options.top,
@@ -36,22 +34,10 @@ export function createCrtBackdrop(
     content: "",
   });
 
-  const render = (): void => {
-    const cols = Math.max(40, (screen.width as number) || 80);
-    const noise = glitchNoise(Math.min(cols - 4, 48), seed);
-    frame.setContent(
-      `${TAG.dim}${noise}${TAG.dimEnd}`,
-    );
-    screen.render();
-  };
-
-  render();
-
   return {
     element: frame,
-    setGlitchSeed(next: number) {
-      seed = next;
-      render();
+    setGlitchSeed() {
+      // Frame border only — no inner noise (keeps chat readable while scrolling).
     },
   };
 }

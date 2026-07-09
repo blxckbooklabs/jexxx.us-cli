@@ -16,11 +16,10 @@ test("stripBlessedTags removes blessed inline tags", () => {
 
 test("buildWelcomeBannerPlain renders copyable welcome box", () => {
   const out = buildWelcomeBannerPlain("alice@example.com", 5);
-  assert.match(out, /Welcome to the kingdom/);
-  assert.match(out, /Auth: alice@example\.com/);
-  assert.match(out, /Tools online: 5/);
-  assert.match(out, /JEXXXUS KINGDOM FEED/);
-  assert.match(out, /╔═╤/);
+  assert.match(out, /Kingdom feed online/);
+  assert.match(out, /alice@example\.com/);
+  assert.match(out, /5 tools/);
+  assert.match(out, /╭/);
 });
 
 test("buildTuISnapshot assembles full TUI plain text", () => {
@@ -50,5 +49,5 @@ test("writeSnapshot persists plain TUI to disk", () => {
   assert.equal(written, getSnapshotPath());
   const saved = fs.readFileSync(getSnapshotPath(), "utf-8");
   assert.equal(saved, text);
-  assert.match(saved, /Welcome to the kingdom/);
+  assert.match(saved, /Kingdom feed online/);
 });

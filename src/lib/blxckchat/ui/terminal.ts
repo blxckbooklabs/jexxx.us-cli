@@ -11,6 +11,7 @@ import { cycleModelOption, listModelOptions } from "../providers/models.js";
 
 import { createTopBar } from "./components/top-bar.js";
 import { createCrtBackdrop } from "./components/crt-backdrop.js";
+import { createJexxxusSplash } from "./components/jexxxus-splash.js";
 import { THEME } from "./theme.js";
 import { createMessageBox } from "./components/message-box.js";
 import { createInputBox } from "./components/input-box.js";
@@ -375,11 +376,35 @@ export async function startTerminalChat(
     gracefulTuiExit(screen);
   };
 
+  const updateScrollStatus = (): void => {
+    const { pinnedToBottom, percent } = messageBox.getScrollState();
+    if (pinnedToBottom) {
+      statusBar.setMessage("Shift+↑↓ scroll · Ctrl+B history · / commands · ? hotkeys");
+    } else {
+      statusBar.setMessage(`History ${percent}% · End jump latest · Ctrl+B scroll · ? hotkeys`);
+    }
+  };
+
   const focusMessages = (): void => {
     hotkeysOverlay.hide();
     searchOverlay.close();
     messageBox.element.focus();
-    statusBar.setMessage("Message focus — PgUp/Dn scroll · Ctrl+I input · ? hotkeys");
+    updateScrollStatus();
+  };
+
+  const bindInputScrollKeys = (): void => {
+    const scrollKeys: Array<[string[], () => void]> = [
+      [["S-up", "C-up"], () => messageBox.scrollUp()],
+      [["S-down", "C-down"], () => messageBox.scrollDown()],
+      [["S-pageup"], () => messageBox.scrollPageUp()],
+      [["S-pagedown"], () => messageBox.scrollPageDown()],
+    ];
+    for (const [keys, fn] of scrollKeys) {
+      inputBox.element.key(keys, () => {
+        fn();
+        updateScrollStatus();
+      });
+    }
   };
 
   const searchOverlay = createSearchOverlay(screen, (query) => {
@@ -433,7 +458,10 @@ export async function startTerminalChat(
   };
 
   topBar = createTopBar(screen, { onUpdate: onSnapshotUpdate });
-  messageBox = createMessageBox(screen, { onUpdate: onSnapshotUpdate });
+  messageBox = createMessageBox(screen, {
+    onUpdate: onSnapshotUpdate,
+    onScrollChange: () => updateScrollStatus(),
+  });
   statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
 
   inputBox = createInputBox(
@@ -518,12 +546,30 @@ export async function startTerminalChat(
   inputBox.element.key(["C-z"], () => suspendTui());
   inputBox.element.key(["C-M-z", "M-z"], () => runBranchUndo());
 
-  messageBox.element.key(["pageup"], () => messageBox.scrollPageUp());
-  messageBox.element.key(["pagedown"], () => messageBox.scrollPageDown());
-  messageBox.element.key(["home"], () => messageBox.scrollToTop());
-  messageBox.element.key(["end"], () => messageBox.scrollToBottom());
-  messageBox.element.key(["up"], () => messageBox.scrollUp());
-  messageBox.element.key(["down"], () => messageBox.scrollDown());
+  messageBox.element.key(["pageup"], () => {
+    messageBox.scrollPageUp();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["pagedown"], () => {
+    messageBox.scrollPageDown();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["home"], () => {
+    messageBox.scrollToTop();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["end"], () => {
+    messageBox.scrollToBottom();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["up"], () => {
+    messageBox.scrollUp();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["down"], () => {
+    messageBox.scrollDown();
+    updateScrollStatus();
+  });
   messageBox.element.key(["space"], () => messageBox.toggleFocusedThinking());
   messageBox.element.key(["C-t"], () => messageBox.toggleAllThinking());
   messageBox.element.key(["C-o"], () => void copyLastReply());
@@ -533,23 +579,26 @@ export async function startTerminalChat(
   messageBox.element.key(["C-z"], () => suspendTui());
   messageBox.element.key(["C-M-z", "M-z"], () => runBranchUndo());
 
+  topBar.setSubtitle(options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`);
+
   if (options.resume && session.messages.length > 0) {
     messageBox.replaySession(session);
     messageBox.appendSystem(
       `Resumed autosave (${session.messages.length} messages, ${session.conversationHistory.length} history turns).`,
     );
+    updateScrollStatus();
   } else {
+    const splash = createJexxxusSplash(screen, { top: 2, bottom: 4 });
+    screen.render();
+    await splash.play();
+    splash.destroy();
     messageBox.appendWelcome(buildWelcomeBannerPlain(authEmail, toolCount));
-  }
-
-  topBar.setSubtitle(options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`);
-
-  const snapshotPath = getSnapshotPath();
-  statusBar.setMessage(`? hotkeys · / commands · Ctrl+B scroll · ${snapshotPath}`);
-  if (!options.resume || session.messages.length === 0) {
     messageBox.appendSystem(formatSlashHelp());
-    messageBox.appendSystem("Press ? for keyboard shortcuts (pi / opencode / codex style).");
+    messageBox.appendSystem("Press ? for keyboard shortcuts · Shift+↑↓ scroll history");
+    updateScrollStatus();
   }
+
+  bindInputScrollKeys();
   syncSnapshot();
 
   inputBox.focus();

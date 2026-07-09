@@ -5,30 +5,27 @@ export function stripBlessedTags(text: string): string {
   return text.replace(/\{open\}/g, "{").replace(/\{[^}]*\}/g, "");
 }
 
+/** Compact welcome card shown after the JEXXXUS splash animation. */
 export function buildWelcomeBannerPlain(authEmail: string, toolCount: number): string {
   const email =
-    authEmail.length > 22 ? `${authEmail.slice(0, 19)}…` : authEmail || "operator";
-  const width = 52;
-  const innerW = width - 4;
-  const staticBar = glitchNoise(innerW, 3);
+    authEmail.length > 28 ? `${authEmail.slice(0, 25)}…` : authEmail || "operator";
+  const width = 44;
+  const innerW = width - 2;
   const inner = [
-    "  ▄▀▄  JEXXXUS KINGDOM FEED  ▄▀▄",
+    "  Kingdom feed online",
     "",
-    "  Welcome to the kingdom.",
+    `  ${email}  ·  ${toolCount} tools`,
     "",
-    `  Auth: ${email}`,
-    `  Tools online: ${toolCount}`,
-    "",
-    "  › Type a message or /help",
-    `  ${staticBar.slice(0, innerW - 2)}`,
+    "  › message below  ·  /help  ·  ? hotkeys",
+    `  ${glitchNoise(innerW - 2, 5)}`,
   ];
   const lines = [
-    `╔═╤${"═".repeat(innerW)}╤═╗`,
+    `╭${"─".repeat(innerW)}╮`,
     ...inner.map((line) => {
       const padded = line.padEnd(innerW);
-      return `║░│${padded}│░║`;
+      return `│${padded}│`;
     }),
-    `╚═╧${"═".repeat(innerW)}╧═╝`,
+    `╰${"─".repeat(innerW)}╯`,
   ];
   return lines.join("\n");
 }
