@@ -5,6 +5,7 @@ import { findTool } from "./tools/registry.js";
 import { confirmToolCall as defaultConfirmToolCall } from "./confirm.js";
 import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
+import { EMPIRE_CONTENT_ROUTING } from "./empire-routing.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
 
@@ -47,10 +48,13 @@ export interface RunAgentOptions {
 
 const SYSTEM_PROMPT_BASE = `You are BLXCKCHAT, the native AI agent for the JEXXXUS CLI. You service \
 specific functions related to the JEXXXUS kingdom/garden ecosystem — Bible lookups, public VEIL \
-article lookups (veil.jexxx.us), dashboard diagnostics, notifications, and contact imports. You are \
-not a general coding agent; stay scoped to the tools available to you. When a tool call would write \
-data or run a shell command, expect the user to be prompted for confirmation before it executes — \
-explain what you're about to do so they can make an informed choice.`;
+articles (veil.jexxx.us), public JEXXXUS | TV videos (tv.jexxx.us), dashboard diagnostics, \
+notifications, and contact imports. You are not a general coding agent; stay scoped to the tools \
+available to you. When a tool call would write data or run a shell command, expect the user to be \
+prompted for confirmation before it executes — explain what you're about to do so they can make \
+an informed choice.
+
+${EMPIRE_CONTENT_ROUTING}`;
 
 const MAX_TURNS = 8;
 
@@ -72,9 +76,11 @@ export interface AgentTurnResult {
 }
 
 const PERSONA_CLI_BRIDGE = `You are operating inside the JEXXXUS CLI (BLXCKCHAT). Retain your persona voice \
-and identity above. You still have access to BLXCKCHAT tools (Bible lookups, public VEIL articles on \
-veil.jexxx.us, dashboard diagnostics, notifications, contact imports). Stay in character when \
-explaining tool actions; the operator must confirm any write/shell tool before it runs.`;
+and identity above. You still have access to BLXCKCHAT tools (Bible lookups, public VEIL articles, \
+public JEXXXUS | TV videos, dashboard diagnostics, notifications, contact imports). Stay in character \
+when explaining tool actions; the operator must confirm any write/shell tool before it runs.
+
+${EMPIRE_CONTENT_ROUTING}`;
 
 function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): string {
   const base = persona
@@ -141,6 +147,7 @@ export async function runAgent(
   let lastCallSignature: string | null = null;
   let repeatCount = 0;
   let lastSuccessfulResult: string | null = null;
+  let bibleQueryMissCount = 0;
 
   // Wraps a final answer with the transcript to hand back as next-turn
   // history — every early-return path below must go through this so the
@@ -237,9 +244,21 @@ export async function runAgent(
       options.onToolStart?.(tool.name);
 
       try {
-        const toolResult = await tool.execute(toolCall.arguments);
+        let toolResult = await tool.execute(toolCall.arguments);
         const isBlocked = toolResult.startsWith("Error: command blocked");
-        const isError = toolResult.startsWith("Error:");
+        const isError =
+          toolResult.startsWith("Error:") ||
+          toolResult.startsWith("No verse found") ||
+          toolResult.includes("does not look like a scripture reference");
+        if (toolCall.name === "bible_query" && isError) {
+          bibleQueryMissCount++;
+          if (bibleQueryMissCount >= 2) {
+            toolResult +=
+              "\n\n(Stop retrying bible_query for this question. If the user named a video channel, " +
+              "series, or title — e.g. \"Forgive Me Father\" on JEXXXUS | TV — use tv_query " +
+              "action=search. Combine TV + Bible + VEIL results in your final answer.)";
+          }
+        }
         recordAudit({
           toolName: tool.name,
           arguments: toolCall.arguments,

@@ -5,6 +5,7 @@ import {
   getBibleChapters,
   findBook,
   findVerse,
+  looksLikeVerseReference,
 } from "../../bible.js";
 
 /**
@@ -15,10 +16,11 @@ import {
 export const bibleTool: BlxckchatTool = {
   name: "bible_query",
   description:
-    "Query the JEXXXUS Bible vault. Use action='query' with a natural verse reference " +
-    "(e.g. 'Genesis 1:1' or 'John 3 16') to fetch a specific verse. Use action='sections' " +
-    "to list major canon sections, action='books' with a section to list books, or " +
-    "action='chapters' with a section and book to list chapters.",
+    "Query the JEXXXUS Bible vault for SCRIPTURE ONLY. action='query' requires a verse " +
+    "reference like 'Genesis 1:1' or '1 John 1:9' (Book Chapter:Verse). Do NOT use for video " +
+    "titles, TV channels/series/tags (e.g. 'Forgive Me Father'), or article topics — use tv_query " +
+    "or veil_query instead. action='sections' lists canon sections; action='books' needs section; " +
+    "action='chapters' needs section + book.",
   parameters: {
     type: "object",
     properties: {
@@ -77,8 +79,20 @@ export const bibleTool: BlxckchatTool = {
 
     if (wantsVerse) {
       if (!query) return "Error: 'query' is required, e.g. 'Genesis 1:1'.";
+      if (!looksLikeVerseReference(query)) {
+        return (
+          `This does not look like a scripture reference (expected Book Chapter:Verse, e.g. "1 John 1:9"). ` +
+          `For video channels, series, or titles like "${query}", use tv_query with action=search instead. ` +
+          `For VEIL articles, use veil_query.`
+        );
+      }
       const verse = findVerse(query);
-      if (!verse) return `No verse found matching "${query}".`;
+      if (!verse) {
+        return (
+          `No verse found matching "${query}". If the user meant a JEXXXUS | TV video or channel, ` +
+          `call tv_query with action=search instead of retrying bible_query.`
+        );
+      }
       return JSON.stringify(verse);
     }
 

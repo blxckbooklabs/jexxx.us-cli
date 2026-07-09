@@ -198,28 +198,35 @@ export function findBook(bookName: string): {
   return null;
 }
 
-export function findVerse(query: string): BibleVerse | null {
-  // Query format: "Genesis 1:1" or "Genesis 1 1"
-  const match = query.match(
-    /^([A-Za-z\s]+?)\s+(\d+)[:\s]+(\d+)$/
+/** True when query looks like "Genesis 1:1" / "1 John 1 9" — not a video title or series name. */
+export function looksLikeVerseReference(query: string): boolean {
+  return parseVerseReference(query) !== null;
+}
+
+/** Parse Book Chapter:Verse references including numbered books (1 John, 2 Peter). */
+export function parseVerseReference(
+  query: string,
+): { bookName: string; chapter: number; verse: number } | null {
+  const trimmed = query.trim();
+  const match = trimmed.match(
+    /^((?:\d+\s+)?[A-Za-z][A-Za-z0-9\s.'-]*?)\s+(\d+)\s*[: ]\s*(\d+)\s*$/,
   );
-  if (!match || !match[1] || !match[2] || !match[3]) {
-    console.error("[Bible] Invalid verse query format. Expected: Book Chapter:Verse");
-    return null;
-  }
+  if (!match?.[1] || !match[2] || !match[3]) return null;
+  const chapter = Number.parseInt(match[2], 10);
+  const verse = Number.parseInt(match[3], 10);
+  if (!Number.isFinite(chapter) || !Number.isFinite(verse)) return null;
+  return { bookName: match[1].trim(), chapter, verse };
+}
 
-  const bookName = match[1];
-  const chapterStr = match[2];
-  const verseStr = match[3];
+export function findVerse(query: string): BibleVerse | null {
+  const parsed = parseVerseReference(query);
+  if (!parsed) return null;
 
-  const bookInfo = findBook(bookName.trim());
-  if (!bookInfo) {
-    console.error(`[Bible] Book not found: ${bookName}`);
-    return null;
-  }
+  const { bookName, chapter: chapterNum, verse: verseNum } = parsed;
 
-  const chapterNum = parseInt(chapterStr);
-  const verseNum = parseInt(verseStr);
+  const bookInfo = findBook(bookName);
+  if (!bookInfo) return null;
+
   const chapter = `Chapter ${chapterNum}`;
 
   try {
@@ -231,15 +238,9 @@ export function findVerse(query: string): BibleVerse | null {
     const verseFile = verses.find((v) =>
       v.startsWith(`${chapterNum}-${verseNum}`)
     );
-    if (!verseFile) {
-      console.error(
-        `[Bible] Verse not found: ${bookName} ${chapterNum}:${verseNum}`
-      );
-      return null;
-    }
+    if (!verseFile) return null;
     return getVerse(bookInfo.section, bookInfo.book, chapter, verseFile);
-  } catch (err) {
-    console.error(`[Bible] Error fetching verse:`, err);
+  } catch {
     return null;
   }
 }

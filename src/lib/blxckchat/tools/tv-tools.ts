@@ -36,8 +36,10 @@ export const tvTool: BlxckchatTool = {
   name: "tv_query",
   description:
     "Query public JEXXXUS | TV videos on tv.jexxx.us (official videos.json or public llms-full/RSS only). " +
+    "Use for watch recommendations and anything on TV — channels/series/tags like 'Forgive Me Father', " +
+    "'Mormon Girlz', 'Deviante', category names (Nuns, Pastor/Priest), or video titles. " +
     "action=list — titles+watch URLs (default limit 10; includes RSS/sitemap links in footer). " +
-    "action=search — find by title, category, tags, or description. " +
+    "action=search — find by title, channel, tag, category, or description. " +
     "action=get — full video description (requires slug). " +
     "action=meta — canonical URL + SEO (requires slug). " +
     "action=discover — feed/sitemap/llms endpoints only (skip if list already answered). " +
