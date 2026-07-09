@@ -16,10 +16,16 @@ test("modal line input supports option+shift+word select", () => {
   assert.ok(state.cursor < state.text.length);
 });
 
-test("modal line input deletes word with option+backspace", () => {
+test("modal line input deletes word with ctrl+backspace", () => {
   const input = createModalLineInput("hello world");
-  input.handleKey("", { name: "backspace", meta: true });
+  input.handleKey("", { name: "backspace", ctrl: true });
   assert.equal(input.getText(), "hello ");
+});
+
+test("modal line input kills to line start with command+delete", () => {
+  const input = createModalLineInput("OpenCode Zen");
+  input.handleKey("", { name: "backspace", meta: true });
+  assert.equal(input.getText(), "");
 });
 
 test("letter p inserts text and is not a paste shortcut", () => {

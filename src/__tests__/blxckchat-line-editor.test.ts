@@ -7,6 +7,9 @@ import {
   deleteWordBackward,
   getSelectionRange,
   insertText,
+  killLine,
+  killToEnd,
+  killToStart,
   moveWordLeft,
   moveWordRight,
   resolveLineEditorKey,
@@ -31,7 +34,23 @@ test("option+arrow resolves to word movement", () => {
 test("full key sequence resolves option+shift+arrow", () => {
   assert.equal(resolveLineEditorKey({ full: "M-S-left" }).type, "move-word-left");
   assert.equal(resolveLineEditorKey({ full: "M-S-left" }).extend, true);
-  assert.equal(resolveLineEditorKey({ full: "M-backspace" }).type, "delete-word-backward");
+  assert.equal(resolveLineEditorKey({ full: "M-backspace" }).type, "kill-to-start");
+  assert.equal(resolveLineEditorKey({ full: "M-delete" }).type, "kill-to-end");
+});
+
+test("command+delete kills to line start or end", () => {
+  const toStart = createLineEditorState("OpenCode Zen profile");
+  toStart.cursor = 13;
+  assert.equal(killToStart(toStart).text, "profile");
+
+  const toEnd = createLineEditorState("OpenCode Zen profile");
+  toEnd.cursor = 9;
+  assert.equal(killToEnd(toEnd).text, "OpenCode ");
+});
+
+test("ctrl+u clears entire field", () => {
+  assert.equal(resolveLineEditorKey({ name: "u", ctrl: true }).type, "kill-line");
+  assert.equal(killLine(createLineEditorState("clear me")).text, "");
 });
 
 test("shift+arrow extends character selection", () => {

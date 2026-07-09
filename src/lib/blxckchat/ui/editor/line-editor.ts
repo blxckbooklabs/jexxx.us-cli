@@ -161,6 +161,22 @@ export function killToEnd(state: LineEditorState): LineEditorState {
   return { text, cursor, selectionAnchor: null };
 }
 
+/** Delete from line start through cursor (macOS ⌘⌫). */
+export function killToStart(state: LineEditorState): LineEditorState {
+  const range = getSelectionRange(state);
+  if (range) {
+    const { text, cursor } = deleteRange(state.text, range.start, range.end);
+    return { text, cursor, selectionAnchor: null };
+  }
+  const { text, cursor } = deleteRange(state.text, 0, state.cursor);
+  return { text, cursor: 0, selectionAnchor: null };
+}
+
+/** Clear the entire field (readline Ctrl+U). */
+export function killLine(state: LineEditorState): LineEditorState {
+  return { text: "", cursor: 0, selectionAnchor: null };
+}
+
 export interface LineEditorKeyAction {
   readonly type:
     | "noop"
@@ -170,6 +186,8 @@ export interface LineEditorKeyAction {
     | "delete-word-backward"
     | "delete-word-forward"
     | "kill-to-end"
+    | "kill-to-start"
+    | "kill-line"
     | "move-char-left"
     | "move-char-right"
     | "move-word-left"
@@ -217,15 +235,19 @@ export function resolveLineEditorKey(key: LineEditorKey): LineEditorKeyAction {
   if (name === "enter" || name === "return") return { type: "submit" };
 
   if (name === "backspace") {
-    if (meta || (ctrl && !shift)) return { type: "delete-word-backward" };
+    // ⌘⌫ (Command+Delete) — delete to beginning of line when Command reports as meta.
+    if (meta) return { type: "kill-to-start" };
+    if (ctrl && !shift) return { type: "delete-word-backward" };
     return { type: "delete-backward" };
   }
 
   if (name === "delete" || name === "S-delete" || name === "C-delete") {
-    if (meta) return { type: "delete-word-forward" };
+    // ⌘⌦ (Command+Forward Delete) — delete through end of line.
+    if (meta) return { type: "kill-to-end" };
     return { type: "delete-forward" };
   }
 
+  if (ctrl && name === "u") return { type: "kill-line" };
   if (ctrl && name === "a") return { type: "select-all" };
   if ((ctrl || meta) && name === "v") return { type: "paste" };
   if ((ctrl || meta) && name === "c") return { type: "noop" };
@@ -284,6 +306,10 @@ export function applyLineEditorAction(
       return deleteWordForward(state);
     case "kill-to-end":
       return killToEnd(state);
+    case "kill-to-start":
+      return killToStart(state);
+    case "kill-line":
+      return killLine(state);
     case "move-char-left":
       return moveCharLeft(state, extend);
     case "move-char-right":
