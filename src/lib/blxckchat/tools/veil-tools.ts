@@ -6,6 +6,24 @@ import {
   listVeilArticles,
   searchVeilArticles,
 } from "../../veil.js";
+import {
+  formatVeilArticleFull,
+  formatVeilArticleList,
+  formatVeilArticleMeta,
+  formatVeilDiscover,
+} from "./veil-format.js";
+
+type VeilAction = "list" | "get" | "search" | "meta" | "discover";
+
+function resolveVeilAction(raw: string): VeilAction | null {
+  const action = raw.toLowerCase().trim();
+  if (action === "list") return "list";
+  if (action === "get") return "get";
+  if (action === "search") return "search";
+  if (action === "meta") return "meta";
+  if (action === "discover" || action === "feed" || action === "rss") return "discover";
+  return null;
+}
 
 /**
  * Read-only access to public VEIL articles on veil.jexxx.us — full text,
@@ -15,11 +33,10 @@ import {
 export const veilTool: BlxckchatTool = {
   name: "veil_query",
   description:
-    "Query public VEIL articles published on veil.jexxx.us. Use action='list' to list articles " +
-    "with titles and canonical URLs. Use action='get' with slug or title to fetch full article " +
-    "text for quoting in chat. Use action='search' with query to find articles. Use action='meta' " +
-    "for SEO fields (title, description, url, publishedAt, author, category). Use action='discover' " +
-    "for public RSS/sitemap/llms.txt endpoints.",
+    "Query public VEIL articles on veil.jexxx.us. action=list (titles+URLs, default limit 10). " +
+    "action=search with query (find by title). action=get with slug (full article text). " +
+    "action=meta with slug (canonical URL + SEO/RSS fields). action=discover (feed/sitemap/llms). " +
+    "slug comes from list/search output — meta and get always require slug or query.",
   parameters: {
     type: "object",
     properties: {
@@ -30,89 +47,81 @@ export const veilTool: BlxckchatTool = {
       },
       slug: {
         type: "string",
-        description: "Article slug or title fragment (for get/meta)",
+        description: "Article slug from list/search (required for get/meta)",
       },
       query: {
         type: "string",
-        description: "Search text (for search; optional filter for list)",
+        description: "Search text (search), or title/slug alias for get/meta",
       },
       limit: {
         type: "number",
-        description: "Max results for list/search (default 20)",
+        description: "Max results for list/search (default 10, max 25)",
       },
     },
     required: ["action"],
   },
   requiresConfirmation: false,
   async execute(args: Record<string, unknown>): Promise<string> {
-    const rawAction = String(args.action ?? "").toLowerCase();
-    const slug = args.slug as string | undefined;
-    const query = args.query as string | undefined;
-    const limit = typeof args.limit === "number" ? Math.min(args.limit, 50) : 20;
+    const action = resolveVeilAction(String(args.action ?? ""));
+    const slug = typeof args.slug === "string" ? args.slug.trim() : "";
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    const limit = typeof args.limit === "number"
+      ? Math.min(Math.max(1, args.limit), 25)
+      : 10;
 
-    const wantsDiscover = rawAction.includes("discover") || rawAction.includes("feed") || rawAction.includes("rss");
-    const wantsList = rawAction.includes("list");
-    const wantsSearch = rawAction.includes("search") || Boolean(query && !slug);
-    const wantsMeta = rawAction.includes("meta") || rawAction.includes("link") || rawAction.includes("url");
-    const wantsGet = rawAction.includes("get") || rawAction.includes("article") || Boolean(slug);
-
-    if (wantsDiscover) {
-      const endpoints = getVeilPublicEndpoints();
-      const articles = await listVeilArticles();
-      return JSON.stringify({
-        ...endpoints,
-        articleCount: articles.length,
-        sampleArticles: articles.slice(0, 5).map((a) => ({
-          title: a.title,
-          url: a.url,
-          publishedAt: a.publishedAt,
-        })),
-      });
+    if (!action) {
+      return `Error: unknown action "${String(args.action)}". Use list, get, search, meta, or discover.`;
     }
 
-    if (wantsList) {
-      const articles = await listVeilArticles();
-      const filtered = query ? searchVeilArticles(articles, query, limit) : articles.slice(0, limit);
-      return JSON.stringify(filtered);
-    }
+    const allArticles = await listVeilArticles();
 
-    if (wantsSearch) {
-      if (!query) return "Error: 'query' is required for search.";
-      const articles = await listVeilArticles();
-      return JSON.stringify(searchVeilArticles(articles, query, limit));
-    }
-
-    if (wantsMeta) {
-      if (!slug && !query) {
-        return "Error: 'slug' (or 'query') is required for meta — e.g. how-becoming-a-christian-made-me-a-better-hoebag.";
+    switch (action) {
+      case "discover": {
+        const endpoints = getVeilPublicEndpoints();
+        return formatVeilDiscover(endpoints, allArticles.length, allArticles.slice(0, 5));
       }
-      const meta = await getVeilArticleMeta(slug ?? query!);
-      if (!meta) return `No VEIL article found matching "${slug ?? query}".`;
-      const endpoints = getVeilPublicEndpoints();
-      return JSON.stringify({
-        ...meta,
-        seo: {
-          canonicalUrl: meta.url,
-          openGraphUrl: meta.url,
-          rssFeed: endpoints.feed,
-          sitemap: endpoints.sitemap,
-          llmsTxt: endpoints.llms,
-        },
-      });
-    }
 
-    if (wantsGet) {
-      if (!slug && !query) {
-        return "Error: 'slug' (or 'query') is required for get — article slug or title.";
+      case "list": {
+        const filtered = query
+          ? searchVeilArticles(allArticles, query, limit)
+          : allArticles.slice(0, limit);
+        return formatVeilArticleList(filtered, allArticles.length);
       }
-      const article = await getVeilArticle(slug ?? query!);
-      if (!article) return `No VEIL article found matching "${slug ?? query}".`;
-      return JSON.stringify(article);
-    }
 
-    return (
-      `Error: could not determine VEIL action from "${rawAction}". ` +
-      `Use list, get, search, meta, or discover.`
-    );
+      case "search": {
+        if (!query) return "Error: 'query' is required for search.";
+        const hits = searchVeilArticles(allArticles, query, limit);
+        return formatVeilArticleList(hits, allArticles.length);
+      }
+
+      case "meta": {
+        const key = slug || query;
+        if (!key) {
+          return (
+            "Error: 'slug' or 'query' is required for meta. " +
+            "Run action=list or action=search first, then pass the article slug."
+          );
+        }
+        const meta = await getVeilArticleMeta(key);
+        if (!meta) return `No VEIL article found matching "${key}".`;
+        return formatVeilArticleMeta(meta, getVeilPublicEndpoints());
+      }
+
+      case "get": {
+        const key = slug || query;
+        if (!key) {
+          return (
+            "Error: 'slug' or 'query' is required for get. " +
+            "Run action=list or action=search first, then pass the article slug."
+          );
+        }
+        const article = await getVeilArticle(key);
+        if (!article) return `No VEIL article found matching "${key}".`;
+        return formatVeilArticleFull(article);
+      }
+
+      default:
+        return `Error: unsupported action "${action}".`;
+    }
   },
 };

@@ -88,18 +88,31 @@ test("getVeilPublicEndpoints exposes RSS and sitemap URLs", () => {
   assert.equal(endpoints.llms, "https://veil.jexxx.us/llms.txt");
 });
 
-test("veil_query tool discover action returns public endpoints", async () => {
+test("veil_query tool discover action returns readable public endpoints", async () => {
   process.env.VEIL_CONTENT_PATH = FIXTURE_ROOT;
   const raw = await veilTool.execute({ action: "discover" });
-  const payload = JSON.parse(raw) as { feed: string; articleCount: number };
-  assert.equal(payload.feed, "https://veil.jexxx.us/feed.xml");
-  assert.equal(payload.articleCount, 1);
+  assert.match(raw, /RSS: https:\/\/veil\.jexxx\.us\/feed\.xml/);
+  assert.match(raw, /Published articles: 1/);
+});
+
+test("veil_query tool list action returns readable article lines", async () => {
+  process.env.VEIL_CONTENT_PATH = FIXTURE_ROOT;
+  const raw = await veilTool.execute({ action: "list" });
+  assert.match(raw, /VEIL articles \(1 shown\)/);
+  assert.match(raw, /Sample VEIL Article/);
+  assert.match(raw, /\/articles\/sample-veil-article/);
+  assert.doesNotMatch(raw, /"authorSlug"/);
 });
 
 test("veil_query tool meta action returns canonical URL", async () => {
   process.env.VEIL_CONTENT_PATH = FIXTURE_ROOT;
   const raw = await veilTool.execute({ action: "meta", slug: "sample-veil-article" });
-  const payload = JSON.parse(raw) as { url: string; seo: { canonicalUrl: string } };
-  assert.equal(payload.url, payload.seo.canonicalUrl);
-  assert.match(payload.url, /sample-veil-article/);
+  assert.match(raw, /URL: https:\/\/veil\.jexxx\.us\/articles\/sample-veil-article/);
+  assert.match(raw, /RSS: https:\/\/veil\.jexxx\.us\/feed\.xml/);
+});
+
+test("veil_query meta without slug explains next step", async () => {
+  const raw = await veilTool.execute({ action: "meta" });
+  assert.match(raw, /slug.*required/i);
+  assert.match(raw, /list or action=search/i);
 });
