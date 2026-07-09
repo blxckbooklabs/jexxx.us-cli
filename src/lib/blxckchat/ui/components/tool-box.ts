@@ -35,7 +35,10 @@ export function summarizeToolResultForDisplay(
   if (!trimmed) return "(empty)";
 
   // Full tool output — chat pane scrolls (mouse scrollbar + wheel).
-  if (toolName === "veil_query" && status === "success") {
+  if (
+    (toolName === "veil_query" || toolName === "tv_query") &&
+    status === "success"
+  ) {
     return trimmed;
   }
 
@@ -44,12 +47,21 @@ export function summarizeToolResultForDisplay(
     (trimmed.startsWith("VEIL articles") ||
       trimmed.startsWith("VEIL public endpoints") ||
       trimmed.startsWith("No VEIL articles"));
+  const isTvCatalog =
+    toolName === "tv_query" &&
+    (trimmed.startsWith("JEXXXUS | TV videos") ||
+      trimmed.startsWith("JEXXXUS | TV public endpoints") ||
+      trimmed.startsWith("No JEXXXUS | TV videos"));
   const isVeilMeta =
     toolName === "veil_query" && trimmed.includes("Public SEO / discovery:");
+  const isTvMeta =
+    toolName === "tv_query" && trimmed.includes("Public SEO / discovery:");
   const isVeilArticleBody =
     toolName === "veil_query" && trimmed.includes("\n---\n");
+  const isTvVideoBody =
+    toolName === "tv_query" && trimmed.includes("\n---\n");
 
-  if (isVeilCatalog || isVeilMeta) {
+  if (isVeilCatalog || isVeilMeta || isTvCatalog || isTvMeta) {
     const lines = trimmed.split("\n");
     if (lines.length <= VEIL_CATALOG_MAX_LINES && trimmed.length <= VEIL_CATALOG_MAX_CHARS) {
       return trimmed;
@@ -57,9 +69,10 @@ export function summarizeToolResultForDisplay(
     return `${lines.slice(0, VEIL_CATALOG_MAX_LINES).join("\n")}\n… (scroll chat history for full catalog)`;
   }
 
-  if (isVeilArticleBody) {
+  if (isVeilArticleBody || isTvVideoBody) {
     const header = trimmed.split("\n---\n")[0] ?? trimmed;
-    return `${header}\n… [article body omitted in TUI — full text in model context]`;
+    const label = isTvVideoBody ? "video description" : "article body";
+    return `${header}\n… [${label} omitted in TUI — full text in model context]`;
   }
 
   if (trimmed.startsWith("[")) {

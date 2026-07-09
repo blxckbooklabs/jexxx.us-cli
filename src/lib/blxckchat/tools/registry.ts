@@ -1,6 +1,7 @@
 import type { BlxckchatTool } from "./types.js";
 import { bibleTool } from "./bible-tools.js";
 import { veilTool } from "./veil-tools.js";
+import { tvTool } from "./tv-tools.js";
 import { doctorTool, notifyTool, importContactsTool } from "./dashboard-tools.js";
 import { shellTool } from "./shell-tool.js";
 
@@ -8,6 +9,7 @@ export function buildToolRegistry(allowShell: boolean): BlxckchatTool[] {
   const tools: BlxckchatTool[] = [
     bibleTool,
     veilTool,
+    tvTool,
     doctorTool,
     notifyTool,
     importContactsTool,

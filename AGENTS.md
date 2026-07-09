@@ -60,6 +60,12 @@ Owned by the JEXXXUS platform / tooling team.
   is a mirror fallback; remote users use `https://veil.jexxx.us/feed.xml` only. Outbound fetch
   is host-locked to `veil.jexxx.us` (or localhost dev). No `.env`, `src/`, or internal Obsidian
   VEIL docs are ever read. Env: `VEIL_CONTENT_PATH`, `VEIL_ARTICLES_PATH`, `VEIL_PUBLIC_BASE_URL`.
+- BLXCKCHAT `tv_query` reads **public** JEXXXUS | TV videos only. Canonical local source is
+  `tv.jexxx.us/src/data/videos.json` (`TV_CONTENT_PATH`); `public/llms-full.txt` is a local
+  mirror fallback; remote users use `https://tv.jexxx.us/llms-full.txt` (then `llms.txt`,
+  `feed.xml`). Outbound fetch is host-locked to `tv.jexxx.us` (or localhost dev). Never exposes
+  `embed_url`/stream URLs, Supabase, or internal Obsidian TV docs. Env: `TV_CONTENT_PATH`,
+  `TV_PUBLIC_BASE_URL`.
 
 ## 6. Child DOX Index
 

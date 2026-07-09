@@ -22,6 +22,12 @@ test("summarizeToolResultForDisplay keeps short multiline text", () => {
   assert.equal(out, raw);
 });
 
+test("summarizeToolResultForDisplay shows full tv_query catalogs", () => {
+  const raw = "JEXXXUS | TV videos (2 shown):\n\n1. Title\n   https://tv.jexxx.us/video/slug";
+  const out = summarizeToolResultForDisplay(raw, "success", "tv_query");
+  assert.equal(out, raw);
+});
+
 test("summarizeToolResultForDisplay shows full veil_query catalogs", () => {
   const raw = `VEIL articles (10 shown of 47):\n\n${"1. Title\n   https://veil.jexxx.us/a\n\n".repeat(10)}Public discovery:`;
   const out = summarizeToolResultForDisplay(raw, "success", "veil_query");
