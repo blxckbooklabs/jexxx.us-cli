@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { fuzzyFilter, fuzzyScore } from "../lib/blxckchat/ui/slash/fuzzy.js";
 import {
+  getArgumentSuggestions,
   getCommandSuggestions,
   detectSlashInputMode,
 } from "../lib/blxckchat/ui/slash/autocomplete.js";
@@ -57,6 +58,29 @@ test("detectSlashInputMode normalizes spaced provider aliases", () => {
     commandFilter: "",
     argFilter: "",
   });
+});
+
+test("detectSlashInputMode treats /auth as auth arguments", () => {
+  assert.deepEqual(detectSlashInputMode("/auth"), {
+    mode: "argument",
+    commandName: "auth",
+    commandFilter: "",
+    argFilter: "",
+  });
+});
+
+test("getArgumentSuggestions lists auth subcommands for bare /auth", async () => {
+  const config: StoredProviderConfig = {
+    name: "test",
+    provider: "openai",
+    model: "gpt-4o",
+    apiKey: "sk-test",
+    isDefault: true,
+  };
+  const subs = await getArgumentSuggestions("auth", "", { activeConfig: config });
+  assert.ok(subs.some((s) => s.value === "login"));
+  assert.ok(subs.some((s) => s.value === "logout"));
+  assert.ok(subs.some((s) => s.value === "refresh"));
 });
 
 test("detectSlashInputMode distinguishes command vs argument", () => {

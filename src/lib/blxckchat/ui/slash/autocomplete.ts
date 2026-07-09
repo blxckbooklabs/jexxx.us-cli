@@ -120,6 +120,28 @@ export async function getArgumentSuggestions(
     return [...savedSuggestions, ...connectSuggestions];
   }
 
+  if (commandName === "auth") {
+    const subs: SlashSuggestion[] = [
+      {
+        value: "login",
+        label: "login",
+        description: "Device authorization via secure.jexxx.us (jexxxus auth login)",
+      },
+      {
+        value: "logout",
+        label: "logout",
+        description: "Revoke CLI access and delete stored credentials",
+      },
+      {
+        value: "refresh",
+        label: "refresh",
+        description: "Refresh access token with secure.jexxx.us",
+      },
+    ];
+    if (!argFilter.trim()) return subs;
+    return fuzzyFilter(subs, argFilter, (s) => `${s.label} ${s.description}`, 8);
+  }
+
   if (
     commandName === "divinities" ||
     commandName === "divinity" ||

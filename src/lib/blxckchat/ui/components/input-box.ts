@@ -177,6 +177,23 @@ export function createInputBox(
     }
 
     const next = applySuggestion(value, suggestion, mode);
+    const shouldSubmit =
+      mode === "command" ||
+      (mode === "argument" &&
+        detectSlashInputMode(next).commandName === "auth" &&
+        /^(login|logout|refresh)$/.test(suggestion.value));
+
+    if (shouldSubmit) {
+      hideSlashPopup();
+      lineEditor.clear();
+      lastSlashValue = "";
+      input.focus();
+      screen.render();
+      notify();
+      onSubmit(next.trim());
+      return true;
+    }
+
     lineEditor.setText(next);
     lastSlashValue = next;
     hideSlashPopup();
