@@ -12,7 +12,12 @@ import {
   type EmpireRoutingOptions,
 } from "./empire-routing.js";
 import { prefetchEmpireContext } from "./empire-prefetch.js";
-import { ACCOUNT_CONTENT_ROUTING, formatAccountRoutingHint } from "./account-routing.js";
+import {
+  ACCOUNT_CONTENT_ROUTING,
+  ACCOUNT_VAULT_REPLY_RULES,
+  formatAccountRoutingHint,
+  isVaultPrimaryPrompt,
+} from "./account-routing.js";
 import { prefetchAccountContext } from "./account-prefetch.js";
 import {
   extractEmpireUrlsFromText,
@@ -135,13 +140,21 @@ async function buildSystemPrompt(
     ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
     : SYSTEM_PROMPT_BASE;
 
-  const routingHint = formatEmpireRoutingHint(userPrompt, routingOptions);
+  const vaultPrimary = isVaultPrimaryPrompt(userPrompt);
+  const routingHint = vaultPrimary
+    ? null
+    : formatEmpireRoutingHint(userPrompt, routingOptions);
   const accountHint = formatAccountRoutingHint(userPrompt);
   let prompt = base;
   if (routingHint) prompt = `${prompt}\n\n${routingHint}`;
   if (accountHint) prompt = `${prompt}\n\n${accountHint}`;
+  if (vaultPrimary && persona) {
+    prompt = `${prompt}\n\n## Vault-only override (persona secondary)\n${ACCOUNT_VAULT_REPLY_RULES}`;
+  }
 
-  const prefetch = await prefetchEmpireContext(userPrompt, routingOptions);
+  const prefetch = vaultPrimary
+    ? null
+    : await prefetchEmpireContext(userPrompt, routingOptions);
   if (prefetch) {
     prompt = `${prompt}\n\n${prefetch}`;
   }

@@ -13,6 +13,12 @@ test("list my contacts routes to account_query contacts", () => {
   assert.equal(plan.target, "blxckbook");
 });
 
+test("who are my current contacts routes to account_query contacts", () => {
+  const plan = planAccountTools("Who are my current contacts?");
+  assert.ok(plan.tools.includes("account_query"));
+  assert.equal(plan.action, "contacts");
+});
+
 test("who am I dating filters Dating status", () => {
   const plan = planAccountTools("who am I dating right now?");
   assert.equal(plan.action, "contacts");

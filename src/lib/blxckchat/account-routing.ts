@@ -40,7 +40,7 @@ export const ACCOUNT_PHRASE_COLLISIONS: readonly AccountPhraseCollision[] = [
   {
     id: "list-contacts",
     pattern:
-      /\b(list my contacts|my contacts|my connections|who(?:'s| is) in my vault|show my connections)\b/i,
+      /\b(list my contacts|my contacts|my current contacts|current contacts(?:\s+list)?|who(?:'re| are) (?:my )?(?:current )?contacts|my connections|who(?:'s| is) in my vault|show my connections)\b/i,
     action: "contacts",
     target: "blxckbook",
     note: "BLXCKBOOK contact list → account_query contacts.",
@@ -156,12 +156,26 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
   };
 }
 
+/** True when the user prompt is a private vault/data question (not empire TV/VEIL). */
+export function isVaultPrimaryPrompt(userPrompt: string): boolean {
+  return planAccountTools(userPrompt).tools.length > 0;
+}
+
+export const ACCOUNT_VAULT_REPLY_RULES = `**Vault-only reply rules (this message):**
+- Call **account_query only** — do NOT call tv_query, veil_query, or bible_query.
+- Do not recommend TV/VEIL videos or quote scripture based on contact names or tags.
+- Reply in plain language: a short intro line, then one bullet per contact from tool output.
+- Format each contact: \`• Name (Status) · tags: …\` — omit tags line when empty.
+- No dramatic section headers (e.g. "VESSEL REGISTRY"), no roleplay framing unless the user asked for a persona.
+- Never invent URLs; never glue tv.jexxx.us or veil.jexxx.us links into vault answers.`;
+
 export function formatAccountRoutingHint(userPrompt: string): string | null {
   const plan = planAccountTools(userPrompt);
   if (plan.tools.length === 0) return null;
 
   const lines = ["## Routing hint for this message (account / vault collision table)"];
   lines.push("Prefer tool: account_query (requires JEXXXUS sign-in via /auth login)");
+  lines.push(ACCOUNT_VAULT_REPLY_RULES);
   if (plan.action) {
     lines.push(`Suggested action: ${plan.action}`);
   }
@@ -203,6 +217,7 @@ export const ACCOUNT_CONTENT_ROUTING = `## Account data routing (private vault �
 
 **Response rules:**
 - Call account_query before answering questions about contacts, dating status, journal entries, timeline, or NXT dates.
+- Vault-only turns: account_query **only** — never mix TV/VEIL/scripture into contact lists; tags are metadata, not watch recommendations.
 - Summarize by default; quote journal notes only when the user asks for detail.
 - If account_query returns empty results, say the vault is empty — do not fabricate people or events.
 - If not authenticated, direct the user to /auth login (same as secure.jexxx.us device flow).

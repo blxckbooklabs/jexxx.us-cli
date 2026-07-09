@@ -1,4 +1,5 @@
 import { looksLikeVerseReference, parseVerseReference } from "../bible.js";
+import { isVaultPrimaryPrompt } from "./account-routing.js";
 
 /** BLXCKCHAT tools + slash commands surfaced in routing hints. */
 export type RoutableTool =
@@ -462,6 +463,10 @@ export function formatEmpireRoutingHint(
   userPrompt: string,
   options?: EmpireRoutingOptions,
 ): string | null {
+  if (isVaultPrimaryPrompt(userPrompt)) {
+    return null;
+  }
+
   const plan = planEmpireTools(userPrompt, options);
   if (plan.tools.length === 0 && plan.slashHints.length === 0) return null;
 
