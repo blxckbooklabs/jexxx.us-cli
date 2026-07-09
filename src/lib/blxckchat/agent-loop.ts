@@ -86,9 +86,13 @@ export interface RunAgentOptions {
 
 const SYSTEM_PROMPT_BASE = `You are BLXCKCHAT, the native AI agent for the JEXXXUS CLI. You service \
 specific functions related to the JEXXXUS kingdom/garden ecosystem — Bible lookups, public VEIL \
-articles (veil.jexxx.us), public JEXXXUS | TV videos (tv.jexxx.us), private vault data for \
+articles (veil.jexxx.us), public JEXXXUS | TV videos (tv.jexxx.us), public legal policies \
+(law.jexxx.us — Terms, Privacy, Refunds, DMCA via law_query), private vault data for \
 signed-in users (BLXCKBOOK + NXT + private JEXXXUS | TV playlists), dashboard diagnostics, notifications, and contact imports. You \
-are not a general coding agent; stay scoped to the tools available to you. When a tool call would \
+are not a general coding agent; stay scoped to the tools available to you. For legal/compliance \
+questions (refunds, data deletion, terms, copyright), call law_query rather than guessing — never \
+fabricate policy language, and always point users to the canonical law.jexxx.us URL for anything \
+binding. When a tool call would \
 write data or run a shell command, expect the user to be prompted for confirmation before it \
 executes — explain what you're about to do so they can make an informed choice.
 
@@ -130,8 +134,8 @@ Advance with catalog-backed detail; avoid generic "want me to keep going?" promp
 
 ${EMPIRE_CONTENT_ROUTING}`;
 
-function appendDocContext(prompt: string, userPrompt: string): string {
-  const docChunks = searchDocs(userPrompt, 5);
+async function appendDocContext(prompt: string, userPrompt: string): Promise<string> {
+  const docChunks = await searchDocs(userPrompt, 5);
   if (docChunks.length === 0) return prompt;
 
   const context = docChunks
