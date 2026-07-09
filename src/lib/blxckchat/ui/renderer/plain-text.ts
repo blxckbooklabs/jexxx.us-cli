@@ -1,8 +1,11 @@
 import { crtCorner, glitchNoise } from "../theme.js";
 
-/** Strip blessed inline tags, restoring {open} escapes. */
+/** Strip blessed inline tags, restoring {open}/{close} escapes. */
 export function stripBlessedTags(text: string): string {
-  return text.replace(/\{open\}/g, "{").replace(/\{[^}]*\}/g, "");
+  return text
+    .replace(/\{open\}/g, "{")
+    .replace(/\{close\}/g, "}")
+    .replace(/\{[^}]*\}/g, "");
 }
 
 /** Compact welcome card shown after the JEXXXUS splash animation. */

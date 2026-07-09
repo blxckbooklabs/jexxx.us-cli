@@ -8,7 +8,8 @@ import {
 } from "../lib/blxckchat/ui/renderer/markdown.js";
 
 test("escapeBlessed escapes blessed tag delimiters", () => {
-  assert.equal(escapeBlessed("{bold}"), "{open}bold}");
+  assert.equal(escapeBlessed("{bold}"), "{open}bold{close}");
+  assert.equal(escapeBlessed("a}b"), "a{close}b");
   assert.equal(escapeBlessed("a@b"), "a@b");
 });
 

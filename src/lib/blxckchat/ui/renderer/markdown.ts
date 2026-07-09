@@ -2,7 +2,7 @@ import { marked, type Token, type Tokens } from "marked";
 
 /** Escape blessed tag delimiters in plain text segments. */
 export function escapeBlessed(text: string): string {
-  return text.replace(/\{/g, "{open}").replace(/@/g, "@");
+  return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
 }
 
 function renderInline(tokens: Token[] | undefined): string {

@@ -34,6 +34,7 @@ import {
 } from "./session/session-store.js";
 import { autosaveSession, loadAutosaveSession, shouldAutosave } from "./session/autosave.js";
 import { branchUndo } from "./session/branch.js";
+import { escapeBlessed } from "./renderer/markdown.js";
 import { StreamBuffer, formatStreamingChunk } from "./renderer/streaming.js";
 import { extractThinkingBlocks } from "./components/thinking-block.js";
 import { buildTuISnapshot } from "./renderer/plain-text.js";
@@ -96,7 +97,7 @@ function createBlessedConfirm(
         `{#ec4899-fg}░░ tool confirm ░░{/}`,
         `{#ec4899-fg}BLXCKCHAT{/} wants to run {bold}${toolName}{/bold}`,
         "",
-        `{gray-fg}${argsPreview.replace(/\{/g, "{open}")}{/gray-fg}`,
+        `{gray-fg}${escapeBlessed(argsPreview)}{/gray-fg}`,
         "",
         "{#67e8f9-fg}Y{/} allow  {#f87171-fg}N{/} decline",
       ].join("\n"),

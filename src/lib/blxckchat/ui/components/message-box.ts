@@ -6,7 +6,7 @@ import {
   formatThinkingBlock,
   formatThinkingBlockPlain,
 } from "./thinking-block.js";
-import { markdownToBlessed } from "../renderer/markdown.js";
+import { escapeBlessed, markdownToBlessed } from "../renderer/markdown.js";
 import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/markdown.js";
 import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult, TerminalSession } from "../session/session-store.js";
@@ -199,12 +199,12 @@ export function createMessageBox(
           break;
         case "error":
           parts.push(
-            `${highlightSearch(`${TAG.pink}⚡ ${TAG.pinkEnd}{#f87171-fg}${block.content}{/}`, searchQuery)}\n`,
+            `${highlightSearch(`${TAG.pink}⚡ ${TAG.pinkEnd}{#f87171-fg}${escapeBlessed(block.content)}{/}`, searchQuery)}\n`,
           );
           break;
         case "system":
           parts.push(
-            `${highlightSearch(`${TAG.dim}┌ ${TAG.dimEnd}${TAG.muted}${block.content}${TAG.mutedEnd}${TAG.dim} ┐${TAG.dimEnd}`, searchQuery)}\n`,
+            `${highlightSearch(`${TAG.dim}┌ ${TAG.dimEnd}${TAG.muted}${escapeBlessed(block.content)}${TAG.mutedEnd}${TAG.dim} ┐${TAG.dimEnd}`, searchQuery)}\n`,
           );
           break;
       }

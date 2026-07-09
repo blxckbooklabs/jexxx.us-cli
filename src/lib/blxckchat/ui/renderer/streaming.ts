@@ -1,4 +1,4 @@
-import { markdownToBlessed } from "./markdown.js";
+import { escapeBlessed, markdownToBlessed } from "./markdown.js";
 
 /** Accumulates streamed tokens for incremental UI updates. */
 export class StreamBuffer {
@@ -30,7 +30,7 @@ export function formatStreamingChunk(buffer: string): string {
   if (!buffer) {
     return `{#ec4899-fg}▌{/}`;
   }
-  const escaped = buffer.replace(/\{/g, "{open}").replace(/@/g, "@");
+  const escaped = escapeBlessed(buffer);
   return `${escaped}{#ec4899-fg}{bold}▌{/bold}{/}`;
 }
 

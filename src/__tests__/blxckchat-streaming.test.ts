@@ -27,6 +27,12 @@ test("formatStreamingChunk appends cursor to partial text", () => {
   assert.match(out, /▌/);
 });
 
+test("formatStreamingChunk escapes closing braces that would break blessed tags", () => {
+  const out = formatStreamingChunk("use {key: value}");
+  assert.match(out, /\{close\}/);
+  assert.doesNotMatch(out, /value\}/);
+});
+
 test("finalizeStreamedContent applies markdown rendering", () => {
   const out = finalizeStreamedContent("**done**");
   assert.match(out, /\{bold\}done\{\/bold\}/);
