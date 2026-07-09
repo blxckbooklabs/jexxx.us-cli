@@ -38,7 +38,8 @@ export function formatTvVideoList(
       .filter(Boolean)
       .join(" · ");
     lines.push(`${i + 1}. ${video.title}`);
-    lines.push(`   ${video.url}`);
+    lines.push(`   Watch: [${video.title}](${video.url})`);
+    lines.push(`   URL (copy exactly): ${video.url}`);
     if (bits) lines.push(`   ${bits}`);
     if (video.description && video.description !== video.title) {
       const preview =

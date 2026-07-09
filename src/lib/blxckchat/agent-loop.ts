@@ -7,6 +7,11 @@ import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
 import { EMPIRE_CONTENT_ROUTING, formatEmpireRoutingHint } from "./empire-routing.js";
 import { prefetchEmpireContext } from "./empire-prefetch.js";
+import {
+  extractEmpireUrlsFromText,
+  sanitizeEmpireUrls,
+  type EmpireUrlEntry,
+} from "./empire-url-sanitize.js";
 import { formatToolResultForFallback } from "./tool-result-format.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
@@ -136,6 +141,9 @@ export async function runAgent(
       : history;
 
   const systemPrompt = await buildSystemPrompt(userPrompt, options.persona);
+  const canonicalUrlCatalog: EmpireUrlEntry[] = [
+    ...extractEmpireUrlsFromText(systemPrompt),
+  ];
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     ...trimmedHistory,
@@ -169,8 +177,9 @@ export async function runAgent(
   // REPL's conversation memory stays consistent regardless of how the turn
   // ended (clean stop, repeat-loop short-circuit, or MAX_TURNS exhaustion).
   const finish = (response: string): AgentTurnResult => {
-    messages.push({ role: "assistant", content: response });
-    return { response, history: messages.slice(conversationStartIndex) };
+    const sanitized = sanitizeEmpireUrls(response, canonicalUrlCatalog);
+    messages.push({ role: "assistant", content: sanitized });
+    return { response: sanitized, history: messages.slice(conversationStartIndex) };
   };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
@@ -296,6 +305,12 @@ export async function runAgent(
         if (!isError) {
           lastSuccessfulResult = toolResult;
           lastSuccessfulTool = tool.name;
+          for (const entry of extractEmpireUrlsFromText(toolResult)) {
+            const key = `${entry.surface}:${entry.slug}`;
+            if (!canonicalUrlCatalog.some((e) => `${e.surface}:${e.slug}` === key)) {
+              canonicalUrlCatalog.push(entry);
+            }
+          }
         }
         messages.push({
           role: "tool",

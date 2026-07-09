@@ -69,8 +69,9 @@ Owned by the JEXXXUS platform / tooling team.
 - BLXCKCHAT empire routing (`src/lib/blxckchat/empire-routing.ts`) plans multi-tool replies:
   thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) and `tvSearchQuery`
   (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `empire-prefetch.ts`
-  pre-loads scripture + TV search into the system prompt for smaller models. Regression tests:
-  `src/__tests__/empire-routing.test.ts`.
+  pre-loads scripture + TV search into the system prompt for smaller models. `empire-url-sanitize.ts`
+  repairs model-hallucinated URLs (`wv.jexxx.us`, spaced slugs) on final replies. Regression tests:
+  `src/__tests__/empire-routing.test.ts`, `src/__tests__/empire-url-sanitize.test.ts`.
 
 ## 6. Child DOX Index
 

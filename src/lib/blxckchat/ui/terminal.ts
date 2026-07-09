@@ -414,7 +414,7 @@ export async function startTerminalChat(
       session.thinkingBlocks.push(...parsed.blocks);
 
       const visible =
-        parsed.visibleContent || streamBuffer.getContent() || response;
+        parsed.visibleContent || response || streamBuffer.getContent();
       addAssistantMessage(session, visible);
       messageBox.finalizeAssistant(
         assistantBlockIndex,
