@@ -59,9 +59,18 @@ export async function runAgent(
   let lastSuccessfulResult: string | null = null;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const result = await provider.chat(messages, toolDefs);
+    // Use streaming for text responses if available
+    let result;
+    if (provider.chatStream) {
+      result = await provider.chatStream(messages, toolDefs, (chunk) => {
+        process.stdout.write(chunk);
+      });
+    } else {
+      result = await provider.chat(messages, toolDefs);
+    }
 
     if (result.stopReason === "stop" || result.toolCalls.length === 0) {
+      console.log(); // Newline after streamed output
       return result.message.content;
     }
 

@@ -35,4 +35,9 @@ export interface ChatResult {
 export interface Provider {
   id: ProviderName;
   chat(messages: ChatMessage[], tools: ToolDefinition[]): Promise<ChatResult>;
+  chatStream?(
+    messages: ChatMessage[],
+    tools: ToolDefinition[],
+    onChunk: (chunk: string) => void
+  ): Promise<ChatResult>;
 }
