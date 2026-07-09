@@ -35,6 +35,14 @@ export const BLXCKCHAT_HOTKEYS: readonly HotkeyDef[] = [
   { keys: "Ctrl+S", action: "Export session JSON", source: "opencode" },
   { keys: "Ctrl+N", action: "New session (clear history)", source: "opencode" },
   { keys: "Ctrl+U", action: "Clear input line", source: "codex" },
+  { keys: "← / →", action: "Move cursor · Shift+arrow select", source: "blxckchat" },
+  { keys: "Option+← / →", action: "Move by word · Option+Shift extend", source: "blxckchat" },
+  { keys: "Ctrl+A", action: "Select all in transmit box", source: "blxckchat" },
+  { keys: "Home / End", action: "Jump to line start / end", source: "blxckchat" },
+  { keys: "Ctrl+W / Option+⌫", action: "Delete word backward", source: "blxckchat" },
+  { keys: "Ctrl+K", action: "Delete to end of line", source: "blxckchat" },
+  { keys: "Delete", action: "Delete forward · Option+Delete word forward", source: "blxckchat" },
+  { keys: "Ctrl+V / Cmd+V", action: "Paste into transmit box", source: "blxckchat" },
 ] as const;
 
 export function formatHotkeysOverlay(): string {

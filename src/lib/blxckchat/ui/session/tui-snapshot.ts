@@ -18,6 +18,33 @@ export function writeSnapshot(text: string): string {
   return target;
 }
 
+/** Read plain text from the system clipboard (best-effort). */
+export function readClipboard(): Promise<string> {
+  return new Promise((resolve) => {
+    const platform = process.platform;
+    let cmd: string;
+    let args: string[] = [];
+
+    if (platform === "darwin") {
+      cmd = "pbpaste";
+    } else if (platform === "win32") {
+      cmd = "powershell";
+      args = ["-command", "Get-Clipboard"];
+    } else {
+      cmd = "xclip";
+      args = ["-selection", "clipboard", "-o"];
+    }
+
+    const proc = spawn(cmd, args, { stdio: ["ignore", "pipe", "ignore"] });
+    let data = "";
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      data += chunk.toString("utf-8");
+    });
+    proc.on("error", () => resolve(""));
+    proc.on("close", () => resolve(data));
+  });
+}
+
 /** Copy plain text to the system clipboard (best-effort). */
 export function copyToClipboard(text: string): Promise<boolean> {
   return new Promise((resolve) => {

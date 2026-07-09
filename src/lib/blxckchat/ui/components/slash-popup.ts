@@ -39,10 +39,14 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     keys: false,
     mouse: isBlessedMouseEnabled(),
     vi: false,
+    itemHoverEffects: { bg: THEME.pink, fg: THEME.text, bold: true },
     style: {
       fg: THEME.text,
       bg: THEME.bgElevated,
       border: { fg: THEME.pink },
+      item: {
+        hover: { bg: THEME.pink, fg: THEME.text, bold: true },
+      },
       selected: { bg: THEME.pink, fg: THEME.text, bold: true },
     },
   });
@@ -57,6 +61,15 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     if (!visible || typeof index !== "number") return;
     selectedIndex = index;
     onPickHandler?.(index);
+  });
+
+  list.on("element mouseover", (el) => {
+    if (!visible) return;
+    const idx = list.getItemIndex(el);
+    if (idx < 0 || idx === selectedIndex) return;
+    selectedIndex = idx;
+    list.select(idx);
+    screen.render();
   });
 
   return {

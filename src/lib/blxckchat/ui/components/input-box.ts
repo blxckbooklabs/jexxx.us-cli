@@ -6,6 +6,7 @@ import {
   detectSlashInputMode,
   type SlashSuggestion,
 } from "../slash/autocomplete.js";
+import { attachBlessedLineEditor } from "../editor/blessed-line-editor.js";
 import { frameTransmitInput } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
@@ -56,33 +57,6 @@ export function createInputBox(
   let slashDebounce: ReturnType<typeof setTimeout> | null = null;
   let lastSlashValue = "";
 
-  const isSlashNavigationKey = (key?: { name?: string }): boolean =>
-    key?.name === "up" || key?.name === "down";
-
-  const input = blessed.textbox({
-    parent: screen,
-    bottom: 0,
-    left: 0,
-    width: "100%",
-    height: 3,
-    border: { type: "line" },
-    label: " transmit ",
-    tags: true,
-    style: {
-      fg: THEME.text,
-      bg: THEME.bgElevated,
-      border: { fg: THEME.pink },
-      focus: {
-        border: { fg: THEME.pinkGlow },
-        bg: THEME.bgPanel,
-      },
-    },
-    inputOnFocus: true,
-    keys: true,
-    mouse: isBlessedMouseEnabled(),
-    vi: false,
-  });
-
   const notify = (): void => {
     options.onUpdate?.();
   };
@@ -123,6 +97,39 @@ export function createInputBox(
     }, 50);
   };
 
+  const input = blessed.textbox({
+    parent: screen,
+    bottom: 0,
+    left: 0,
+    width: "100%",
+    height: 3,
+    border: { type: "line" },
+    label: " transmit ",
+    tags: true,
+    style: {
+      fg: THEME.text,
+      bg: THEME.bgElevated,
+      border: { fg: THEME.pink },
+      focus: {
+        border: { fg: THEME.pinkGlow },
+        bg: THEME.bgPanel,
+      },
+    },
+    inputOnFocus: true,
+    keys: true,
+    mouse: isBlessedMouseEnabled(),
+    vi: false,
+  });
+
+  const lineEditor = attachBlessedLineEditor(input, screen, {
+    onChange: (text) => {
+      setImmediate(() => {
+        refreshSlashSuggestions(text);
+        notify();
+      });
+    },
+  });
+
   const applySlashSuggestionAt = (idx: number): boolean => {
     if (!options.slashPopup?.isVisible() || slashSuggestions.length === 0) {
       return false;
@@ -130,12 +137,12 @@ export function createInputBox(
     const suggestion = slashSuggestions[idx];
     if (!suggestion) return false;
 
-    const value = input.getValue();
+    const value = lineEditor.getText();
     const { mode } = detectSlashInputMode(value);
     if (mode === "none") return false;
 
     const next = applySuggestion(value, suggestion, mode);
-    input.setValue(next);
+    lineEditor.setText(next);
     lastSlashValue = next;
     hideSlashPopup();
     screen.render();
@@ -158,21 +165,10 @@ export function createInputBox(
       historyIndex = history.length;
     }
     draft = "";
-    input.clearValue();
+    lineEditor.clear();
     onSubmit(trimmed);
     input.focus();
     notify();
-  });
-
-  input.on("keypress", (_ch, key) => {
-    if (options.slashPopup?.isVisible() && isSlashNavigationKey(key)) {
-      return;
-    }
-    // Blessed updates textbox value after our listener; defer one tick.
-    setImmediate(() => {
-      refreshSlashSuggestions(input.getValue());
-      notify();
-    });
   });
 
   input.key(["C-c", "C-d"], () => {
@@ -180,7 +176,7 @@ export function createInputBox(
   });
 
   input.key(["C-u"], () => {
-    input.clearValue();
+    lineEditor.clear();
     hideSlashPopup();
     screen.render();
     notify();
@@ -218,11 +214,11 @@ export function createInputBox(
     }
     if (history.length === 0) return;
     if (historyIndex === history.length) {
-      draft = input.getValue();
+      draft = lineEditor.getText();
     }
     if (historyIndex > 0) {
       historyIndex--;
-      input.setValue(history[historyIndex] ?? "");
+      lineEditor.setText(history[historyIndex] ?? "");
       hideSlashPopup();
       screen.render();
       notify();
@@ -238,10 +234,10 @@ export function createInputBox(
     if (history.length === 0) return;
     if (historyIndex < history.length - 1) {
       historyIndex++;
-      input.setValue(history[historyIndex] ?? "");
+      lineEditor.setText(history[historyIndex] ?? "");
     } else {
       historyIndex = history.length;
-      input.setValue(draft);
+      lineEditor.setText(draft);
     }
     hideSlashPopup();
     screen.render();
@@ -249,7 +245,7 @@ export function createInputBox(
   });
 
   const getPlainText = (): string =>
-    frameTransmitInput(input.getValue(), (screen.width as number) || 80);
+    frameTransmitInput(lineEditor.getText(), (screen.width as number) || 80);
 
   return {
     element: input,
@@ -257,20 +253,20 @@ export function createInputBox(
       input.focus();
     },
     clear() {
-      input.clearValue();
+      lineEditor.clear();
       draft = "";
       historyIndex = history.length;
       hideSlashPopup();
       notify();
     },
     setValue(value: string) {
-      input.setValue(value);
+      lineEditor.setText(value);
       refreshSlashSuggestions(value);
       screen.render();
       notify();
     },
     getValue() {
-      return input.getValue();
+      return lineEditor.getText();
     },
     getHistory() {
       return [...history];
