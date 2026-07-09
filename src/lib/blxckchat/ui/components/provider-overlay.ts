@@ -221,7 +221,8 @@ export function createProviderOverlay(
       const defaultAnswer = await showPrompt({
         title: "░ set default? ░",
         label: "Default (y/n)",
-        defaultValue: "y",
+        hint: "y = always start TUI with this profile · n = remember for this session only",
+        defaultValue: "n",
       });
       if (defaultAnswer === null) {
         opts.onMessage("Provider setup cancelled");
@@ -232,7 +233,7 @@ export function createProviderOverlay(
         catalogId: entry.id,
         model,
         name: nameAnswer || entry.id,
-        isDefault: !defaultAnswer || defaultAnswer.toLowerCase().startsWith("y"),
+        isDefault: Boolean(defaultAnswer?.toLowerCase().startsWith("y")),
         ...(apiKey ? { apiKey } : {}),
         ...(baseUrl ? { baseUrl } : {}),
       });

@@ -4,7 +4,7 @@ import type { Provider } from "./providers/types.js";
 import type { BlxckchatTool } from "./tools/types.js";
 import { runAgent } from "./agent-loop.js";
 import { getDivinityPersonaById } from "./divinities/source.js";
-import type { StoredProviderConfig } from "./config.js";
+import { saveLastUsedProvider, type StoredProviderConfig } from "./config.js";
 import { dispatchSlashCommand, isSlashCommand } from "./ui/slash/handler.js";
 import { formatSlashHelp } from "./ui/slash/registry.js";
 import { createSession } from "./ui/session/session-store.js";
@@ -86,6 +86,7 @@ async function startReadlineFallback(
         setActiveConfig: (config, nextProvider) => {
           activeConfig = config;
           activeProvider = nextProvider;
+          saveLastUsedProvider(config);
           console.log(
             chalk.cyan(
               `\n[BLXCKCHAT] Now using ${config.provider}/${config.model}\n`,
@@ -138,6 +139,7 @@ async function startReadlineFallback(
   });
 
   rl.on("close", () => {
+    saveLastUsedProvider(activeConfig);
     console.log(chalk.dim("\nSession ended."));
     process.exit(0);
   });

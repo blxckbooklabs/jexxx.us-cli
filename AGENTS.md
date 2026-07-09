@@ -86,6 +86,10 @@ Owned by the JEXXXUS platform / tooling team.
   recent conversation history for short persona follow-ups (Proverbs 31, drafts, corruption beats).
   `empire-url-sanitize.ts` repairs model-hallucinated URLs on final replies. Regression tests:
   `src/__tests__/empire-routing.test.ts`, `src/__tests__/empire-url-sanitize.test.ts`.
+- BLXCKCHAT TUI **startup LLM resolution** (`resolveStartupProvider` in `config.ts`):
+  pinned default (`isDefault` from provider setup **y**) beats `lastUsed` profile;
+  without a pin, reopens with the last active provider/model from the previous session.
+  `saveLastUsedProvider` runs on model/provider change and TUI exit (Ctrl+C).
 - BLXCKCHAT TUI streams LLM **thinking in real time** (Pi/OpenCode parity): gray `[▼ think]`
   block via `stream-thinking.ts` (`StreamThinkingParser` for `<think>`/API reasoning deltas;
   `formatThinkingWaitState` between tool passes). Toggle collapsed blocks: `Space` / `Ctrl+T`.

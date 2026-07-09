@@ -6,7 +6,7 @@ import { AgentAbortedError, runAgent } from "../agent-loop.js";
 import type { Provider } from "../providers/types.js";
 import type { BlxckchatTool } from "../tools/types.js";
 import type { StoredProviderConfig } from "../config.js";
-import { upsertProvider } from "../config.js";
+import { saveLastUsedProvider, upsertProvider } from "../config.js";
 import { loadCredentials } from "../../auth.js";
 import {
   formatCredentialsDisplayName,
@@ -395,6 +395,7 @@ export async function startTerminalChat(
     activeConfig = config;
     activeProvider = nextProvider;
     topBar.setSubtitle(`${config.provider}/${config.model}`);
+    saveLastUsedProvider(config);
     void listModelOptions(activeConfig).then((opts) => {
       cachedModelOptions = opts;
     });
@@ -621,10 +622,15 @@ export async function startTerminalChat(
     await runTurn(trimmed);
   };
 
-  const requestExit = (): void => {
+  const persistSessionState = (): void => {
+    saveLastUsedProvider(activeConfig);
     if (session.messages.length > 0) {
       autosaveSession(session);
     }
+  };
+
+  const requestExit = (): void => {
+    persistSessionState();
     gracefulTuiExit(screen);
   };
 
@@ -833,6 +839,7 @@ export async function startTerminalChat(
     screen,
     [screen, inputBox.element, messageBox.element],
     handleEscapeLayer,
+    { onBeforeExit: persistSessionState },
   );
 
   inputBox.element.key(["C-i"], () => {

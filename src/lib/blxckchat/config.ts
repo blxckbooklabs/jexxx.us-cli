@@ -23,8 +23,17 @@ export interface StoredProviderConfig {
   isDefault?: boolean;
 }
 
+/** Last LLM profile active when the TUI closed or the user switched models. */
+export interface LastUsedProvider {
+  name: string;
+  provider: ProviderName;
+  model: string;
+  savedAt: string;
+}
+
 export interface BlxckchatCredentialsFile {
   providers: StoredProviderConfig[];
+  lastUsed?: LastUsedProvider;
 }
 
 type UnifiedCredentialsFile = BlxckchatCredentialsFile & {
@@ -79,6 +88,69 @@ export function getDefaultProvider(): StoredProviderConfig | null {
   return file.providers.find((p) => p.isDefault) ?? file.providers[0] ?? null;
 }
 
+function mergeLastUsedModel(
+  config: StoredProviderConfig | null,
+  lastUsed?: LastUsedProvider,
+): StoredProviderConfig | null {
+  if (!config) return null;
+  if (lastUsed && lastUsed.name === config.name) {
+    return {
+      ...config,
+      provider: lastUsed.provider,
+      model: lastUsed.model,
+    };
+  }
+  return config;
+}
+
+/**
+ * Resolve which provider profile BLXCKCHAT should start with.
+ *
+ * 1. `--provider <name>` when given (explicit override)
+ * 2. Pinned default (`isDefault` from "set as default? y") — always this profile;
+ *    model comes from `lastUsed` when it matches the same profile name
+ * 3. `lastUsed` from the previous TUI session (most recently active LLM)
+ * 4. First configured provider
+ */
+export function resolveStartupProvider(explicitName?: string): StoredProviderConfig | null {
+  const file = readUnifiedFile();
+  const lastUsed = file.lastUsed;
+
+  if (explicitName?.trim()) {
+    return mergeLastUsedModel(getProviderByName(explicitName.trim()), lastUsed);
+  }
+
+  const pinned = file.providers.find((p) => p.isDefault);
+  if (pinned) {
+    return mergeLastUsedModel(pinned, lastUsed);
+  }
+
+  if (lastUsed) {
+    const match = file.providers.find((p) => p.name === lastUsed.name);
+    if (match) {
+      return {
+        ...match,
+        provider: lastUsed.provider,
+        model: lastUsed.model,
+      };
+    }
+  }
+
+  return file.providers[0] ?? null;
+}
+
+/** Persist the active LLM for the next TUI launch (does not change pinned default). */
+export function saveLastUsedProvider(config: StoredProviderConfig): void {
+  writeUnifiedFile((file) => {
+    file.lastUsed = {
+      name: config.name,
+      provider: config.provider,
+      model: config.model,
+      savedAt: new Date().toISOString(),
+    };
+  });
+}
+
 export function getProviderByName(name: string): StoredProviderConfig | null {
   const file = loadCredentials();
   return file.providers.find((p) => p.name === name) ?? null;
@@ -100,7 +172,12 @@ export function upsertProvider(config: StoredProviderConfig): void {
       file.providers.push(config);
     }
 
-    if (!file.providers.some((p) => p.isDefault) && file.providers.length > 0) {
+    // Legacy: auto-pin first profile only when default was not explicitly declined (setup "n").
+    if (
+      config.isDefault !== false &&
+      !file.providers.some((p) => p.isDefault) &&
+      file.providers.length > 0
+    ) {
       const first = file.providers[0];
       if (first) first.isDefault = true;
     }

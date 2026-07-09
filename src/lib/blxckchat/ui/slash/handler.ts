@@ -2,6 +2,7 @@ import {
   getProviderByName,
   loadCredentials,
   listProvidersRedacted,
+  saveLastUsedProvider,
   upsertProvider,
   type StoredProviderConfig,
 } from "../../config.js";
@@ -143,6 +144,7 @@ async function handleModel(
     provider: match.provider,
   };
   upsertProvider(updated);
+  saveLastUsedProvider(updated);
   const provider = resolveProvider(updated);
   state.setActiveConfig(updated, provider);
   lines.push(`Model set to ${updated.provider}/${updated.model}`);

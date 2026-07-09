@@ -28,9 +28,8 @@ import {
 import { createOperatorClient } from "./lib/supabase.js";
 import type { DashboardTarget } from "./lib/supabase.js";
 import {
-  getDefaultProvider,
-  getProviderByName,
   listProvidersRedacted,
+  resolveStartupProvider,
   runConfigureFlow,
 } from "./lib/blxckchat/config.js";
 import { resolveProvider } from "./lib/blxckchat/providers/registry.js";
@@ -558,9 +557,7 @@ blxckchatCmd
   .option("--resume", "Resume the last autosaved BLXCKCHAT session")
   .option("--shell", "Opt in to shell access for this session (off by default; every call still requires confirmation and is checked against a hard blocklist)")
   .action(async (prompt: string | undefined, options: { provider?: string; shell?: boolean; resume?: boolean }) => {
-    const storedConfig = options.provider
-      ? getProviderByName(options.provider)
-      : getDefaultProvider();
+    const storedConfig = resolveStartupProvider(options.provider);
 
     if (!storedConfig) {
       console.error(

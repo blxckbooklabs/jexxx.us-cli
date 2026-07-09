@@ -10,6 +10,8 @@ import {
   listProvidersRedacted,
   upsertProvider,
   getDefaultProvider,
+  resolveStartupProvider,
+  saveLastUsedProvider,
 } from "../lib/blxckchat/config.js";
 
 const CREDENTIALS_PATH = path.join(os.homedir(), ".jexxxus", "credentials.json");
@@ -78,5 +80,76 @@ test("getDefaultProvider falls back to first provider if none marked default", (
     });
     const result = getDefaultProvider();
     assert.equal(result?.name, "only");
+  });
+});
+
+test("resolveStartupProvider prefers pinned default over lastUsed", () => {
+  withBackup(() => {
+    saveCredentials({
+      providers: [
+        { name: "pinned", provider: "anthropic", model: "claude-sonnet-4-5", isDefault: true },
+        { name: "other", provider: "openai", model: "gpt-4o" },
+      ],
+    });
+    saveLastUsedProvider({
+      name: "other",
+      provider: "openai",
+      model: "gpt-4o-mini",
+    });
+    const result = resolveStartupProvider();
+    assert.equal(result?.name, "pinned");
+    assert.equal(result?.model, "claude-sonnet-4-5");
+  });
+});
+
+test("resolveStartupProvider applies lastUsed model to pinned profile when names match", () => {
+  withBackup(() => {
+    saveCredentials({
+      providers: [
+        { name: "main", provider: "openrouter", model: "gpt-4o", isDefault: true },
+      ],
+    });
+    saveLastUsedProvider({
+      name: "main",
+      provider: "openrouter",
+      model: "claude-3.5-sonnet",
+    });
+    const result = resolveStartupProvider();
+    assert.equal(result?.name, "main");
+    assert.equal(result?.model, "claude-3.5-sonnet");
+  });
+});
+
+test("upsertProvider does not auto-pin when user declines default", () => {
+  withBackup(() => {
+    saveCredentials({ providers: [] });
+    upsertProvider({
+      name: "first",
+      provider: "anthropic",
+      model: "claude-sonnet-4-5",
+      isDefault: false,
+    });
+    const file = loadCredentials();
+    assert.equal(file.providers[0]?.isDefault, false);
+    assert.equal(file.providers.filter((p) => p.isDefault).length, 0);
+  });
+});
+
+test("resolveStartupProvider uses lastUsed when no pinned default", () => {
+  withBackup(() => {
+    saveCredentials({
+      providers: [
+        { name: "a", provider: "anthropic", model: "claude-sonnet-4-5" },
+        { name: "b", provider: "openai", model: "gpt-4o" },
+      ],
+    });
+    saveLastUsedProvider({
+      name: "b",
+      provider: "openai",
+      model: "gpt-4o-mini",
+    });
+    const result = resolveStartupProvider();
+    assert.equal(result?.name, "b");
+    assert.equal(result?.model, "gpt-4o-mini");
   });
 });

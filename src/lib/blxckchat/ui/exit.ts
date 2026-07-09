@@ -20,6 +20,8 @@ type KeyableElement = {
 export interface BindExitKeysOptions {
   /** Delay SIGINT/SIGTERM exit until the TUI has finished its first render. */
   deferSignalMs?: number;
+  /** Called before the terminal tears down (e.g. persist last-used LLM). */
+  onBeforeExit?: () => void;
 }
 
 /** Bind Ctrl+C / Ctrl+D / Esc exit to every focusable widget. */
@@ -32,7 +34,10 @@ export function bindExitKeys(
   const deferMs = options.deferSignalMs ?? 400;
   let signalsArmed = false;
 
-  const exit = (): void => gracefulTuiExit(screen, 0);
+  const exit = (): void => {
+    options.onBeforeExit?.();
+    gracefulTuiExit(screen, 0);
+  };
 
   const handleEscape = (): void => {
     if (onEscape?.()) return;
