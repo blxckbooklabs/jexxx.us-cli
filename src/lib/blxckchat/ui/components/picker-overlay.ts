@@ -1,6 +1,10 @@
 import blessed from "blessed";
 
-import { bindFocusedKey } from "../editor/focused-key.js";
+import {
+  createModalKeypress,
+  isPrintableKey,
+  type BlessedKey,
+} from "../editor/modal-keypress.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
@@ -10,6 +14,18 @@ export interface PickerItem {
   id: string;
   label: string;
   description?: string;
+}
+
+/** Filter picker rows by label, id, or description (case-insensitive). */
+export function filterPickerItems(items: readonly PickerItem[], query: string): PickerItem[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...items];
+  return items.filter(
+    (item) =>
+      item.label.toLowerCase().includes(q) ||
+      item.id.toLowerCase().includes(q) ||
+      (item.description?.toLowerCase().includes(q) ?? false),
+  );
 }
 
 export interface PickerOverlayHandle {
@@ -32,9 +48,12 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
   let selectedIndex = 0;
   let allItems: PickerItem[] = [];
   let filteredItems: PickerItem[] = [];
+  let filterBuffer = "";
+  let filterFocused = false;
   let onPickHandler: ((item: PickerItem) => void) | undefined;
   let onCancelHandler: (() => void) | undefined;
   const mouseEnabled = isSlashPopupMouseEnabled();
+  const modalKeys = createModalKeypress(screen);
 
   const container = blessed.box({
     parent: screen,
@@ -53,7 +72,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     },
   });
 
-  const filterBox = blessed.textbox({
+  const filterBox = blessed.box({
     parent: container,
     top: 0,
     left: 0,
@@ -62,7 +81,8 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     border: { type: "line" },
     label: " filter ",
     tags: true,
-    inputOnFocus: true,
+    keys: true,
+    mouse: mouseEnabled,
     style: {
       fg: THEME.text,
       bg: THEME.bgInset,
@@ -78,9 +98,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     width: "100%-2",
     height: 1,
     tags: true,
-    content: mouseEnabled
-      ? "{gray-fg}↑↓ navigate · Enter or click select · Tab filter · Esc cancel{/gray-fg}"
-      : "{gray-fg}↑↓ navigate · Enter select · Tab filter · Esc cancel{/gray-fg}",
+    content: "",
     style: { fg: THEME.textDim, bg: THEME.bgElevated },
   });
 
@@ -120,21 +138,56 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       : `{bold}${item.label}{/bold}`;
   };
 
+  const renderFilter = (): void => {
+    const borderFg = filterFocused ? THEME.pinkGlow : THEME.cyan;
+    filterBox.style.border = { fg: borderFg };
+    if (filterBuffer) {
+      const cursor = filterFocused ? "▌" : "";
+      filterBox.setContent(` ${filterBuffer}${cursor}`);
+    } else if (filterFocused) {
+      filterBox.setContent(" ▌");
+    } else {
+      filterBox.setContent(
+        "{gray-fg} Tab or click here · type to filter · any letter starts filter{/gray-fg}",
+      );
+    }
+  };
+
+  const renderFooter = (): void => {
+    const mouseHint = mouseEnabled ? " · click select" : "";
+    const filterHint = filterFocused
+      ? "Type to filter · Tab → list"
+      : "Tab/click filter · type to filter";
+    footer.setContent(
+      `{gray-fg}↑↓ navigate · Enter select${mouseHint} · ${filterHint} · Esc cancel{/gray-fg}`,
+    );
+  };
+
   const applyFilter = (query: string): void => {
-    const q = query.trim().toLowerCase();
-    filteredItems = q
-      ? allItems.filter(
-          (item) =>
-            item.label.toLowerCase().includes(q) ||
-            item.id.toLowerCase().includes(q) ||
-            (item.description?.toLowerCase().includes(q) ?? false),
-        )
-      : [...allItems];
+    filteredItems = filterPickerItems(allItems, query);
     selectedIndex = Math.min(selectedIndex, Math.max(0, filteredItems.length - 1));
     list.setItems(filteredItems.map(formatItem));
     if (filteredItems.length > 0) {
       list.select(selectedIndex);
     }
+    renderFilter();
+    renderFooter();
+    screen.render();
+  };
+
+  const focusFilter = (): void => {
+    filterFocused = true;
+    filterBox.focus();
+    renderFilter();
+    renderFooter();
+    screen.render();
+  };
+
+  const focusList = (): void => {
+    filterFocused = false;
+    list.focus();
+    renderFilter();
+    renderFooter();
     screen.render();
   };
 
@@ -187,48 +240,88 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     highlightIndex(stepListIndex(selectedIndex, delta, filteredItems.length));
   };
 
-  const whenVisible = (handler: () => void): (() => void) => () => {
-    if (!visible) return;
-    handler();
+  const appendFilterChar = (ch: string): void => {
+    if (!filterFocused) {
+      filterFocused = true;
+      filterBox.focus();
+    }
+    filterBuffer += ch;
+    applyFilter(filterBuffer);
   };
 
-  // Blessed element.key() is program-global — gate focus and visibility.
-  bindFocusedKey(screen, list, ["up", "k"], whenVisible(() => navigateList(-1)));
-  bindFocusedKey(screen, list, ["down", "j"], whenVisible(() => navigateList(1)));
-  bindFocusedKey(screen, list, ["enter", "C-m"], whenVisible(() => pickIndex(selectedIndex)));
-  bindFocusedKey(screen, list, ["escape", "C-c", "q"], whenVisible(cancel));
-  bindFocusedKey(screen, list, ["tab"], whenVisible(() => filterBox.focus()));
+  const handleKeypress = (ch: string, key: BlessedKey): void => {
+    if (!visible) return;
 
-  bindFocusedKey(screen, filterBox, ["up", "k"], whenVisible(() => navigateList(-1)));
-  bindFocusedKey(screen, filterBox, ["down", "j"], whenVisible(() => navigateList(1)));
-  bindFocusedKey(screen, filterBox, ["enter", "C-m"], whenVisible(() => pickIndex(selectedIndex)));
-  bindFocusedKey(screen, filterBox, ["escape", "C-c"], whenVisible(cancel));
-
-  filterBox.on("keypress", (_ch, key) => {
-    if (key.name === "tab") {
-      list.focus();
+    if (key.name === "escape" || key.name === "C-c" || key.name === "q") {
+      cancel();
       return;
     }
-    setTimeout(() => applyFilter(filterBox.getValue()), 0);
-  });
+
+    if (key.name === "tab") {
+      if (filterFocused) focusList();
+      else focusFilter();
+      return;
+    }
+
+    if (key.name === "up" || key.name === "k") {
+      navigateList(-1);
+      return;
+    }
+
+    if (key.name === "down" || key.name === "j") {
+      navigateList(1);
+      return;
+    }
+
+    if (key.name === "enter" || key.name === "return") {
+      pickIndex(selectedIndex);
+      return;
+    }
+
+    if (key.name === "backspace") {
+      if (!filterBuffer) return;
+      filterBuffer = filterBuffer.slice(0, -1);
+      applyFilter(filterBuffer);
+      return;
+    }
+
+    if (isPrintableKey(ch, key)) {
+      appendFilterChar(ch);
+    }
+  };
 
   const close = (): void => {
     container.hide();
     visible = false;
-    filterBox.setValue("");
+    filterBuffer = "";
+    filterFocused = false;
+    modalKeys.stop();
     releaseOverlayFocus(screen);
     screen.render();
   };
+
+  if (mouseEnabled) {
+    filterBox.on("click", () => {
+      if (!visible) return;
+      focusFilter();
+    });
+    list.on("click", () => {
+      if (!visible) return;
+      focusList();
+    });
+    screen.enableMouse(filterBox);
+  }
 
   return {
     open(items, options) {
       allItems = items;
       filteredItems = [...items];
       selectedIndex = options?.selectedIndex ?? 0;
+      filterBuffer = "";
+      filterFocused = false;
       if (options?.title) {
         container.setLabel(` ${options.title} `);
       }
-      filterBox.setValue("");
       list.setItems(filteredItems.map(formatItem));
       wireAllItems();
       if (filteredItems.length > 0) {
@@ -241,7 +334,10 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
         screen.enableMouse(list);
       }
       takeOverlayFocus(screen, list);
+      modalKeys.start(handleKeypress);
       visible = true;
+      renderFilter();
+      renderFooter();
       screen.render();
     },
     close,
