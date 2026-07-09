@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import { fuzzyFilter, fuzzyScore } from "../lib/blxckchat/ui/slash/fuzzy.js";
 import {
-  getArgumentSuggestions,
   getCommandSuggestions,
   detectSlashInputMode,
 } from "../lib/blxckchat/ui/slash/autocomplete.js";
@@ -69,7 +68,8 @@ test("detectSlashInputMode treats /auth as auth arguments", () => {
   });
 });
 
-test("getArgumentSuggestions lists auth subcommands for bare /auth", async () => {
+test("dispatchSlashCommand bare /auth opens auth picker when wired", async () => {
+  let opened = false;
   const config: StoredProviderConfig = {
     name: "test",
     provider: "openai",
@@ -77,10 +77,50 @@ test("getArgumentSuggestions lists auth subcommands for bare /auth", async () =>
     apiKey: "sk-test",
     isDefault: true,
   };
-  const subs = await getArgumentSuggestions("auth", "", { activeConfig: config });
-  assert.ok(subs.some((s) => s.value === "login"));
-  assert.ok(subs.some((s) => s.value === "logout"));
-  assert.ok(subs.some((s) => s.value === "refresh"));
+  const result = await dispatchSlashCommand("/auth", {
+    session: createSession(),
+    activeConfig: config,
+    toolCount: 1,
+    setActiveConfig: () => {},
+    copySnapshot: async () => ({ path: "", copied: false }),
+    openAuthPicker: () => {
+      opened = true;
+    },
+  });
+  assert.equal(opened, true);
+  assert.equal(result.handled, true);
+  assert.equal(result.messages.length, 0);
+  assert.equal(result.deferInputFocus, true);
+});
+
+test("dispatchSlashCommand /auth login still bypasses picker", async () => {
+  let opened = false;
+  const config: StoredProviderConfig = {
+    name: "test",
+    provider: "openai",
+    model: "gpt-4o",
+    apiKey: "sk-test",
+    isDefault: true,
+  };
+  const result = await dispatchSlashCommand("/auth login", {
+    session: createSession(),
+    activeConfig: config,
+    toolCount: 1,
+    setActiveConfig: () => {},
+    copySnapshot: async () => ({ path: "", copied: false }),
+    openAuthPicker: () => {
+      opened = true;
+    },
+    authActions: {
+      status: async () => ["status"],
+      login: async () => ["login flow started"],
+      logout: async () => ["logout"],
+      refresh: async () => ["refresh"],
+    },
+  });
+  assert.equal(opened, false);
+  assert.equal(result.handled, true);
+  assert.deepEqual(result.messages, ["login flow started"]);
 });
 
 test("detectSlashInputMode distinguishes command vs argument", () => {

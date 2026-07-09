@@ -23,7 +23,7 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
   { name: "session", aliases: ["status"], description: "Show session stats and active provider" },
   {
     name: "auth",
-    description: "JEXXXUS account via secure.jexxx.us (same as jexxxus auth)",
+    description: "JEXXXUS account picker — sign-in status, login, logout, refresh",
     argumentHint: "login | logout | refresh",
   },
   {

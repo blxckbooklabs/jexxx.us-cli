@@ -177,13 +177,7 @@ export function createInputBox(
     }
 
     const next = applySuggestion(value, suggestion, mode);
-    const shouldSubmit =
-      mode === "command" ||
-      (mode === "argument" &&
-        detectSlashInputMode(next).commandName === "auth" &&
-        /^(login|logout|refresh)$/.test(suggestion.value));
-
-    if (shouldSubmit) {
+    if (mode === "command") {
       hideSlashPopup();
       lineEditor.clear();
       lastSlashValue = "";

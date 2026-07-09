@@ -5,6 +5,7 @@ const PICKER_SLASH_COMMANDS = new Set([
   "model",
   "provider",
   "divinities",
+  "auth",
 ]);
 
 export function isPickerSlashCommand(commandName: string): boolean {

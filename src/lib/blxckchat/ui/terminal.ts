@@ -68,6 +68,7 @@ import {
   registerSlashMenuDismiss,
 } from "./menu-mutex.js";
 import { openExternalEditor } from "./external-editor.js";
+import { createAuthPickerOverlay } from "./components/auth-picker-overlay.js";
 import { createAuthTuiActions } from "./auth-tui.js";
 import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
 
@@ -183,6 +184,7 @@ export async function startTerminalChat(
   let modelPickerOverlay!: ReturnType<typeof createModelPickerOverlay>;
   let providerOverlay!: ReturnType<typeof createProviderOverlay>;
   let divinityPickerOverlay!: ReturnType<typeof createDivinityPickerOverlay>;
+  let authPickerOverlay!: ReturnType<typeof createAuthPickerOverlay>;
 
   let isProcessing = false;
   let abortController: AbortController | null = null;
@@ -218,6 +220,15 @@ export async function startTerminalChat(
     onAuthChanged: refreshAuthChrome,
   });
 
+  authPickerOverlay = createAuthPickerOverlay(screen, {
+    authActions,
+    onMessage: (message) => {
+      messageBox.appendSystem(message);
+      statusBar.setMessage(message.split("\n")[0] ?? message);
+    },
+    onFocusInput: () => inputBox.focus(),
+  });
+
   const onDivinityChatCleared = (): void => {
     messageBox.clearChat();
     showIdleHero();
@@ -236,6 +247,7 @@ export async function startTerminalChat(
       openModelPicker: () => modelPickerOverlay.open(),
       openProviderPicker: () => providerOverlay.open(),
       openDivinityPicker: () => divinityPickerOverlay.open(),
+      openAuthPicker: () => authPickerOverlay.open(),
       setupProvider: (catalogId) => providerOverlay.setup(catalogId),
       onDivinityActivated: onDivinityChatCleared,
     });
@@ -687,6 +699,7 @@ export async function startTerminalChat(
       modelPickerOverlay.isVisible() ||
       providerOverlay.isVisible() ||
       divinityPickerOverlay.isVisible() ||
+      authPickerOverlay.isVisible() ||
       searchOverlay.isVisible() ||
       hotkeysOverlay.isVisible(),
   );
@@ -694,6 +707,11 @@ export async function startTerminalChat(
   const handleEscapeLayer = (): boolean => {
     if (isProcessing) {
       abortInFlight();
+      return true;
+    }
+    if (authPickerOverlay.isVisible()) {
+      authPickerOverlay.close();
+      inputBox.focus();
       return true;
     }
     if (providerOverlay.isVisible()) {

@@ -31,8 +31,17 @@ export function filterPickerItems(items: readonly PickerItem[], query: string): 
   );
 }
 
+export interface PickerOpenOptions {
+  title?: string;
+  selectedIndex?: number;
+  /** Hide the filter row (compact menus such as /auth). */
+  hideFilter?: boolean;
+  /** Status lines shown above the list when hideFilter is true. */
+  statusHeader?: string;
+}
+
 export interface PickerOverlayHandle {
-  open: (items: PickerItem[], options?: { title?: string; selectedIndex?: number }) => void;
+  open: (items: PickerItem[], options?: PickerOpenOptions) => void;
   close: () => void;
   isVisible: () => boolean;
   setOnPick: (handler: ((item: PickerItem) => void) | undefined) => void;
@@ -92,6 +101,18 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       border: { fg: THEME.cyan },
       focus: { border: { fg: THEME.pinkGlow } },
     },
+  });
+
+  const statusBox = blessed.box({
+    parent: container,
+    top: 0,
+    left: 0,
+    width: "100%-2",
+    height: 5,
+    tags: true,
+    hidden: true,
+    padding: { left: 1, right: 1, top: 0, bottom: 0 },
+    style: { fg: THEME.text, bg: THEME.bgInset },
   });
 
   const footer = blessed.box({
@@ -157,8 +178,35 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     }
   };
 
+  let filterHidden = false;
+
+  const layoutList = (): void => {
+    if (filterHidden) {
+      const statusVisible = !statusBox.hidden;
+      if (statusVisible) {
+        statusBox.top = 0;
+        list.top = 5;
+        list.height = "100%-6";
+      } else {
+        list.top = 0;
+        list.height = "100%-3";
+      }
+      return;
+    }
+    statusBox.hide();
+    filterBox.show();
+    list.top = 3;
+    list.height = "100%-5";
+  };
+
   const renderFooter = (): void => {
     const mouseHint = mouseEnabled ? " · click select" : "";
+    if (filterHidden) {
+      footer.setContent(
+        `{gray-fg}↑↓ navigate · Enter select${mouseHint} · Esc cancel{/gray-fg}`,
+      );
+      return;
+    }
     const filterHint = filterFocused
       ? "Type to filter · Tab → list"
       : "Tab/click filter · type to filter";
@@ -268,6 +316,10 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     }
 
     if (key.name === "tab") {
+      if (filterHidden) {
+        focusList();
+        return;
+      }
       if (filterFocused) focusList();
       else focusFilter();
       return;
@@ -298,6 +350,10 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     visible = false;
     filterInput.setText("");
     filterFocused = false;
+    filterHidden = false;
+    filterBox.show();
+    statusBox.hide();
+    layoutList();
     modalKeys.stop();
     releaseOverlayFocus(screen);
     screen.render();
@@ -323,6 +379,20 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       selectedIndex = options?.selectedIndex ?? 0;
       filterInput.setText("");
       filterFocused = false;
+      filterHidden = options?.hideFilter === true;
+      if (filterHidden) {
+        filterBox.hide();
+        if (options?.statusHeader?.trim()) {
+          statusBox.setContent(options.statusHeader);
+          statusBox.show();
+        } else {
+          statusBox.hide();
+        }
+      } else {
+        filterBox.show();
+        statusBox.hide();
+      }
+      layoutList();
       if (options?.title) {
         container.setLabel(` ${options.title} `);
       }

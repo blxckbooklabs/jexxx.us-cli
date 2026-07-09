@@ -50,6 +50,7 @@ export interface SlashHandlerState {
   openModelPicker?: () => void | Promise<void>;
   openProviderPicker?: () => void | Promise<void>;
   openDivinityPicker?: () => void | Promise<void>;
+  openAuthPicker?: () => void | Promise<void>;
   setupProvider?: (catalogId: string) => Promise<void>;
   onDivinityActivated?: () => void;
 }
@@ -215,10 +216,19 @@ function handleSession(state: SlashHandlerState): SlashResult {
 }
 
 async function handleAuth(args: string, state: SlashHandlerState): Promise<SlashResult> {
-  const sub = args.trim().toLowerCase() || "status";
+  const sub = args.trim().toLowerCase();
+
+  if (!sub) {
+    if (state.openAuthPicker) {
+      state.openAuthPicker();
+      return { handled: true, messages: [], deferInputFocus: true };
+    }
+  }
+
+  const resolvedSub = sub || "status";
 
   if (state.authActions) {
-    switch (sub) {
+    switch (resolvedSub) {
       case "status":
         return { handled: true, messages: await state.authActions.status() };
       case "login":
@@ -242,7 +252,7 @@ async function handleAuth(args: string, state: SlashHandlerState): Promise<Slash
     }
   }
 
-  switch (sub) {
+  switch (resolvedSub) {
     case "status":
       return {
         handled: true,

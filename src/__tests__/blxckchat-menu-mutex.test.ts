@@ -29,13 +29,20 @@ afterEach(() => {
 test("isPickerSlashCommand resolves aliases", () => {
   assert.equal(isPickerSlashCommand("divinity"), true);
   assert.equal(isPickerSlashCommand("providers"), true);
+  assert.equal(isPickerSlashCommand("auth"), true);
   assert.equal(isPickerSlashCommand("help"), false);
 });
 
 test("shouldSuppressSlashArgumentSuggestions for bare picker commands", () => {
   assert.equal(shouldSuppressSlashArgumentSuggestions("divinities", ""), true);
   assert.equal(shouldSuppressSlashArgumentSuggestions("model", ""), true);
+  assert.equal(shouldSuppressSlashArgumentSuggestions("auth", ""), true);
   assert.equal(shouldSuppressSlashArgumentSuggestions("divinities", "luna"), false);
+});
+
+test("getArgumentSuggestions empty for bare /auth", async () => {
+  const suggestions = await getArgumentSuggestions("auth", "", { activeConfig: config });
+  assert.equal(suggestions.length, 0);
 });
 
 test("getArgumentSuggestions empty for bare /divinities", async () => {
