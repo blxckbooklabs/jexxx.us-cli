@@ -1,6 +1,6 @@
 import { fetchAccountSummary } from "../../../account-data/account-query.js";
 import { exportVaultToDisk } from "../../../account-data/export-to-disk.js";
-import { createAuthenticatedAccountSession } from "../../../account-data/session.js";
+import { resolveAuthenticatedAccountSession } from "../../../account-data/session.js";
 import { formatAuthStatusLines, loadCredentials } from "../../../auth.js";
 import type { SlashResult } from "./handler.js";
 
@@ -19,16 +19,19 @@ export async function handleAccount(args: string): Promise<SlashResult> {
       };
     }
 
-    const session = await createAuthenticatedAccountSession();
-    if (!session) {
+    const resolved = await resolveAuthenticatedAccountSession();
+    if (!resolved.ok) {
       return {
         handled: true,
         messages: [
-          "Signed in but vault client unavailable.",
-          "Check SUPABASE_URL and SUPABASE_ANON_KEY in operator .env.",
+          resolved.reason === "not_signed_in"
+            ? "Vault: not available (not signed in)"
+            : "Signed in but vault client unavailable:",
+          resolved.message,
         ],
       };
     }
+    const session = resolved.session;
 
     try {
       const summary = await fetchAccountSummary(session);

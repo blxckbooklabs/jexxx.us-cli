@@ -4,7 +4,7 @@ import * as path from "path";
 
 import { fetchBlxckbookExport } from "./blxckbook-export.js";
 import { fetchNxtExport } from "./nxt-export.js";
-import { createAuthenticatedAccountSession } from "./session.js";
+import { resolveAuthenticatedAccountSession } from "./session.js";
 
 const EXPORTS_DIR = path.join(os.homedir(), ".jexxxus", "exports");
 
@@ -27,13 +27,11 @@ export type VaultExportTarget = "blxckbook" | "nxt" | "all";
 export async function exportVaultToDisk(
   target: VaultExportTarget,
 ): Promise<{ paths: string[]; error?: string }> {
-  const session = await createAuthenticatedAccountSession();
-  if (!session) {
-    return {
-      paths: [],
-      error: "Not signed in. Run /auth login or jexxxus auth login first.",
-    };
+  const resolved = await resolveAuthenticatedAccountSession();
+  if (!resolved.ok) {
+    return { paths: [], error: resolved.message };
   }
+  const session = resolved.session;
 
   const date = new Date().toISOString().slice(0, 10);
   const paths: string[] = [];

@@ -1,5 +1,5 @@
 import { fetchAccountSummary } from "../account-data/account-query.js";
-import { createAuthenticatedAccountSession } from "../account-data/session.js";
+import { resolveAuthenticatedAccountSession } from "../account-data/session.js";
 import { planAccountTools } from "./account-routing.js";
 
 /**
@@ -12,10 +12,11 @@ export async function prefetchAccountContext(userPrompt: string): Promise<string
     return null;
   }
 
-  const session = await createAuthenticatedAccountSession();
-  if (!session) {
+  const resolved = await resolveAuthenticatedAccountSession();
+  if (!resolved.ok) {
     return null;
   }
+  const session = resolved.session;
 
   try {
     const summary = await fetchAccountSummary(session);

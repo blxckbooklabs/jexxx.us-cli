@@ -4,7 +4,7 @@ import {
   type AccountQueryAction,
   type AccountQueryArgs,
 } from "../../account-data/account-query.js";
-import { createAuthenticatedAccountSession } from "../../account-data/session.js";
+import { resolveAuthenticatedAccountSession } from "../../account-data/session.js";
 
 const ACTIONS: AccountQueryAction[] = [
   "summary",
@@ -75,13 +75,11 @@ export const accountQueryTool: BlxckchatTool = {
       return `Error: unknown action "${String(args.action)}". Use: ${ACTIONS.join(", ")}.`;
     }
 
-    const session = await createAuthenticatedAccountSession();
-    if (!session) {
-      return (
-        "Error: not signed in to JEXXXUS. Run /auth login or `jexxxus auth login` " +
-        "(secure.jexxx.us device flow), then retry. Vault data requires your Clerk session."
-      );
+    const resolved = await resolveAuthenticatedAccountSession();
+    if (!resolved.ok) {
+      return `Error: ${resolved.message}`;
     }
+    const session = resolved.session;
 
     const targetRaw = typeof args.target === "string" ? args.target.trim() : "auto";
     const target =
