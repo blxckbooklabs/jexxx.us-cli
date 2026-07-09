@@ -368,11 +368,16 @@ export async function runAgent(
       }
 
       if (!confirmed) {
+        const isElevated =
+          tool.name === "account_query" &&
+          typeof toolCall.arguments.asUserId === "string" &&
+          toolCall.arguments.asUserId.trim() !== "";
         recordAudit({
           toolName: tool.name,
           arguments: toolCall.arguments,
           confirmed: false,
           outcome: "declined",
+          ...(isElevated ? { elevated: true } : {}),
         });
         options.onToolComplete?.(tool.name, "User declined", "declined");
         messages.push({
@@ -402,12 +407,17 @@ export async function runAgent(
               "scripture in your final answer.)";
           }
         }
+        const isElevated =
+          tool.name === "account_query" &&
+          typeof toolCall.arguments.asUserId === "string" &&
+          toolCall.arguments.asUserId.trim() !== "";
         recordAudit({
           toolName: tool.name,
           arguments: toolCall.arguments,
           confirmed: true,
           outcome: isBlocked ? "blocked" : "executed",
           resultPreview: toolResult.slice(0, 200),
+          ...(isElevated ? { elevated: true } : {}),
         });
         if (isBlocked) {
           if (!useCustomStream) {
@@ -439,12 +449,17 @@ export async function runAgent(
         });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : String(err);
+        const isElevated =
+          tool.name === "account_query" &&
+          typeof toolCall.arguments.asUserId === "string" &&
+          toolCall.arguments.asUserId.trim() !== "";
         recordAudit({
           toolName: tool.name,
           arguments: toolCall.arguments,
           confirmed: true,
           outcome: "error",
           resultPreview: errorMessage.slice(0, 200),
+          ...(isElevated ? { elevated: true } : {}),
         });
         options.onToolComplete?.(tool.name, `Error: ${errorMessage}`, "error");
         messages.push({
