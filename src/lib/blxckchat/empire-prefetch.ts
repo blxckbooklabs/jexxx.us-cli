@@ -2,6 +2,7 @@ import { findVerse } from "../bible.js";
 import { getTvContentSourceInfo, listTvVideos, searchTvVideos } from "../tv.js";
 import { getVeilContentSourceInfo, listVeilArticles, searchVeilArticles } from "../veil.js";
 import { formatBibleVerseForChat } from "./bible-format.js";
+import { isVaultPrimaryPrompt } from "./account-routing.js";
 import {
   inferTvSearchQuery,
   inferVeilSearchQuery,
@@ -24,6 +25,10 @@ export async function prefetchEmpireContext(
   userPrompt: string,
   options?: EmpireRoutingOptions,
 ): Promise<string | null> {
+  if (isVaultPrimaryPrompt(userPrompt)) {
+    return null;
+  }
+
   const plan = planEmpireTools(userPrompt, options);
   const routingText = options?.conversationContext
     ? `${userPrompt}\n\n${options.conversationContext}`
