@@ -55,6 +55,10 @@ Owned by the JEXXXUS platform / tooling team.
 - BLXCKCHAT `/divinities` loads personas from `jexxx.us-obsidian/Divinities`
   (`DIVINITIES_VAULT_PATH` override). Persona extracts inject the system prompt;
   RAG docs index remains `docs.jexxx.us` only.
+- BLXCKCHAT `veil_query` reads **public** VEIL articles only (`veil.jexxx.us/content/posts`
+  or Obsidian `VEIL/articles` mirror). Remote fallback uses `https://veil.jexxx.us/feed.xml`.
+  Internal Obsidian VEIL docs (architecture, deployment, AEO playbooks) are never exposed.
+  Env: `VEIL_CONTENT_PATH`, `VEIL_ARTICLES_PATH`, `VEIL_PUBLIC_BASE_URL`.
 
 ## 6. Child DOX Index
 
