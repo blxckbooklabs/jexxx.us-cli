@@ -1,6 +1,7 @@
 import blessed from "blessed";
 
 import type { SlashSuggestion } from "../slash/autocomplete.js";
+import { bindFocusedKey } from "../editor/focused-key.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 
@@ -118,6 +119,23 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     wireAllItems();
   });
 
+  const moveSelection = (delta: number, total: number): number => {
+    selectedIndex = stepListIndex(selectedIndex, delta, total);
+    list.select(selectedIndex);
+    screen.render();
+    return selectedIndex;
+  };
+
+  const whenVisible = (handler: () => void): (() => void) => () => {
+    if (!visible) return;
+    handler();
+  };
+
+  // Mouse click can move focus onto the list; handle arrows/enter here too.
+  bindFocusedKey(screen, list, ["up", "k"], whenVisible(() => moveSelection(-1, list.items.length)));
+  bindFocusedKey(screen, list, ["down", "j"], whenVisible(() => moveSelection(1, list.items.length)));
+  bindFocusedKey(screen, list, ["enter", "C-m"], whenVisible(() => pickIndex(selectedIndex)));
+
   return {
     show(suggestions: SlashSuggestion[], index: number) {
       selectedIndex = Math.min(index, Math.max(0, suggestions.length - 1));
@@ -145,12 +163,7 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     isVisible() {
       return visible;
     },
-    moveSelection(delta: number, total: number) {
-      selectedIndex = stepListIndex(selectedIndex, delta, total);
-      list.select(selectedIndex);
-      screen.render();
-      return selectedIndex;
-    },
+    moveSelection,
     getSelectedIndex() {
       return selectedIndex;
     },

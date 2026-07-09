@@ -1,6 +1,7 @@
 import blessed from "blessed";
 
 import { bindFocusedKey } from "../editor/focused-key.js";
+import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 import { stepListIndex } from "./slash-popup.js";
@@ -215,6 +216,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     container.hide();
     visible = false;
     filterBox.setValue("");
+    releaseOverlayFocus(screen);
     screen.render();
   };
 
@@ -238,7 +240,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
         list.mouse = true;
         screen.enableMouse(list);
       }
-      list.focus();
+      takeOverlayFocus(screen, list);
       visible = true;
       screen.render();
     },

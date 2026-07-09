@@ -5,6 +5,7 @@ import { listModelOptions, type ModelOption } from "../../providers/models.js";
 import {
   BUILTIN_SLASH_COMMANDS,
   resolveExactCommandToken,
+  resolveSlashCommandName,
   type SlashCommandDef,
 } from "./registry.js";
 import { fuzzyFilter } from "./fuzzy.js";
@@ -150,9 +151,10 @@ export function detectSlashInputMode(value: string): {
 
   const cmdToken = rest.slice(0, spaceIdx);
   const argPart = rest.slice(spaceIdx + 1);
+  const resolved = resolveSlashCommandName(cmdToken);
   return {
     mode: "argument",
-    commandName: cmdToken,
+    commandName: resolved ?? cmdToken,
     commandFilter: "",
     argFilter: argPart,
   };

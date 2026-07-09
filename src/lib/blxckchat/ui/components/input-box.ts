@@ -158,6 +158,7 @@ export function createInputBox(
     lineEditor.setText(next);
     lastSlashValue = next;
     hideSlashPopup();
+    input.focus();
     screen.render();
     notify();
     return true;

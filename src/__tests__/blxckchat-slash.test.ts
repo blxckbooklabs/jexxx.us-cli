@@ -49,6 +49,15 @@ test("detectSlashInputMode treats /providers as provider arguments", () => {
   });
 });
 
+test("detectSlashInputMode normalizes spaced provider aliases", () => {
+  assert.deepEqual(detectSlashInputMode("/connect "), {
+    mode: "argument",
+    commandName: "provider",
+    commandFilter: "",
+    argFilter: "",
+  });
+});
+
 test("detectSlashInputMode distinguishes command vs argument", () => {
   assert.deepEqual(detectSlashInputMode("/"), {
     mode: "command",
