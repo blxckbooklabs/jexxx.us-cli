@@ -27,11 +27,12 @@ test("formatStreamingChunk appends cursor to partial text", () => {
   assert.match(out, /▌/);
 });
 
-test("formatStreamingChunk renders incremental markdown during stream", () => {
-  const out = formatStreamingChunk("**Hello**");
-  assert.match(out, /\{bold\}Hello\{\/bold\}/);
+test("formatStreamingChunk uses plain text during stream (no partial markdown)", () => {
+  const out = formatStreamingChunk("**Hello** [Title](https://veil.jexxx.us/x)");
+  const body = out.replace(/\{[^}]*\}▌.*$/, "");
+  assert.match(body, /\*\*Hello\*\*/);
+  assert.doesNotMatch(body, /\{bold\}Hello/);
   assert.match(out, /▌/);
-  assert.doesNotMatch(out, /\x1b\[/);
 });
 
 test("finalizeStreamedContent applies blessed markdown rendering", () => {

@@ -147,6 +147,15 @@ test("regression 10: short follow-up routes via conversation context (Proverbs 3
   assert.equal(plan.veilSearchQuery, "Proverbs 31");
 });
 
+test("regression 13: multi-persona roleplay lists all named divinities", () => {
+  const hint = formatEmpireRoutingHint("Roleplay Ruth, Lil' Bible, and Hannah.");
+  assert.ok(hint);
+  assert.match(hint!, /Ruth/);
+  assert.match(hint!, /Lil' Bible/);
+  assert.match(hint!, /Hannah/);
+  assert.match(hint!, /equal depth/i);
+});
+
 test("regression 12: Rachel church girls routes VEIL + Genesis companions", () => {
   const plan = planEmpireTools("church girls who still think they're Rachels", {
     conversationContext: "leads her toward the vestry door",

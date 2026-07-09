@@ -112,11 +112,18 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
   },
   {
     id: "veil-rachel-leah",
-    pattern: /\b(rachels?|leahs?)\b/i,
+    pattern: /\b(ruth|rachels?|leahs?|boaz|naomi)\b/i,
     tools: ["veil_query", "bible_query"],
     companionVerses: COMPANION_VERSE_SETS.rachelLeah,
-    veilSearchQuery: "Rachel Leah",
-    note: "Rachel/Leah arc — VEIL + Genesis companions.",
+    veilSearchQuery: "Ruth",
+    note: "Ruth / Rachel-Leah arc — VEIL + Genesis companions.",
+  },
+  {
+    id: "divinities-multi-roleplay",
+    pattern: /\broleplay\b.*\b(ruth|hannah|lil'?\s*bible)\b/i,
+    tools: ["veil_query", "bible_query"],
+    slashHints: ["/divinities"],
+    note: "Multi-divinity roleplay — embody every named persona with VEIL/scripture.",
   },
   {
     id: "veil-draft-article",
@@ -276,6 +283,7 @@ export function inferThemeCompanionVerses(prompt: string): string[] {
 export function inferVeilSearchQuery(prompt: string, plan: EmpireToolPlan): string | null {
   if (plan.veilSearchQuery) return plan.veilSearchQuery;
   if (/proverbs\s*31/i.test(prompt)) return "Proverbs 31";
+  if (/\b(ruth|boaz|naomi)\b/i.test(prompt)) return "Ruth";
   if (/\b(rachels?|leahs?)\b/i.test(prompt)) return "Rachel Leah";
   if (/\b(church\s+girl|churchy)\b/i.test(prompt)) return "church girl";
   if (/\b(corruption|confession|altar)\b/i.test(prompt)) return "corruption";
@@ -440,6 +448,15 @@ export function planEmpireTools(
   };
 }
 
+/** Divinity names requested for multi-persona roleplay. */
+export function detectNamedDivinities(text: string): string[] {
+  const names: string[] = [];
+  if (/\bruth\b/i.test(text)) names.push("Ruth");
+  if (/\blil'?\s*bible\b/i.test(text)) names.push("Lil' Bible");
+  if (/\bhannah\b/i.test(text)) names.push("Hannah");
+  return names;
+}
+
 /** Human-readable block appended to the system prompt for the current user turn. */
 export function formatEmpireRoutingHint(
   userPrompt: string,
@@ -471,6 +488,14 @@ export function formatEmpireRoutingHint(
   if (options?.conversationContext?.trim()) {
     lines.push(
       "Routing includes recent conversation context — use tools even during persona roleplay when scripture, drafts, or VEIL themes appear.",
+    );
+  }
+  const personas = detectNamedDivinities(
+    buildEmpireRoutingText(userPrompt, options),
+  );
+  if (personas.length >= 2) {
+    lines.push(
+      `Persona cast — labeled sections for each: ${personas.join(", ")}. Include every named character with equal depth.`,
     );
   }
   if (plan.companionVerses.length > 0) {

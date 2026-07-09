@@ -1,4 +1,4 @@
-import { BLESSED_STREAM_CURSOR, markdownToBlessed } from "./markdown.js";
+import { BLESSED_STREAM_CURSOR, escapeBlessed, markdownToBlessed } from "./markdown.js";
 
 /** Accumulates streamed tokens for incremental UI updates. */
 export class StreamBuffer {
@@ -24,17 +24,18 @@ export class StreamBuffer {
 
 /**
  * Format a partial stream buffer for live display in the blessed TUI.
- * Uses blessed tags — not ANSI — so wrap width stays correct.
+ * Plain escaped text only — partial markdown (links, emphasis) corrupts mid-stream.
+ * Full markdown runs once in finalizeAssistant / finalizeStreamedContent.
  */
 export function formatStreamingChunk(buffer: string): string {
   if (!buffer.trim()) {
     return BLESSED_STREAM_CURSOR;
   }
-  const rendered = markdownToBlessed(buffer);
-  if (!rendered) {
-    return `${buffer.trimEnd()}\n${BLESSED_STREAM_CURSOR}`;
-  }
-  return `${rendered}${BLESSED_STREAM_CURSOR}`;
+  const body = escapeBlessed(buffer)
+    .split("\n")
+    .map((line) => (line.length > 0 ? `  ${line}` : line))
+    .join("\n");
+  return `${body}${BLESSED_STREAM_CURSOR}`;
 }
 
 /** Finalize streamed assistant text with markdown rendering. */

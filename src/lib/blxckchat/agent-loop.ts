@@ -23,6 +23,7 @@ import {
   needsEmpireSynthesis,
   stripMetaContinuationPrompts,
 } from "./empire-synthesis.js";
+import { sanitizeRoleplayProse } from "./prose-sanitize.js";
 import { formatToolResultForFallback } from "./tool-result-format.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
@@ -210,7 +211,7 @@ export async function runAgent(
   // REPL's conversation memory stays consistent regardless of how the turn
   // ended (clean stop, repeat-loop short-circuit, or MAX_TURNS exhaustion).
   const finish = (response: string): AgentTurnResult => {
-    const cleaned = stripMetaContinuationPrompts(response);
+    const cleaned = sanitizeRoleplayProse(stripMetaContinuationPrompts(response));
     const sanitized = sanitizeEmpireUrls(cleaned, canonicalUrlCatalog);
     messages.push({ role: "assistant", content: sanitized });
     return { response: sanitized, history: messages.slice(conversationStartIndex) };
