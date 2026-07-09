@@ -17,7 +17,8 @@ export interface ToolDefinition {
   parameters: Record<string, unknown>;
 }
 
-export type ProviderName = "anthropic" | "openai" | "ollama";
+/** Catalog provider id (anthropic, openrouter, groq, …). */
+export type ProviderName = string;
 
 export interface ProviderConfig {
   provider: ProviderName;
@@ -38,6 +39,6 @@ export interface Provider {
   chatStream?(
     messages: ChatMessage[],
     tools: ToolDefinition[],
-    onChunk: (chunk: string) => void
+    onChunk: (chunk: string) => void,
   ): Promise<ChatResult>;
 }

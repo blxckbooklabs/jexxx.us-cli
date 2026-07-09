@@ -101,7 +101,24 @@ export function loadCredentials(options: LoadCredentialsOptions = {}): Credentia
 export function saveCredentials(creds: Credentials): void {
   ensureCredsDir();
 
-  const content = JSON.stringify(creds, null, 2);
+  let existing: CredentialsFile = {};
+  if (fs.existsSync(CREDS_PATH)) {
+    try {
+      existing = JSON.parse(fs.readFileSync(CREDS_PATH, "utf-8")) as CredentialsFile;
+    } catch {
+      existing = {};
+    }
+  }
+
+  const content = JSON.stringify(
+    {
+      ...existing,
+      credentials: creds,
+      providers: existing.providers,
+    },
+    null,
+    2,
+  );
   fs.writeFileSync(CREDS_PATH, content, { mode: 0o600 });
 }
 

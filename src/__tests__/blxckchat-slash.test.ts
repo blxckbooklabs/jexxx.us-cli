@@ -51,7 +51,8 @@ test("getCommandSuggestions fuzzy-filters commands", () => {
 
 test("getCommandSuggestions lists all commands for bare slash", () => {
   const results = getCommandSuggestions("");
-  assert.ok(results.length >= 8);
+  assert.ok(results.length >= 9);
+  assert.ok(results.some((r) => r.label === "/connect"));
   assert.ok(results.some((r) => r.label === "/help"));
   assert.ok(results.some((r) => r.label === "/model"));
 });

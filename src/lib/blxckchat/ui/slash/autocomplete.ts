@@ -1,5 +1,6 @@
 import { listProvidersRedacted } from "../../config.js";
 import type { StoredProviderConfig } from "../../config.js";
+import { listCatalogEntries } from "../../providers/catalog.js";
 import { listModelOptions, type ModelOption } from "../../providers/models.js";
 import { BUILTIN_SLASH_COMMANDS, type SlashCommandDef } from "./registry.js";
 import { fuzzyFilter } from "./fuzzy.js";
@@ -72,6 +73,21 @@ export async function getArgumentSuggestions(
       value: o.id.includes("/") ? o.id : `${o.provider}/${o.id}`,
       label: o.id,
       description: o.label,
+    }));
+  }
+
+  if (commandName === "connect" || commandName === "login") {
+    const entries = listCatalogEntries();
+    const filtered = fuzzyFilter(
+      [...entries],
+      argFilter,
+      (e) => `${e.id} ${e.label}`,
+      12,
+    );
+    return filtered.map((e) => ({
+      value: e.id,
+      label: e.id,
+      description: e.label,
     }));
   }
 

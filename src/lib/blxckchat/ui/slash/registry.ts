@@ -7,8 +7,9 @@ export interface SlashCommandDef {
 
 export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
   { name: "help", aliases: ["?"], description: "Show slash commands and shortcuts" },
-  { name: "model", aliases: ["models", "mo"], description: "List or switch model", argumentHint: "<provider/model>" },
-  { name: "provider", aliases: ["providers"], description: "List or switch provider config", argumentHint: "<name>" },
+  { name: "connect", aliases: ["login"], description: "Connect inference provider (BYOK gateway)", argumentHint: "<provider-id>" },
+  { name: "model", aliases: ["models", "mo"], description: "Open model picker or switch model", argumentHint: "<provider/model>" },
+  { name: "provider", aliases: ["providers"], description: "Open provider picker or switch config", argumentHint: "<name>" },
   { name: "session", aliases: ["status"], description: "Show session stats and active provider" },
   { name: "copy", description: "Copy full TUI snapshot to clipboard" },
   { name: "save", aliases: ["export"], description: "Export session to JSON" },

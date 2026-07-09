@@ -50,7 +50,7 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
       : undefined;
 
   return {
-    id: config.baseUrl ? "ollama" : "openai",
+    id: config.provider,
     async chat(
       messages: ChatMessage[],
       tools: ToolDefinition[]

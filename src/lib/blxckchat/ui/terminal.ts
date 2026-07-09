@@ -46,6 +46,8 @@ import { dispatchSlashCommand, isSlashCommand, parseSlashInput } from "./slash/h
 
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
+import { createModelPickerOverlay } from "./components/model-picker-overlay.js";
+import { createConnectOverlay } from "./components/connect-overlay.js";
 import { MessageQueue } from "./message-queue.js";
 import { openExternalEditor } from "./external-editor.js";
 import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
@@ -159,6 +161,9 @@ export async function startTerminalChat(
   const hotkeysOverlay = createHotkeysOverlay(screen);
   const messageQueue = new MessageQueue();
 
+  let modelPickerOverlay!: ReturnType<typeof createModelPickerOverlay>;
+  let connectOverlay!: ReturnType<typeof createConnectOverlay>;
+
   let isProcessing = false;
   let abortController: AbortController | null = null;
 
@@ -186,6 +191,9 @@ export async function startTerminalChat(
       toolCount,
       setActiveConfig,
       copySnapshot,
+      openModelPicker: () => modelPickerOverlay.open(),
+      openConnect: (catalogId) => connectOverlay.open(catalogId),
+      openProviderPicker: () => connectOverlay.openProviderSwitch(),
     });
     if (parsed.command === "reset") {
       messageBox.clearChat();
@@ -271,6 +279,31 @@ export async function startTerminalChat(
       cachedModelOptions = opts;
     });
   };
+
+  modelPickerOverlay = createModelPickerOverlay(screen, {
+    getActiveConfig: () => activeConfig,
+    setActiveConfig,
+    onApplied: (message) => {
+      messageBox.appendSystem(message);
+      statusBar.setMessage(message);
+      inputBox.focus();
+    },
+  });
+
+  connectOverlay = createConnectOverlay(screen, {
+    getActiveConfig: () => activeConfig,
+    setActiveConfig,
+    onMessage: (message) => {
+      messageBox.appendSystem(message);
+      statusBar.setMessage(message);
+      inputBox.focus();
+    },
+    onError: (message) => {
+      messageBox.appendError(message);
+      statusBar.setMessage(message);
+      inputBox.focus();
+    },
+  });
 
   const maybeAutosave = (): void => {
     if (shouldAutosave(session.messages.length)) {
@@ -519,7 +552,7 @@ export async function startTerminalChat(
           statusBar.setMessage(copied ? "TUI copied" : `Snapshot: ${path}`);
         },
         onCopyLastReply: () => void copyLastReply(),
-        onModelList: () => void runSlash("/model"),
+        onModelList: () => void modelPickerOverlay.open(),
         onModelNext: () => void cycleModel(1),
         onModelPrev: () => void cycleModel(-1),
         onToggleAllThinking: () => messageBox.toggleAllThinking(),
@@ -538,6 +571,16 @@ export async function startTerminalChat(
   const handleEscapeLayer = (): boolean => {
     if (isProcessing) {
       abortInFlight();
+      return true;
+    }
+    if (connectOverlay.isVisible()) {
+      connectOverlay.close();
+      inputBox.focus();
+      return true;
+    }
+    if (modelPickerOverlay.isVisible()) {
+      modelPickerOverlay.close();
+      inputBox.focus();
       return true;
     }
     if (searchOverlay.isVisible()) {

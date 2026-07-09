@@ -1,3 +1,8 @@
+import {
+  getCatalogEntry,
+  listCatalogEntries,
+  normalizeProviderId,
+} from "./catalog.js";
 import type { ProviderName } from "./types.js";
 import {
   listProvidersRedacted,
@@ -6,22 +11,11 @@ import {
 
 const DEFAULT_OLLAMA_BASE = "http://localhost:11434";
 
-const SUGGESTED_MODELS: Record<ProviderName, string[]> = {
-  anthropic: [
-    "claude-sonnet-4-5",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
-    "claude-3-opus-20240229",
-  ],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "o1", "o1-mini"],
-  ollama: ["llama3.1", "llama3.2", "mistral", "codellama", "qwen2.5"],
-};
-
 export interface ModelOption {
   id: string;
   label: string;
   provider: ProviderName;
-  source: "configured" | "suggested" | "ollama";
+  source: "configured" | "suggested" | "ollama" | "catalog";
 }
 
 function ollamaRootUrl(baseUrl?: string): string {
@@ -73,14 +67,26 @@ export async function listModelOptions(
   }
 
   if (activeConfig) {
-    for (const id of SUGGESTED_MODELS[activeConfig.provider] ?? []) {
-      push(id, activeConfig.provider, "suggested");
-    }
-    if (activeConfig.provider === "ollama") {
-      const local = await listOllamaModels(activeConfig.baseUrl);
-      for (const id of local) {
-        push(id, "ollama", "ollama");
+    const catalogId = normalizeProviderId(activeConfig.provider);
+    const entry = getCatalogEntry(catalogId);
+
+    if (entry) {
+      for (const id of entry.suggestedModels) {
+        push(id, catalogId, "suggested", `${entry.label} · ${id}`);
       }
+    }
+
+    if (catalogId === "ollama" || entry?.adapter === "ollama") {
+      const local = await listOllamaModels(activeConfig.baseUrl ?? entry?.baseUrl);
+      for (const id of local) {
+        push(id, catalogId, "ollama", `ollama · ${id}`);
+      }
+    }
+  }
+
+  for (const entry of listCatalogEntries()) {
+    for (const id of entry.suggestedModels.slice(0, 2)) {
+      push(id, entry.id, "catalog", `${entry.label} · ${id}`);
     }
   }
 
@@ -117,7 +123,8 @@ export function cycleModelOption(
   current: StoredProviderConfig,
   direction: 1 | -1,
 ): ModelOption | null {
-  const forProvider = options.filter((o) => o.provider === current.provider);
+  const catalogId = normalizeProviderId(current.provider);
+  const forProvider = options.filter((o) => o.provider === catalogId);
   if (forProvider.length === 0) return null;
 
   const idx = forProvider.findIndex((o) => o.id === current.model);
