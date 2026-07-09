@@ -1,10 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
+import { resolveBibleVaultPath, validateVaultPath } from "./path-resolver.js";
 
 /**
  * Bible lookup library for verse-level retrieval from the obsidian-bible vault.
  * Supports hierarchical queries: section → book → chapter → verse.
- * Vault location resolved via BIBLE_VAULT_PATH env var or default path.
+ * Vault location resolved via JEXXXUS_BIBLE_VAULT_PATH env var; returns null if unavailable
+ * (caller handles graceful fallback to web queries).
  */
 
 export interface BibleVerse {
@@ -23,25 +25,22 @@ export interface BibleChapter {
   verseCount: number;
 }
 
-const VAULT_PATHS = [
-  process.env.BIBLE_VAULT_PATH || "",
-  "/Users/dylanroberts/Documents/non-music/Dev/GitHub/Crucifly, LLC/obsidian-bible",
-  "../../../Crucifly\\ LLC/obsidian-bible",
-].filter(Boolean);
+function getVaultPath(): string | null {
+  return resolveBibleVaultPath();
+}
 
-function getVaultPath(): string {
-  for (const vaultPath of VAULT_PATHS) {
-    if (fs.existsSync(vaultPath)) {
-      return vaultPath;
-    }
+function requireVaultPath(): string {
+  const vaultPath = requireVaultPath();
+  if (!vaultPath) {
+    throw new Error(
+      "[Bible] Local vault not configured. Set JEXXXUS_BIBLE_VAULT_PATH env var or use web-based queries."
+    );
   }
-  throw new Error(
-    `[Bible] Obsidian vault not found. Set BIBLE_VAULT_PATH env var. Tried: ${VAULT_PATHS.join(", ")}`
-  );
+  return vaultPath;
 }
 
 export function getBibleSections(): string[] {
-  const vaultPath = getVaultPath();
+  const vaultPath = requireVaultPath();
   const entries = fs.readdirSync(vaultPath);
   return entries
     .filter(
@@ -53,7 +52,7 @@ export function getBibleSections(): string[] {
 }
 
 export function getBibleBooks(section: string): string[] {
-  const vaultPath = getVaultPath();
+  const vaultPath = requireVaultPath();
   const sectionPath = path.join(vaultPath, section);
   if (!fs.existsSync(sectionPath)) {
     throw new Error(`[Bible] Section not found: ${section}`);
@@ -69,7 +68,7 @@ export function getBibleBooks(section: string): string[] {
 }
 
 export function getBibleChapters(section: string, book: string): string[] {
-  const vaultPath = getVaultPath();
+  const vaultPath = requireVaultPath();
   const bookPath = path.join(vaultPath, section, book);
   if (!fs.existsSync(bookPath)) {
     throw new Error(`[Bible] Book not found: ${section}/${book}`);
@@ -89,7 +88,7 @@ export function getBibleVerses(
   book: string,
   chapter: string
 ): string[] {
-  const vaultPath = getVaultPath();
+  const vaultPath = requireVaultPath();
   const chapterPath = path.join(vaultPath, section, book, chapter);
   if (!fs.existsSync(chapterPath)) {
     throw new Error(
@@ -139,7 +138,7 @@ export function getVerse(
   chapter: string,
   verseFile: string
 ): BibleVerse {
-  const vaultPath = getVaultPath();
+  const vaultPath = requireVaultPath();
   const versePath = path.join(vaultPath, section, book, chapter, verseFile);
 
   if (!fs.existsSync(versePath)) {

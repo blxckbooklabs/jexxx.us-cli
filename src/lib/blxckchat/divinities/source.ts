@@ -6,15 +6,21 @@ import {
   parsePersonaMetadata,
 } from "./prompt.js";
 
+/**
+ * Divinities resolution strategy (priority order):
+ * 1. Local versioned data files in CLI repo (src/lib/blxckchat/divinities/data/personas)
+ *    → No private repo access needed; managed via extraction script
+ * 2. External Obsidian vault (JEXXXUS_OBSIDIAN_PERSONAS_PATH env var)
+ *    → For developers with private repo access; overrides local data
+ * 3. (fallback) Built-in default persona if no data available
+ */
 function getDivinitiesSearchPaths(): string[] {
+  const cliDataDir = path.resolve(__dirname, "data", "personas");
+  const envPath = process.env.JEXXXUS_OBSIDIAN_PERSONAS_PATH?.trim();
+
   return [
-    process.env.DIVINITIES_VAULT_PATH?.trim() ?? "",
-    path.join(
-      process.env.JEXXXUS_ROOT?.trim() ?? "",
-      "jexxx.us-obsidian",
-      "Divinities",
-    ),
-    "/Users/dylanroberts/Documents/non-music/Dev/GitHub/JEXXXUS/jexxx.us-obsidian/Divinities",
+    cliDataDir, // Local versioned data (always checked first)
+    envPath ?? "", // External vault if env var set
   ].filter((p) => p.length > 0);
 }
 

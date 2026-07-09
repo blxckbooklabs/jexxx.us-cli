@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { resolveTvRepoPath } from "./path-resolver.js";
 import {
   assertAllowedTvPublicBaseUrl,
   readPublicJsonCatalog,
@@ -70,11 +71,15 @@ interface RawVideoRow {
 let remoteCache: { fetchedAt: number; videos: TvVideo[] } | null = null;
 const REMOTE_CACHE_MS = 5 * 60 * 1000;
 
-function getRepoRootPaths(): string[] {
-  return [
-    process.env.TV_CONTENT_PATH || "",
-    "/Users/dylanroberts/Documents/non-music/Dev/GitHub/JEXXXUS/tv.jexxx.us",
-  ].filter(Boolean);
+function getRepoRootPath(): string | null {
+  const resolved = resolveTvRepoPath();
+  if (!resolved) {
+    // Log helpful message for users without local TV repo
+    console.debug(
+      "[TV] Local TV repo not configured. Set JEXXXUS_TV_REPO_PATH env var for local catalog, or use remote endpoints."
+    );
+  }
+  return resolved;
 }
 
 export function getTvPublicBaseUrl(): string {
@@ -145,19 +150,17 @@ function rowToMeta(
 }
 
 function resolveLocalVideosJsonPath(): string | null {
-  for (const root of getRepoRootPaths()) {
-    const jsonPath = path.join(root, "src", "data", "videos.json");
-    if (fs.existsSync(jsonPath)) return jsonPath;
-  }
-  return null;
+  const root = getRepoRootPath();
+  if (!root) return null;
+  const jsonPath = path.join(root, "src", "data", "videos.json");
+  return fs.existsSync(jsonPath) ? jsonPath : null;
 }
 
 function resolveLocalLlmsFullPath(): string | null {
-  for (const root of getRepoRootPaths()) {
-    const llmsPath = path.join(root, "public", "llms-full.txt");
-    if (fs.existsSync(llmsPath)) return llmsPath;
-  }
-  return null;
+  const root = getRepoRootPath();
+  if (!root) return null;
+  const llmsPath = path.join(root, "public", "llms-full.txt");
+  return fs.existsSync(llmsPath) ? llmsPath : null;
 }
 
 function loadLocalVideosJson(): TvVideo[] | null {
@@ -183,14 +186,13 @@ function loadLocalVideosJson(): TvVideo[] | null {
 }
 
 function loadLocalLlmsFull(): TvVideo[] | null {
-  for (const root of getRepoRootPaths()) {
-    const publicDir = path.join(root, "public");
-    const llmsPath = path.join(publicDir, "llms-full.txt");
-    if (!fs.existsSync(llmsPath)) continue;
-    const text = readPublicLlmsFile(publicDir, "llms-full.txt");
-    return parseTvLlmsFullText(text, getTvPublicBaseUrl(), "llms-full");
-  }
-  return null;
+  const root = getRepoRootPath();
+  if (!root) return null;
+  const publicDir = path.join(root, "public");
+  const llmsPath = path.join(publicDir, "llms-full.txt");
+  if (!fs.existsSync(llmsPath)) return null;
+  const text = readPublicLlmsFile(publicDir, "llms-full.txt");
+  return parseTvLlmsFullText(text, getTvPublicBaseUrl(), "llms-full");
 }
 
 /** Parse public llms-full.txt (prebuild artifact on tv.jexxx.us). */
