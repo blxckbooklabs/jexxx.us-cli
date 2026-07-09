@@ -2,6 +2,7 @@ import type { BlxckchatTool } from "./types.js";
 import {
   getVeilArticle,
   getVeilArticleMeta,
+  getVeilContentSourceInfo,
   getVeilPublicEndpoints,
   listVeilArticles,
   searchVeilArticles,
@@ -33,10 +34,12 @@ function resolveVeilAction(raw: string): VeilAction | null {
 export const veilTool: BlxckchatTool = {
   name: "veil_query",
   description:
-    "Query public VEIL articles on veil.jexxx.us. action=list (titles+URLs, default limit 10). " +
-    "action=search with query (find by title). action=get with slug (full article text). " +
-    "action=meta with slug (canonical URL + SEO/RSS fields). action=discover (feed/sitemap/llms). " +
-    "slug comes from list/search output — meta and get always require slug or query.",
+    "Query public VEIL articles on veil.jexxx.us (official repo content/posts or public RSS only). " +
+    "action=list — titles+URLs (default limit 10; includes RSS/sitemap links in footer). " +
+    "action=search — find by title. action=get — full article text (requires slug). " +
+    "action=meta — canonical URL + SEO (requires slug). " +
+    "action=discover — feed/sitemap/llms endpoints only (skip if list already answered). " +
+    "Never call discover and list for the same user question.",
   parameters: {
     type: "object",
     properties: {
@@ -74,24 +77,26 @@ export const veilTool: BlxckchatTool = {
     }
 
     const allArticles = await listVeilArticles();
+    const sourceInfo = getVeilContentSourceInfo();
+    const endpoints = getVeilPublicEndpoints();
 
     switch (action) {
       case "discover": {
-        const endpoints = getVeilPublicEndpoints();
-        return formatVeilDiscover(endpoints, allArticles.length, allArticles.slice(0, 5));
+        return formatVeilDiscover(endpoints, allArticles.length, allArticles.slice(0, 5), sourceInfo);
       }
 
       case "list": {
         const filtered = query
           ? searchVeilArticles(allArticles, query, limit)
           : allArticles.slice(0, limit);
-        return formatVeilArticleList(filtered, allArticles.length);
+        const body = formatVeilArticleList(filtered, allArticles.length, sourceInfo);
+        return `${body}\n\nPublic discovery:\nRSS: ${endpoints.feed}\nSitemap: ${endpoints.sitemap}\nllms.txt: ${endpoints.llms}`;
       }
 
       case "search": {
         if (!query) return "Error: 'query' is required for search.";
         const hits = searchVeilArticles(allArticles, query, limit);
-        return formatVeilArticleList(hits, allArticles.length);
+        return formatVeilArticleList(hits, allArticles.length, sourceInfo);
       }
 
       case "meta": {

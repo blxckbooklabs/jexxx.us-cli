@@ -1,5 +1,10 @@
 import * as fs from "fs";
 import * as path from "path";
+import {
+  assertAllowedVeilPublicBaseUrl,
+  assertSafeArticlePostsDir,
+  readPublicMarkdownFile,
+} from "./veil-security.js";
 
 /**
  * Read-only access to **public** VEIL articles — the same content published on
@@ -71,9 +76,42 @@ interface LocalCategory {
 let rssCache: { fetchedAt: number; articles: VeilArticle[] } | null = null;
 const RSS_CACHE_MS = 5 * 60 * 1000;
 
+export type VeilContentSource = "veil-repo" | "obsidian-mirror" | "public-rss";
+
+export interface VeilContentSourceInfo {
+  source: VeilContentSource;
+  detail: string;
+}
+
 export function getVeilPublicBaseUrl(): string {
   const raw = process.env.VEIL_PUBLIC_BASE_URL?.trim();
-  return raw && raw.startsWith("http") ? raw.replace(/\/$/, "") : VEIL_DEFAULT_BASE_URL;
+  const candidate = raw && raw.startsWith("http") ? raw : VEIL_DEFAULT_BASE_URL;
+  return assertAllowedVeilPublicBaseUrl(candidate);
+}
+
+/** Reports which public-only source BLXCKCHAT is reading (for operator transparency). */
+export function getVeilContentSourceInfo(): VeilContentSourceInfo {
+  for (const root of getRepoRootPaths()) {
+    const postsDir = path.join(root, "content", "posts");
+    if (fs.existsSync(postsDir)) {
+      return {
+        source: "veil-repo",
+        detail: `${root}/content/posts (official veil.jexxx.us publish tree)`,
+      };
+    }
+  }
+  for (const articlesDir of getObsidianArticlePaths()) {
+    if (fs.existsSync(articlesDir)) {
+      return {
+        source: "obsidian-mirror",
+        detail: `${articlesDir} (public article mirror only)`,
+      };
+    }
+  }
+  return {
+    source: "public-rss",
+    detail: `${getVeilPublicBaseUrl()}/feed.xml (remote public feed)`,
+  };
 }
 
 export function getVeilPublicEndpoints(
@@ -167,7 +205,7 @@ function loadLocalAuthors(contentRoot: string): Map<string, LocalAuthor> {
   if (!fs.existsSync(authorsDir)) return map;
 
   for (const file of fs.readdirSync(authorsDir).filter((f) => f.endsWith(".md"))) {
-    const { data } = parseFrontmatter(fs.readFileSync(path.join(authorsDir, file), "utf-8"));
+    const { data } = parseFrontmatter(readPublicMarkdownFile(authorsDir, file));
     const base = file.replace(/\.md$/, "");
     const slug = data.slug ? slugifyVeil(data.slug) : slugifyVeil(base);
     map.set(slug, { slug, name: data.name || slug });
@@ -181,7 +219,7 @@ function loadLocalCategories(contentRoot: string): Map<string, LocalCategory> {
   if (!fs.existsSync(categoriesDir)) return map;
 
   for (const file of fs.readdirSync(categoriesDir).filter((f) => f.endsWith(".md"))) {
-    const { data } = parseFrontmatter(fs.readFileSync(path.join(categoriesDir, file), "utf-8"));
+    const { data } = parseFrontmatter(readPublicMarkdownFile(categoriesDir, file));
     const base = file.replace(/\.md$/, "");
     const slug = data.slug ? slugifyVeil(data.slug) : slugifyVeil(base);
     map.set(slug, { slug, name: data.name || slug });
@@ -227,6 +265,8 @@ function loadLocalArticles(): VeilArticle[] | null {
   const postsDir = resolveLocalPostsDir();
   if (!postsDir) return null;
 
+  assertSafeArticlePostsDir(postsDir);
+
   const contentRoot = resolveLocalContentRoot();
   const authors = contentRoot ? loadLocalAuthors(contentRoot) : new Map();
   const categories = contentRoot ? loadLocalCategories(contentRoot) : new Map();
@@ -234,7 +274,7 @@ function loadLocalArticles(): VeilArticle[] | null {
 
   const articles: VeilArticle[] = [];
   for (const file of fs.readdirSync(postsDir).filter((f) => f.endsWith(".md"))) {
-    const raw = fs.readFileSync(path.join(postsDir, file), "utf-8");
+    const raw = readPublicMarkdownFile(postsDir, file);
     const { data, body } = parseFrontmatter(raw);
     const slug = articleSlugFromFilename(file, data);
     articles.push({

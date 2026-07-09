@@ -21,3 +21,10 @@ test("summarizeToolResultForDisplay keeps short multiline text", () => {
   const out = summarizeToolResultForDisplay(raw, "success");
   assert.equal(out, raw);
 });
+
+test("summarizeToolResultForDisplay shows full veil_query catalogs", () => {
+  const raw = `VEIL articles (10 shown of 47):\n\n${"1. Title\n   https://veil.jexxx.us/a\n\n".repeat(10)}Public discovery:`;
+  const out = summarizeToolResultForDisplay(raw, "success", "veil_query");
+  assert.equal(out, raw);
+  assert.doesNotMatch(out, /chars total/);
+});

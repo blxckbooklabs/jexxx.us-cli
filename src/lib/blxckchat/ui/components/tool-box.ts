@@ -20,13 +20,42 @@ const STATUS_COLORS: Record<ToolStatus, string> = {
 
 const TOOL_DISPLAY_MAX_LINES = 6;
 const TOOL_DISPLAY_MAX_CHARS = 480;
+const VEIL_CATALOG_MAX_LINES = 80;
+const VEIL_CATALOG_MAX_CHARS = 8000;
 
 /** Compact tool output for the TUI — full result still goes to the model. */
-export function summarizeToolResultForDisplay(result: string, status: ToolStatus): string {
+export function summarizeToolResultForDisplay(
+  result: string,
+  status: ToolStatus,
+  toolName?: string,
+): string {
   if (status === "pending") return "running…";
 
   const trimmed = result.trim();
   if (!trimmed) return "(empty)";
+
+  const isVeilCatalog =
+    toolName === "veil_query" &&
+    (trimmed.startsWith("VEIL articles") ||
+      trimmed.startsWith("VEIL public endpoints") ||
+      trimmed.startsWith("No VEIL articles"));
+  const isVeilMeta =
+    toolName === "veil_query" && trimmed.includes("Public SEO / discovery:");
+  const isVeilArticleBody =
+    toolName === "veil_query" && trimmed.includes("\n---\n");
+
+  if (isVeilCatalog || isVeilMeta) {
+    const lines = trimmed.split("\n");
+    if (lines.length <= VEIL_CATALOG_MAX_LINES && trimmed.length <= VEIL_CATALOG_MAX_CHARS) {
+      return trimmed;
+    }
+    return `${lines.slice(0, VEIL_CATALOG_MAX_LINES).join("\n")}\n… (scroll chat history for full catalog)`;
+  }
+
+  if (isVeilArticleBody) {
+    const header = trimmed.split("\n---\n")[0] ?? trimmed;
+    return `${header}\n… [article body omitted in TUI — full text in model context]`;
+  }
 
   if (trimmed.startsWith("[")) {
     try {
@@ -72,7 +101,8 @@ export function formatToolLinePlain(
   status: ToolStatus,
 ): string {
   const icon = STATUS_ICONS[status];
-  const label = status === "pending" ? "running…" : summarizeToolResultForDisplay(result, status);
+  const label =
+    status === "pending" ? "running…" : summarizeToolResultForDisplay(result, status, toolName);
   return `  ${icon} tool:${toolName} → ${label}\n`;
 }
 
@@ -80,7 +110,9 @@ export function formatToolLine(toolName: string, result: string, status: ToolSta
   const icon = STATUS_ICONS[status];
   const color = STATUS_COLORS[status];
   const label =
-    status === "pending" ? "running…" : escapeBlessed(summarizeToolResultForDisplay(result, status));
+    status === "pending"
+      ? "running…"
+      : escapeBlessed(summarizeToolResultForDisplay(result, status, toolName));
   return `  {${color}}${icon}{/} ${TAG.pink}${toolName}${TAG.pinkEnd} {gray-fg}→{/gray-fg} {${color}}${label}{/${color}}\n`;
 }
 

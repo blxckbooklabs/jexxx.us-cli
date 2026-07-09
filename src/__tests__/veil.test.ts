@@ -99,8 +99,10 @@ test("veil_query tool list action returns readable article lines", async () => {
   process.env.VEIL_CONTENT_PATH = FIXTURE_ROOT;
   const raw = await veilTool.execute({ action: "list" });
   assert.match(raw, /VEIL articles \(1 shown\)/);
+  assert.match(raw, /Source:.*content\/posts/);
   assert.match(raw, /Sample VEIL Article/);
   assert.match(raw, /\/articles\/sample-veil-article/);
+  assert.match(raw, /Public discovery:\nRSS: https:\/\/veil\.jexxx\.us\/feed\.xml/);
   assert.doesNotMatch(raw, /"authorSlug"/);
 });
 

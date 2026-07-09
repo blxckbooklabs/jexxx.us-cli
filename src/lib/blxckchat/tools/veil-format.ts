@@ -1,4 +1,9 @@
-import type { VeilArticle, VeilArticleMeta, VeilPublicEndpoints } from "../../veil.js";
+import type {
+  VeilArticle,
+  VeilArticleMeta,
+  VeilContentSourceInfo,
+  VeilPublicEndpoints,
+} from "../../veil.js";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -9,6 +14,7 @@ function formatDate(iso: string): string {
 export function formatVeilArticleList(
   articles: VeilArticleMeta[],
   total: number,
+  source?: VeilContentSourceInfo,
 ): string {
   if (articles.length === 0) {
     return "No VEIL articles matched.";
@@ -16,8 +22,11 @@ export function formatVeilArticleList(
 
   const lines = [
     `VEIL articles (${articles.length} shown${total > articles.length ? ` of ${total}` : ""}):`,
-    "",
   ];
+  if (source) {
+    lines.push(`Source: ${source.detail}`);
+  }
+  lines.push("");
 
   for (const [i, article] of articles.entries()) {
     const bits = [article.author, article.category, formatDate(article.publishedAt)]
@@ -60,9 +69,15 @@ export function formatVeilDiscover(
   endpoints: VeilPublicEndpoints,
   articleCount: number,
   samples: VeilArticleMeta[],
+  source?: VeilContentSourceInfo,
 ): string {
   const lines = [
     "VEIL public endpoints:",
+  ];
+  if (source) {
+    lines.push(`Source: ${source.detail}`);
+  }
+  lines.push(
     `Site: ${endpoints.site}`,
     `Articles index: ${endpoints.articlesIndex}`,
     `RSS: ${endpoints.feed}`,
@@ -71,7 +86,7 @@ export function formatVeilDiscover(
     `llms.txt: ${endpoints.llms}`,
     "",
     `Published articles: ${articleCount}`,
-  ];
+  );
 
   if (samples.length > 0) {
     lines.push("", "Recent:");
