@@ -90,6 +90,10 @@ Owned by the JEXXXUS platform / tooling team.
   pinned default (`isDefault` from provider setup **y**) beats `lastUsed` profile;
   without a pin, reopens with the last active provider/model from the previous session.
   `saveLastUsedProvider` runs on model/provider change and TUI exit (Ctrl+C).
+- **Open-source security prep:** repo `SECURITY.md` is the public disclosure + threat-model entry;
+  full audit findings live in Obsidian `JEXXXUS CLI/Open-Source-Security-Audit.md`. Before any
+  public release: remove hardcoded super-admin Clerk IDs from `super-admin.ts`, strip dev default
+  paths, add Bible vault prefix guards, run secret scan on git history.
 - BLXCKCHAT TUI streams LLM **thinking in real time** (Pi/OpenCode parity): gray `[▼ think]`
   block via `stream-thinking.ts` (`StreamThinkingParser` for `<think>`/API reasoning deltas;
   `formatThinkingWaitState` between tool passes). Toggle collapsed blocks: `Space` / `Ctrl+T`.
