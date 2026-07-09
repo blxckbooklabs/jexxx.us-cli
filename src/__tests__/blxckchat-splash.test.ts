@@ -14,7 +14,7 @@ const META = {
 
 test("renderJexxxusHeroPlain centers block JEXXXUS letters", () => {
   const frame = renderJexxxusHeroPlain(80, META);
-  assert.match(frame, /▄▄/);
+  assert.match(frame, /█████/);
   assert.match(frame, /Type a message to begin/);
   assert.match(frame, /alice@example\.com/);
 });
