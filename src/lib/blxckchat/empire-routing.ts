@@ -30,6 +30,8 @@ export interface PhraseCollision {
   slashHints?: string[];
   /** Fitting bible_query refs to fetch alongside TV/VEIL (not instead of them). */
   companionVerses?: readonly string[];
+  /** Explicit tv_query search string (series, tag, category). */
+  tvSearchQuery?: string;
   note: string;
 }
 
@@ -39,15 +41,18 @@ export interface EmpireToolPlan {
   slashHints: string[];
   /** Distinct verse refs for separate bible_query action=query calls. */
   companionVerses: string[];
+  /** Best tv_query search string for this prompt, if any. */
+  tvSearchQuery: string | null;
   matchedRules: string[];
 }
 
 export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
   {
     id: "tv-series-forgive-me-father",
-    pattern: /forgive\s+me\s+father/i,
+    pattern: /forgive\s*,?\s*me\s*,?\s*father/i,
     tools: ["tv_query", "bible_query"],
     companionVerses: COMPANION_VERSE_SETS.forgiveness,
+    tvSearchQuery: "Forgive Me Father",
     note: "Forgive Me Father TV series + forgiveness scripture companions.",
   },
   {
@@ -149,6 +154,17 @@ function mergeCompanionVerses(target: Set<string>, verses: readonly string[]): v
   }
 }
 
+/** Resolve tv_query search text from routing plan + prompt. */
+export function inferTvSearchQuery(prompt: string, plan: EmpireToolPlan): string | null {
+  if (plan.tvSearchQuery) return plan.tvSearchQuery;
+  if (/forgive\s*,?\s*me\s*,?\s*father/i.test(prompt)) return "Forgive Me Father";
+  if (/\b(mormon\s+girlz)\b/i.test(prompt)) return "Mormon Girlz";
+  if (/\bdeviante\b/i.test(prompt)) return "Deviante";
+  if (/\b(pastor\/?priest)\b/i.test(prompt)) return "Pastor/Priest";
+  if (/\bnuns?\b/i.test(prompt)) return "Nuns";
+  return null;
+}
+
 /** Infer fitting companions when TV/VEIL matched but no row supplied verses. */
 export function inferThemeCompanionVerses(prompt: string): string[] {
   const verses = new Set<string>();
@@ -189,6 +205,7 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
   const exclude = new Set<RoutableTool>();
   const slashHints = new Set<string>();
   const companionVerses = new Set<string>();
+  let tvSearchQuery: string | null = null;
   const matchedRules: string[] = [];
 
   const prompt = userPrompt.trim();
@@ -209,6 +226,9 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     }
     if (row.companionVerses) {
       mergeCompanionVerses(companionVerses, row.companionVerses);
+    }
+    if (row.tvSearchQuery) {
+      tvSearchQuery = row.tvSearchQuery;
     }
   }
 
@@ -287,11 +307,23 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     tools.delete("bible_query");
   }
 
+  if (!tvSearchQuery && tools.has("tv_query")) {
+    tvSearchQuery = inferTvSearchQuery(prompt, {
+      tools: [...tools],
+      exclude: [...exclude],
+      slashHints: [...slashHints],
+      companionVerses: [...companionVerses],
+      tvSearchQuery: null,
+      matchedRules,
+    });
+  }
+
   return {
     tools: [...tools],
     exclude: [...exclude],
     slashHints: [...slashHints],
     companionVerses: [...companionVerses],
+    tvSearchQuery,
     matchedRules,
   };
 }
@@ -311,13 +343,24 @@ export function formatEmpireRoutingHint(userPrompt: string): string | null {
   if (plan.slashHints.length > 0) {
     lines.push(`Slash hints: ${plan.slashHints.join(", ")}`);
   }
+  if (plan.tvSearchQuery && plan.tools.includes("tv_query")) {
+    lines.push(
+      `TV search — call tv_query action=search query="${plan.tvSearchQuery}" (not action=list).`,
+    );
+  }
   if (plan.companionVerses.length > 0) {
     lines.push(
       `Companion scripture — call bible_query action=query separately for each: ${plan.companionVerses.join("; ")}`,
     );
     lines.push(
       "Quote 2–3 of these verses in your final reply alongside TV/VEIL links. " +
-        "Do not pass series titles (e.g. Forgive Me Father) to bible_query — only the Book Ch:V refs above.",
+        "Do not pass series titles (e.g. Forgive Me Father) to bible_query — only the Book Ch:V refs above. " +
+        "Never use action=chapters or book-only lookups.",
+    );
+  }
+  if (plan.companionVerses.length > 0 || plan.tvSearchQuery) {
+    lines.push(
+      "Pre-fetched TV/scripture may appear below — synthesize a polished answer from that data.",
     );
   }
   lines.push(

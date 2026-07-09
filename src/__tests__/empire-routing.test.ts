@@ -51,6 +51,14 @@ test("regression 1: Forgive Me Father videos → tv_query + companion scripture"
   });
 });
 
+test("regression 1b: Forgive Me, father? → series routing with punctuation", () => {
+  const plan = planEmpireTools("Forgive Me, father?");
+  assert.ok(plan.tools.includes("tv_query"));
+  assert.ok(plan.tools.includes("bible_query"));
+  assert.equal(plan.tvSearchQuery, "Forgive Me Father");
+  assert.ok(plan.companionVerses.includes("1 John 1:9"));
+});
+
 test("regression 2: 1 John 1:9 → bible_query only", () => {
   expectTools("1 John 1:9", {
     include: ["bible_query"],
@@ -112,6 +120,8 @@ test("formatEmpireRoutingHint lists companion bible_query refs", () => {
   const hint = formatEmpireRoutingHint("Forgive Me Father videos");
   assert.ok(hint);
   assert.match(hint!, /tv_query/);
+  assert.match(hint!, /action=search/);
+  assert.match(hint!, /Forgive Me Father/);
   assert.match(hint!, /bible_query/);
   assert.match(hint!, /1 John 1:9/);
   assert.match(hint!, /Do not pass series titles/);

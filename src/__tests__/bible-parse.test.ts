@@ -33,3 +33,13 @@ test("bible_query redirects non-verse queries to tv_query", async () => {
   assert.match(raw, /does not look like a scripture reference/i);
   assert.match(raw, /tv_query/i);
 });
+
+test("bible_query returns formatted verse text for valid refs", async () => {
+  const raw = await bibleTool.execute({
+    action: "query",
+    query: "Genesis 1:1",
+  });
+  if (raw.startsWith("No verse found")) return;
+  assert.doesNotMatch(raw, /^\[/);
+  assert.match(raw, /Genesis 1:1/);
+});

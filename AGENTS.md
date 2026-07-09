@@ -67,9 +67,10 @@ Owned by the JEXXXUS platform / tooling team.
   `embed_url`/stream URLs, Supabase, or internal Obsidian TV docs. Env: `TV_CONTENT_PATH`,
   `TV_PUBLIC_BASE_URL`.
 - BLXCKCHAT empire routing (`src/lib/blxckchat/empire-routing.ts`) plans multi-tool replies:
-  thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) for separate
-  `bible_query` calls — never pass series titles (e.g. Forgive Me Father) as bible queries.
-  Regression tests: `src/__tests__/empire-routing.test.ts`.
+  thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) and `tvSearchQuery`
+  (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `empire-prefetch.ts`
+  pre-loads scripture + TV search into the system prompt for smaller models. Regression tests:
+  `src/__tests__/empire-routing.test.ts`.
 
 ## 6. Child DOX Index
 

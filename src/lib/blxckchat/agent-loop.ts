@@ -6,6 +6,8 @@ import { confirmToolCall as defaultConfirmToolCall } from "./confirm.js";
 import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
 import { EMPIRE_CONTENT_ROUTING, formatEmpireRoutingHint } from "./empire-routing.js";
+import { prefetchEmpireContext } from "./empire-prefetch.js";
+import { formatToolResultForFallback } from "./tool-result-format.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
 
@@ -82,14 +84,7 @@ when explaining tool actions; the operator must confirm any write/shell tool bef
 
 ${EMPIRE_CONTENT_ROUTING}`;
 
-function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): string {
-  const base = persona
-    ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
-    : SYSTEM_PROMPT_BASE;
-
-  const routingHint = formatEmpireRoutingHint(userPrompt);
-  let prompt = routingHint ? `${base}\n\n${routingHint}` : base;
-
+function appendDocContext(prompt: string, userPrompt: string): string {
   const docChunks = searchDocs(userPrompt, 5);
   if (docChunks.length === 0) return prompt;
 
@@ -98,6 +93,22 @@ function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): string
     .join("\n\n");
 
   return `${prompt}\n\nRelevant JEXXXUS documentation context:\n\n${context}`;
+}
+
+async function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): Promise<string> {
+  const base = persona
+    ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
+    : SYSTEM_PROMPT_BASE;
+
+  const routingHint = formatEmpireRoutingHint(userPrompt);
+  let prompt = routingHint ? `${base}\n\n${routingHint}` : base;
+
+  const prefetch = await prefetchEmpireContext(userPrompt);
+  if (prefetch) {
+    prompt = `${prompt}\n\n${prefetch}`;
+  }
+
+  return appendDocContext(prompt, userPrompt);
 }
 
 /**
@@ -124,7 +135,7 @@ export async function runAgent(
       ? history.slice(history.length - MAX_HISTORY_MESSAGES)
       : history;
 
-  const systemPrompt = buildSystemPrompt(userPrompt, options.persona);
+  const systemPrompt = await buildSystemPrompt(userPrompt, options.persona);
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
     ...trimmedHistory,
@@ -150,6 +161,7 @@ export async function runAgent(
   let lastCallSignature: string | null = null;
   let repeatCount = 0;
   let lastSuccessfulResult: string | null = null;
+  let lastSuccessfulTool: string | null = null;
   let bibleQueryMissCount = 0;
 
   // Wraps a final answer with the transcript to hand back as next-turn
@@ -217,10 +229,11 @@ export async function runAgent(
         lastCallSignature = signature;
       }
 
-      if (repeatCount >= 2 && lastSuccessfulResult) {
+      if (repeatCount >= 2 && lastSuccessfulResult && lastSuccessfulTool) {
         // The model already has this result and is looping instead of
-        // answering. Return it directly rather than exhausting MAX_TURNS.
-        return finish(`Based on the ${tool.name} result: ${lastSuccessfulResult}`);
+        // answering. Return formatted context rather than raw JSON dumps.
+        const formatted = formatToolResultForFallback(lastSuccessfulTool, lastSuccessfulResult);
+        return finish(formatted);
       }
 
       let confirmed = true;
@@ -282,6 +295,7 @@ export async function runAgent(
         }
         if (!isError) {
           lastSuccessfulResult = toolResult;
+          lastSuccessfulTool = tool.name;
         }
         messages.push({
           role: "tool",
@@ -311,8 +325,9 @@ export async function runAgent(
   }
 
   return finish(
-    lastSuccessfulResult
-      ? `Based on the available tool result: ${lastSuccessfulResult}`
-      : "BLXCKCHAT stopped after reaching the maximum number of tool-call turns."
+    lastSuccessfulResult && lastSuccessfulTool
+      ? formatToolResultForFallback(lastSuccessfulTool, lastSuccessfulResult)
+      : "BLXCKCHAT stopped after reaching the maximum number of tool-call turns. " +
+          "Try asking again — pre-fetched TV and scripture may already be in context for thematic queries."
   );
 }

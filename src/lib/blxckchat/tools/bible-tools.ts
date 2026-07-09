@@ -7,6 +7,7 @@ import {
   findVerse,
   looksLikeVerseReference,
 } from "../../bible.js";
+import { formatBibleVerseForChat } from "../bible-format.js";
 
 /**
  * Read-only wrapper around lib/bible.ts. Consolidated into a single tool
@@ -56,9 +57,12 @@ export const bibleTool: BlxckchatTool = {
     // failing on an unrecognized literal — the presence of specific params
     // is a more reliable signal than the exact action string chosen.
     const wantsSections = rawAction.includes("section");
-    const wantsBooks = rawAction.includes("book") && !bookArg;
-    const wantsChapters = rawAction.includes("chapter") || (section && bookArg && !query);
-    const wantsVerse = query || rawAction.includes("verse") || rawAction.includes("query");
+    const wantsBooks =
+      rawAction === "books" || (rawAction.includes("book") && !bookArg && !rawAction.includes("chapter"));
+    const wantsChapters =
+      rawAction === "chapters" ||
+      (rawAction.includes("chapter") && Boolean(section) && Boolean(bookArg));
+    const wantsVerse = Boolean(query) || rawAction === "query" || rawAction.includes("verse");
 
     if (wantsSections) {
       return JSON.stringify(getBibleSections());
@@ -70,11 +74,20 @@ export const bibleTool: BlxckchatTool = {
     }
 
     if (wantsChapters) {
-      if (!section || !bookArg)
-        return "Error: 'section' and 'book' are required to list chapters.";
+      if (!section || !bookArg) {
+        return (
+          "Error: chapter listing requires section + book. For a single verse use action=query " +
+          "with Book Chapter:Verse (e.g. '1 John 1:9')."
+        );
+      }
       const bookInfo = findBook(bookArg);
       const bookFolder = bookInfo?.book ?? bookArg;
-      return JSON.stringify(getBibleChapters(section, bookFolder));
+      const chapters = getBibleChapters(section, bookFolder);
+      return (
+        `Chapter list for ${bookArg} (navigation only — not verse text):\n` +
+        `${chapters.join(", ")}\n\n` +
+        `Use action=query with a full reference like "${bookArg} 1:1" to fetch verse text.`
+      );
     }
 
     if (wantsVerse) {
@@ -93,7 +106,7 @@ export const bibleTool: BlxckchatTool = {
           `call tv_query with action=search instead of retrying bible_query.`
         );
       }
-      return JSON.stringify(verse);
+      return formatBibleVerseForChat(verse);
     }
 
     return (
