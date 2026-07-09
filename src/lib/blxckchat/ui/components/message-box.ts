@@ -10,7 +10,7 @@ import { markdownToBlessed } from "../renderer/markdown.js";
 import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/markdown.js";
 import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult, TerminalSession } from "../session/session-store.js";
-import { wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
+import { framePanel, wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 import { TAG, THEME } from "../theme.js";
 import { centerHeroVertically } from "./jexxxus-hero.js";
@@ -452,7 +452,11 @@ export function createMessageBox(
       return null;
     },
     getPlainText() {
-      return renderPlainContent();
+      const content = renderPlainContent();
+      if (!content.trim()) {
+        return framePanel("", Math.max(40, (screen.width as number) || 80));
+      }
+      return framePanel(content, Math.max(40, (screen.width as number) || 80));
     },
     popLastExchange() {
       while (blocks.length > 0) {

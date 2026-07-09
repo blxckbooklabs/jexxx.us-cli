@@ -6,6 +6,7 @@ import {
   detectSlashInputMode,
   type SlashSuggestion,
 } from "../slash/autocomplete.js";
+import { frameTransmitInput } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 
@@ -144,8 +145,11 @@ export function createInputBox(
   });
 
   input.on("keypress", () => {
-    refreshSlashSuggestions(input.getValue());
-    notify();
+    // Blessed updates textbox value after our listener; defer one tick.
+    setImmediate(() => {
+      refreshSlashSuggestions(input.getValue());
+      notify();
+    });
   });
 
   input.key(["C-c", "C-d"], () => {
@@ -219,12 +223,8 @@ export function createInputBox(
     notify();
   });
 
-  const getPlainText = (): string => {
-    const cols = Math.max(40, screen.width as number);
-    const value = input.getValue();
-    const border = "─".repeat(Math.max(10, cols - 2));
-    return [`╭${border}╮`, `│ › ${value}▌`, `╰${border}╯`].join("\n");
-  };
+  const getPlainText = (): string =>
+    frameTransmitInput(input.getValue(), (screen.width as number) || 80);
 
   return {
     element: input,

@@ -404,7 +404,9 @@ export async function startTerminalChat(
   const updateScrollStatus = (): void => {
     const { pinnedToBottom, percent } = messageBox.getScrollState();
     if (pinnedToBottom) {
-      statusBar.setMessage("Shift+↑↓ scroll · Ctrl+B history · / commands · ? hotkeys");
+      statusBar.setMessage(
+        "Shift+↑↓ scroll · Ctrl+B history · / commands · Ctrl+Y copy · ? hotkeys",
+      );
     } else {
       statusBar.setMessage(`History ${percent}% · End jump latest · Ctrl+B scroll · ? hotkeys`);
     }

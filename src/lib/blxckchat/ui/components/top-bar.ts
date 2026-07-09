@@ -1,5 +1,6 @@
 import blessed from "blessed";
 
+import { buildTopBarPlain } from "../renderer/plain-text.js";
 import { THEME, TAG, glitchNoise, crtCorner } from "../theme.js";
 
 export interface TopBarHandle {
@@ -34,13 +35,8 @@ export function createTopBar(
     content: "",
   });
 
-  const getPlainText = (): string => {
-    const cols = screen.width as number;
-    const model = subtitle;
-    const title = `BLXCKCHAT ╱ ${model}`;
-    const pad = Math.max(1, cols - title.length - 6);
-    return `${title}${" ".repeat(pad)} LIVE`;
-  };
+  const getPlainText = (): string =>
+    buildTopBarPlain((screen.width as number) || 80, subtitle, glitchSeed);
 
   const render = (): void => {
     const cols = screen.width as number;

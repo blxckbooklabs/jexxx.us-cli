@@ -24,6 +24,12 @@ test("resolveSlashCommandName resolves aliases", () => {
 });
 
 test("detectSlashInputMode distinguishes command vs argument", () => {
+  assert.deepEqual(detectSlashInputMode("/"), {
+    mode: "command",
+    commandName: "",
+    commandFilter: "",
+    argFilter: "",
+  });
   assert.deepEqual(detectSlashInputMode("/mod"), {
     mode: "command",
     commandName: "",
@@ -40,6 +46,13 @@ test("detectSlashInputMode distinguishes command vs argument", () => {
 
 test("getCommandSuggestions fuzzy-filters commands", () => {
   const results = getCommandSuggestions("mod");
+  assert.ok(results.some((r) => r.label === "/model"));
+});
+
+test("getCommandSuggestions lists all commands for bare slash", () => {
+  const results = getCommandSuggestions("");
+  assert.ok(results.length >= 8);
+  assert.ok(results.some((r) => r.label === "/help"));
   assert.ok(results.some((r) => r.label === "/model"));
 });
 

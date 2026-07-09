@@ -16,6 +16,18 @@ export interface SlashAutocompleteContext {
 }
 
 export function getCommandSuggestions(filter: string): SlashSuggestion[] {
+  const normalized = filter.replace(/^\//, "");
+  if (!normalized.trim()) {
+    return BUILTIN_SLASH_COMMANDS.map((cmd) => {
+      const hint = cmd.argumentHint ? ` ${cmd.argumentHint}` : "";
+      return {
+        value: `/${cmd.name}`,
+        label: `/${cmd.name}`,
+        description: cmd.description + (hint ? ` ${hint}` : ""),
+      };
+    });
+  }
+
   const items = BUILTIN_SLASH_COMMANDS.flatMap((cmd) => {
     const entries: Array<{ cmd: SlashCommandDef; name: string }> = [
       { cmd, name: cmd.name },

@@ -1,5 +1,6 @@
 import blessed from "blessed";
 
+import { buildStatusBarPlain } from "../renderer/plain-text.js";
 import { THEME, TAG, glitchNoise } from "../theme.js";
 
 export interface StatusBarHandle {
@@ -52,7 +53,7 @@ export function createStatusBar(
       render();
     },
     getPlainText() {
-      return message;
+      return buildStatusBarPlain((screen.width as number) || 80, message);
     },
   };
 }

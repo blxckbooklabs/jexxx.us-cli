@@ -3,8 +3,12 @@ import * as fs from "fs";
 import { test } from "node:test";
 
 import {
+  buildStatusBarPlain,
+  buildTopBarPlain,
   buildTuISnapshot,
   buildWelcomeBannerPlain,
+  framePanel,
+  frameTransmitInput,
   stripBlessedTags,
 } from "../lib/blxckchat/ui/renderer/plain-text.js";
 import { getSnapshotPath, writeSnapshot } from "../lib/blxckchat/ui/session/tui-snapshot.js";
@@ -22,19 +26,45 @@ test("buildWelcomeBannerPlain renders copyable welcome box", () => {
   assert.match(out, /╭/);
 });
 
+test("buildTopBarPlain renders CRT header lines", () => {
+  const out = buildTopBarPlain(72, "ollama/gemma4:31b-cloud");
+  assert.match(out, /▄▀ BLXCKCHAT │ ollama\/gemma4:31b-cloud/);
+  assert.match(out, /▮ LIVE ▀▄/);
+});
+
+test("framePanel wraps content in box borders", () => {
+  const out = framePanel("Hello\nworld", 40);
+  assert.match(out, /^┌/);
+  assert.match(out, /│Hello/);
+  assert.match(out, /│world/);
+  assert.match(out, /└/);
+});
+
+test("frameTransmitInput matches transmit box chrome", () => {
+  const out = frameTransmitInput("/hel", 50);
+  assert.match(out, /┌─ transmit ─/);
+  assert.match(out, /│\/hel/);
+});
+
+test("buildStatusBarPlain adds glitch ornaments", () => {
+  const out = buildStatusBarPlain(60, "Ctrl+Y copy");
+  assert.match(out, /^░ Ctrl\+Y copy/);
+  assert.match(out, /[░▒▓█▄▀]/);
+});
+
 test("buildTuISnapshot assembles full TUI plain text", () => {
   const out = buildTuISnapshot({
     width: 60,
-    topBar: "BLXCKCHAT — test",
-    messages: "Hello",
-    statusBar: "Ctrl+Y copy",
-    input: "> _",
+    topBar: buildTopBarPlain(60, "test-model"),
+    messages: framePanel("Hello", 60),
+    statusBar: buildStatusBarPlain(60, "Ctrl+Y copy"),
+    input: frameTransmitInput("", 60),
   });
-  assert.match(out, /BLXCKCHAT — test/);
+  assert.match(out, /BLXCKCHAT │ test-model/);
   assert.match(out, /Hello/);
   assert.match(out, /Ctrl\+Y copy/);
-  assert.match(out, /> _/);
-  assert.match(out, /─{40,}/);
+  assert.match(out, /transmit/);
+  assert.match(out, /┌/);
 });
 
 test("writeSnapshot persists plain TUI to disk", () => {

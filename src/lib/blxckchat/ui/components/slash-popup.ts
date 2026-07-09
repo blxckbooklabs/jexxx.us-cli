@@ -57,6 +57,7 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
       }
       list.setItems(suggestions.map(formatItem));
       list.select(selectedIndex);
+      list.setFront();
       list.show();
       visible = true;
       screen.render();
