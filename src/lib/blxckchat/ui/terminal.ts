@@ -503,6 +503,8 @@ export async function startTerminalChat(
       [["S-down", "C-down"], () => messageBox.scrollDown()],
       [["S-pageup"], () => messageBox.scrollPageUp()],
       [["S-pagedown"], () => messageBox.scrollPageDown()],
+      [["C-M-u", "M-u"], () => messageBox.scrollHalfPageUp()],
+      [["C-M-d", "M-d"], () => messageBox.scrollHalfPageDown()],
     ];
     for (const [keys, fn] of scrollKeys) {
       inputBox.element.key(keys, () => {
@@ -683,6 +685,14 @@ export async function startTerminalChat(
   });
   messageBox.element.key(["pagedown"], () => {
     messageBox.scrollPageDown();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["C-M-u", "M-u"], () => {
+    messageBox.scrollHalfPageUp();
+    updateScrollStatus();
+  });
+  messageBox.element.key(["C-M-d", "M-d"], () => {
+    messageBox.scrollHalfPageDown();
     updateScrollStatus();
   });
   messageBox.element.key(["home"], () => {

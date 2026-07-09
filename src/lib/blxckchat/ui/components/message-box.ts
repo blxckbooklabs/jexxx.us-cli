@@ -16,9 +16,14 @@ import { isBlessedMouseEnabled } from "../tty.js";
 import { TAG, THEME } from "../theme.js";
 import { centerHeroVertically } from "./jexxxus-hero.js";
 import {
+  halfPageScrollDelta,
   isNearBottom as isNearBottomLines,
+  lineScrollStep,
+  pageScrollDelta,
+  restoreScrollOffset,
+  SCROLL_LAYOUT_DEFER_MS,
   scrollPercent as scrollPercentFromLines,
-  scrollPercentAfterContent,
+  STREAM_RENDER_INTERVAL_MS,
 } from "./scroll-state.js";
 
 function highlightSearch(text: string, query: string): string {
@@ -70,6 +75,8 @@ export interface MessageBoxHandle {
   scrollDown: () => void;
   scrollPageUp: () => void;
   scrollPageDown: () => void;
+  scrollHalfPageUp: () => void;
+  scrollHalfPageDown: () => void;
   scrollToTop: () => void;
   scrollToBottom: () => void;
   getScrollState: () => ScrollState;
@@ -103,6 +110,8 @@ export function createMessageBox(
   let searchQuery = "";
   let pinnedToBottom = true;
   let blessedContentCache: string | null = null;
+  let streamRenderTimer: ReturnType<typeof setTimeout> | null = null;
+  let layoutDeferTimer: ReturnType<typeof setTimeout> | null = null;
 
   const box = blessed.box({
     parent: screen,
@@ -157,12 +166,59 @@ export function createMessageBox(
     });
   };
 
-  const applyScrollAfterContent = (savedPercent: number): void => {
-    const target = scrollPercentAfterContent(pinnedToBottom, savedPercent);
-    box.setScrollPerc(target);
-    syncPinnedFromScroll();
+  type ScrollSnapshot = {
+    pinned: boolean;
+    percent: number;
+    scroll: number;
+  };
+
+  const captureScrollSnapshot = (): ScrollSnapshot => ({
+    pinned: pinnedToBottom,
+    percent: pinnedToBottom ? 100 : readScrollPercent(),
+    scroll: box.getScroll() ?? 0,
+  });
+
+  const restoreScrollFromSnapshot = (snapshot: ScrollSnapshot, forceBottom: boolean): void => {
+    if (forceBottom || snapshot.pinned) {
+      pinnedToBottom = true;
+      box.setScrollPerc(100);
+    } else {
+      const { height, content } = getScrollMetrics();
+      const offset = restoreScrollOffset(snapshot.scroll, height, content);
+      box.setScroll(offset);
+      syncPinnedFromScroll();
+    }
     screen.render();
     emitScrollChange();
+  };
+
+  const deferScrollRestore = (fn: () => void, forceBottom: boolean): void => {
+    if (layoutDeferTimer) {
+      clearTimeout(layoutDeferTimer);
+      layoutDeferTimer = null;
+    }
+    if (forceBottom) {
+      layoutDeferTimer = setTimeout(() => {
+        layoutDeferTimer = null;
+        fn();
+      }, SCROLL_LAYOUT_DEFER_MS);
+      return;
+    }
+    setImmediate(fn);
+  };
+
+  const setBoxContentWithScroll = (
+    content: string,
+    opts: { forceBottom?: boolean; snapshot?: ScrollSnapshot } = {},
+  ): void => {
+    const snapshot = opts.snapshot ?? captureScrollSnapshot();
+    const forceBottom = opts.forceBottom ?? false;
+    blessedContentCache = content;
+    box.setContent(content);
+    deferScrollRestore(() => {
+      restoreScrollFromSnapshot(snapshot, forceBottom);
+      notify();
+    }, forceBottom);
   };
 
   const allThinkingBlocks = (): ThinkingBlock[] =>
@@ -285,18 +341,17 @@ export function createMessageBox(
   };
 
   const refreshContent = (forceBottom = false): void => {
-    const savedPercent = readScrollPercent();
+    const snapshot = captureScrollSnapshot();
     invalidateBlessedCache();
-    box.setContent(getBlessedContent());
-    if (forceBottom) {
-      pinnedToBottom = true;
-      box.setScrollPerc(100);
-      screen.render();
-      emitScrollChange();
-    } else {
-      applyScrollAfterContent(savedPercent);
-    }
-    notify();
+    setBoxContentWithScroll(renderBlessedContent(), { forceBottom, snapshot });
+  };
+
+  const flushStreamRender = (blockIndex: number): void => {
+    const block = blocks[blockIndex];
+    if (block?.type !== "assistant") return;
+    const snapshot = captureScrollSnapshot();
+    invalidateBlessedCache();
+    setBoxContentWithScroll(getBlessedContent(), { snapshot });
   };
 
   const rebuild = (): void => {
@@ -369,23 +424,26 @@ export function createMessageBox(
       if (block?.type === "assistant") {
         block.content = partial;
         block.assistantRaw = rawPlain ?? partial;
-        const savedPercent = pinnedToBottom ? 100 : readScrollPercent();
-        invalidateBlessedCache();
-        box.setContent(getBlessedContent());
-        box.setScrollPerc(scrollPercentAfterContent(pinnedToBottom, savedPercent));
-        syncPinnedFromScroll();
-        screen.render();
-        emitScrollChange();
-        notify();
+        if (streamRenderTimer) clearTimeout(streamRenderTimer);
+        streamRenderTimer = setTimeout(() => {
+          streamRenderTimer = null;
+          flushStreamRender(blockIndex);
+        }, STREAM_RENDER_INTERVAL_MS);
       }
     },
     finalizeAssistant(blockIndex: number, content: string, thinkingBlocks: ThinkingBlock[]) {
       const block = blocks[blockIndex];
       if (block?.type === "assistant") {
+        if (streamRenderTimer) {
+          clearTimeout(streamRenderTimer);
+          streamRenderTimer = null;
+        }
         block.assistantRaw = content;
         block.content = markdownToBlessed(content);
         block.thinkingBlocks = thinkingBlocks;
-        rebuild();
+        const snapshot = captureScrollSnapshot();
+        invalidateBlessedCache();
+        setBoxContentWithScroll(getBlessedContent(), { snapshot });
       }
     },
     appendTools(tools: ToolResult[]) {
@@ -406,18 +464,22 @@ export function createMessageBox(
       rebuild();
     },
     scrollUp() {
-      scrollBy(-3);
+      scrollBy(-lineScrollStep());
     },
     scrollDown() {
-      scrollBy(3);
+      scrollBy(lineScrollStep());
     },
     scrollPageUp() {
-      const page = Math.max(5, ((box.height as number) || 12) - 2);
-      scrollBy(-page);
+      scrollBy(-pageScrollDelta(getViewportHeight()));
     },
     scrollPageDown() {
-      const page = Math.max(5, ((box.height as number) || 12) - 2);
-      scrollBy(page);
+      scrollBy(pageScrollDelta(getViewportHeight()));
+    },
+    scrollHalfPageUp() {
+      scrollBy(-halfPageScrollDelta(getViewportHeight()));
+    },
+    scrollHalfPageDown() {
+      scrollBy(halfPageScrollDelta(getViewportHeight()));
     },
     scrollToTop() {
       box.setScroll(0);
@@ -428,6 +490,7 @@ export function createMessageBox(
     scrollToBottom() {
       box.setScrollPerc(100);
       pinnedToBottom = true;
+      syncPinnedFromScroll();
       screen.render();
       emitScrollChange();
     },
