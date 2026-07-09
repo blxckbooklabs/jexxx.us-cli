@@ -28,7 +28,12 @@ export function loadCredentials(): CredentialsFile {
   }
   const raw = fs.readFileSync(CREDENTIALS_PATH, "utf-8");
   try {
-    return JSON.parse(raw) as CredentialsFile;
+    const parsed = JSON.parse(raw) as CredentialsFile;
+    // Ensure providers array exists and is valid
+    if (!Array.isArray(parsed.providers)) {
+      return { providers: [] };
+    }
+    return parsed;
   } catch {
     return { providers: [] };
   }
