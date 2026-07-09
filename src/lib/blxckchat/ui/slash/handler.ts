@@ -38,6 +38,7 @@ import type { AuthTuiActions } from "../auth-tui.js";
 import { formatHeroHint, formatHeroSubtitle } from "../components/jexxxus-hero.js";
 import { buildChromeDigestPlain } from "../renderer/plain-text.js";
 import { copyToClipboard, writeChromeDigest } from "../session/tui-snapshot.js";
+import { handleAccount } from "./account-handler.js";
 
 export interface SlashHandlerState {
   session: TerminalSession;
@@ -463,6 +464,9 @@ export async function dispatchSlashCommand(
 
     case "auth":
       return handleAuth(args, state);
+
+    case "account":
+      return handleAccount(args);
 
     case "divinities":
       return handleDivinities(args, state);

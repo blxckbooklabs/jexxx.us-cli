@@ -30,6 +30,13 @@ export function formatToolResultForFallback(toolName: string, raw: string): stri
     }
   }
 
+  if (toolName === "account_query") {
+    if (trimmed.startsWith("Error: not signed in")) {
+      return `${trimmed} Vault questions need /auth login first.`;
+    }
+    return trimmed;
+  }
+
   if (looksLikeChapterJsonArray(trimmed)) {
     return (
       "I retrieved catalog metadata but not the content you asked for. " +

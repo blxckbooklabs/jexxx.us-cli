@@ -27,6 +27,12 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
     argumentHint: "login | logout | refresh",
   },
   {
+    name: "account",
+    aliases: ["vault"],
+    description: "Vault summary and export (BLXCKBOOK + NXT) — requires /auth login",
+    argumentHint: "status | export [blxckbook|nxt|all]",
+  },
+  {
     name: "chrome",
     aliases: ["indicators", "hud"],
     description: "Copy TUI text indicators (model, auth, tools, hints) to clipboard",

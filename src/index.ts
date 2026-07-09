@@ -572,7 +572,11 @@ blxckchatCmd
     }
 
     const provider = resolveProvider(storedConfig);
-    const tools = buildToolRegistry(Boolean(options.shell));
+    const authed = Boolean(loadCredentials({ quiet: true }));
+    const tools = buildToolRegistry({
+      allowShell: Boolean(options.shell),
+      includeAccountQuery: authed,
+    });
 
     if (options.shell) {
       console.log(

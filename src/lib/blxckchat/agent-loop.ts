@@ -12,6 +12,8 @@ import {
   type EmpireRoutingOptions,
 } from "./empire-routing.js";
 import { prefetchEmpireContext } from "./empire-prefetch.js";
+import { ACCOUNT_CONTENT_ROUTING, formatAccountRoutingHint } from "./account-routing.js";
+import { prefetchAccountContext } from "./account-prefetch.js";
 import {
   extractEmpireUrlsFromText,
   sanitizeEmpireUrls,
@@ -69,13 +71,15 @@ export interface RunAgentOptions {
 
 const SYSTEM_PROMPT_BASE = `You are BLXCKCHAT, the native AI agent for the JEXXXUS CLI. You service \
 specific functions related to the JEXXXUS kingdom/garden ecosystem — Bible lookups, public VEIL \
-articles (veil.jexxx.us), public JEXXXUS | TV videos (tv.jexxx.us), dashboard diagnostics, \
-notifications, and contact imports. You are not a general coding agent; stay scoped to the tools \
-available to you. When a tool call would write data or run a shell command, expect the user to be \
-prompted for confirmation before it executes — explain what you're about to do so they can make \
-an informed choice.
+articles (veil.jexxx.us), public JEXXXUS | TV videos (tv.jexxx.us), private vault data for \
+signed-in users (BLXCKBOOK + NXT), dashboard diagnostics, notifications, and contact imports. You \
+are not a general coding agent; stay scoped to the tools available to you. When a tool call would \
+write data or run a shell command, expect the user to be prompted for confirmation before it \
+executes — explain what you're about to do so they can make an informed choice.
 
-${EMPIRE_CONTENT_ROUTING}`;
+${EMPIRE_CONTENT_ROUTING}
+
+${ACCOUNT_CONTENT_ROUTING}`;
 
 const MAX_TURNS = 8;
 
@@ -98,8 +102,9 @@ export interface AgentTurnResult {
 
 const PERSONA_CLI_BRIDGE = `You are operating inside the JEXXXUS CLI (BLXCKCHAT). Retain your persona voice \
 and identity above. You still have access to BLXCKCHAT tools (Bible lookups, public VEIL articles, \
-public JEXXXUS | TV videos, dashboard diagnostics, notifications, contact imports). Stay in character \
-when explaining tool actions; the operator must confirm any write/shell tool before it runs.
+public JEXXXUS | TV videos, signed-in vault data via account_query, dashboard diagnostics, \
+notifications, contact imports). Stay in character when explaining tool actions; the operator must \
+confirm any write/shell tool before it runs.
 
 **Persona + empire:** When the scene mentions scripture bookmarks (Proverbs 31, etc.), a VEIL draft/article, \
 or a TV sacrament, call veil_query / bible_query / tv_query in the **same turn** and weave real URLs and \
@@ -131,11 +136,19 @@ async function buildSystemPrompt(
     : SYSTEM_PROMPT_BASE;
 
   const routingHint = formatEmpireRoutingHint(userPrompt, routingOptions);
-  let prompt = routingHint ? `${base}\n\n${routingHint}` : base;
+  const accountHint = formatAccountRoutingHint(userPrompt);
+  let prompt = base;
+  if (routingHint) prompt = `${prompt}\n\n${routingHint}`;
+  if (accountHint) prompt = `${prompt}\n\n${accountHint}`;
 
   const prefetch = await prefetchEmpireContext(userPrompt, routingOptions);
   if (prefetch) {
     prompt = `${prompt}\n\n${prefetch}`;
+  }
+
+  const accountPrefetch = await prefetchAccountContext(userPrompt);
+  if (accountPrefetch) {
+    prompt = `${prompt}\n\n${accountPrefetch}`;
   }
 
   return appendDocContext(prompt, userPrompt);
