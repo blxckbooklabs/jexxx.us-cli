@@ -48,7 +48,7 @@ import { dispatchSlashCommand, isSlashCommand, parseSlashInput } from "./slash/h
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
 import { createModelPickerOverlay } from "./components/model-picker-overlay.js";
-import { createConnectOverlay } from "./components/connect-overlay.js";
+import { createProviderOverlay } from "./components/provider-overlay.js";
 import { MessageQueue } from "./message-queue.js";
 import { openExternalEditor } from "./external-editor.js";
 import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
@@ -163,7 +163,7 @@ export async function startTerminalChat(
   const messageQueue = new MessageQueue();
 
   let modelPickerOverlay!: ReturnType<typeof createModelPickerOverlay>;
-  let connectOverlay!: ReturnType<typeof createConnectOverlay>;
+  let providerOverlay!: ReturnType<typeof createProviderOverlay>;
 
   let isProcessing = false;
   let abortController: AbortController | null = null;
@@ -193,8 +193,8 @@ export async function startTerminalChat(
       setActiveConfig,
       copySnapshot,
       openModelPicker: () => modelPickerOverlay.open(),
-      openConnect: (catalogId) => connectOverlay.open(catalogId),
-      openProviderPicker: () => connectOverlay.openProviderSwitch(),
+      openProviderPicker: () => providerOverlay.open(),
+      setupProvider: (catalogId) => providerOverlay.setup(catalogId),
     });
     if (parsed.command === "reset") {
       messageBox.clearChat();
@@ -207,6 +207,10 @@ export async function startTerminalChat(
     }
     if (result.exit) {
       requestExit();
+      return;
+    }
+    if (!result.deferInputFocus) {
+      inputBox.focus();
     }
   };
 
@@ -291,7 +295,7 @@ export async function startTerminalChat(
     },
   });
 
-  connectOverlay = createConnectOverlay(screen, {
+  providerOverlay = createProviderOverlay(screen, {
     getActiveConfig: () => activeConfig,
     setActiveConfig,
     onMessage: (message) => {
@@ -422,7 +426,9 @@ export async function startTerminalChat(
     const slashLine = coerceSlashLine(trimmed);
     if (isSlashCommand(slashLine)) {
       await runSlash(slashLine);
-      statusBar.setMessage("Ready — ? for hotkeys · / for commands");
+      if (!providerOverlay.isVisible()) {
+        statusBar.setMessage("Ready — ? for hotkeys · / for commands");
+      }
       return;
     }
 
@@ -567,6 +573,7 @@ export async function startTerminalChat(
           activeConfig,
           modelOptions: cachedModelOptions,
         }),
+      onSetupProvider: (catalogId) => providerOverlay.setup(catalogId),
     },
   );
 
@@ -575,8 +582,8 @@ export async function startTerminalChat(
       abortInFlight();
       return true;
     }
-    if (connectOverlay.isVisible()) {
-      connectOverlay.close();
+    if (providerOverlay.isVisible()) {
+      providerOverlay.close();
       inputBox.focus();
       return true;
     }

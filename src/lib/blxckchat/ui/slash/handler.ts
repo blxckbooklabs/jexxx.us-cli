@@ -1,4 +1,5 @@
 import {
+  getProviderByName,
   loadCredentials,
   listProvidersRedacted,
   upsertProvider,
@@ -22,14 +23,15 @@ export interface SlashHandlerState {
   setActiveConfig: (config: StoredProviderConfig, provider: Provider) => void;
   copySnapshot: () => Promise<{ path: string; copied: boolean }>;
   openModelPicker?: () => void | Promise<void>;
-  openConnect?: (catalogId?: string) => void | Promise<void>;
   openProviderPicker?: () => void | Promise<void>;
+  setupProvider?: (catalogId: string) => Promise<void>;
 }
 
 export interface SlashResult {
   handled: boolean;
   messages: string[];
   exit?: boolean;
+  deferInputFocus?: boolean;
 }
 
 function findProviderConfig(name: string): StoredProviderConfig | null {
@@ -72,7 +74,7 @@ async function handleModel(
   if (!args) {
     if (state.openModelPicker) {
       await state.openModelPicker();
-      return { handled: true, messages: [] };
+      return { handled: true, messages: [], deferInputFocus: true };
     }
     lines.push(
       `Current model: ${state.activeConfig.provider}/${state.activeConfig.model}`,
@@ -118,16 +120,19 @@ async function handleModel(
   return { handled: true, messages: lines };
 }
 
-function handleProvider(args: string, state: SlashHandlerState): SlashResult {
+async function handleProvider(
+  args: string,
+  state: SlashHandlerState,
+): Promise<SlashResult> {
   const providers = listProvidersRedacted();
   const lines: string[] = [];
 
   if (!args) {
     if (state.openProviderPicker) {
       state.openProviderPicker();
-      return { handled: true, messages: [] };
+      return { handled: true, messages: [], deferInputFocus: true };
     }
-    lines.push("Saved profiles (use /provider <name>). Add new: /connect or /providers");
+    lines.push("Use /provider to open picker — saved profiles + catalog (API key flow)");
     for (const p of providers) {
       const active = p.name === state.activeConfig.name ? "▸ " : "  ";
       const def = p.isDefault ? " (default)" : "";
@@ -136,65 +141,30 @@ function handleProvider(args: string, state: SlashHandlerState): SlashResult {
     return { handled: true, messages: lines };
   }
 
-  const resolved = findProviderConfig(args);
+  const catalogId = args.trim().toLowerCase();
+  const catalogEntry = getCatalogEntry(catalogId);
+  if (catalogEntry && state.setupProvider) {
+    await state.setupProvider(catalogId);
+    return { handled: true, messages: [], deferInputFocus: true };
+  }
+
+  const resolved = findProviderConfig(args) ?? getProviderByName(args);
   if (!resolved) {
     return {
       handled: true,
-      messages: [`Unknown provider config "${args}". Use /provider to list.`],
+      messages: [
+        `Unknown profile "${args}".`,
+        "Use /provider to browse catalog, or /provider <catalog-id> (e.g. google, openai).",
+      ],
     };
   }
 
   const provider = resolveProvider(resolved);
   state.setActiveConfig(resolved, provider);
   lines.push(
-    `Switched to provider "${resolved.name}" (${resolved.provider}/${resolved.model})`,
+    `Switched to "${resolved.name}" (${resolved.provider}/${resolved.model})`,
   );
   return { handled: true, messages: lines };
-}
-
-async function handleConnect(
-  args: string,
-  state: SlashHandlerState,
-): Promise<SlashResult> {
-  if (!args) {
-    if (state.openConnect) {
-      await state.openConnect();
-      return { handled: true, messages: [] };
-    }
-    const lines = [
-      "Add an inference provider (BYOK) — same as OpenCode /connect:",
-      "  /connect or /providers  — open catalog picker + API key flow",
-      "  /connect <id>           — quick-connect one provider",
-      "",
-      "Not the same as /provider (switch saved profiles only).",
-      "",
-      "Catalog: opencode-zen, anthropic, openai, google, openrouter, ollama,",
-      "  ollama-cloud, llamacpp, groq, deepseek, mistral, xai, …",
-    ];
-    return { handled: true, messages: lines };
-  }
-
-  const catalogId = args.trim().toLowerCase();
-  const entry = getCatalogEntry(catalogId);
-  if (!entry) {
-    return {
-      handled: true,
-      messages: [`Unknown provider "${args}". Use /connect to browse the catalog.`],
-    };
-  }
-
-  if (state.openConnect) {
-    await state.openConnect(catalogId);
-    return { handled: true, messages: [] };
-  }
-
-  return {
-    handled: true,
-    messages: [
-      `Provider "${entry.label}" requires TUI connect flow.`,
-      "Run BLXCKCHAT interactively and use /connect.",
-    ],
-  };
 }
 
 function handleSession(state: SlashHandlerState): SlashResult {
@@ -253,9 +223,6 @@ export async function dispatchSlashCommand(
       const path = exportSessionToFile(state.session);
       return { handled: true, messages: [`Session exported to ${path}`] };
     }
-
-    case "connect":
-      return handleConnect(args, state);
 
     case "model":
       return handleModel(args, state);

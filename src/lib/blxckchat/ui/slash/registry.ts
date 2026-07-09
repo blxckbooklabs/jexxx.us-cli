@@ -7,17 +7,12 @@ export interface SlashCommandDef {
 
 export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
   { name: "help", aliases: ["?"], description: "Show slash commands and shortcuts" },
-  {
-    name: "connect",
-    aliases: ["login", "providers"],
-    description: "Add provider & API key (BYOK) — browse catalog",
-    argumentHint: "<provider-id>",
-  },
   { name: "model", aliases: ["models", "mo"], description: "Open model picker or switch model", argumentHint: "<provider/model>" },
   {
     name: "provider",
-    description: "Switch saved profile (use /connect to add providers)",
-    argumentHint: "<name>",
+    aliases: ["providers", "connect"],
+    description: "Switch profile or add provider (BYOK catalog + API key)",
+    argumentHint: "<name-or-catalog-id>",
   },
   { name: "session", aliases: ["status"], description: "Show session stats and active provider" },
   { name: "copy", description: "Copy full TUI snapshot to clipboard" },
@@ -68,7 +63,7 @@ export function formatSlashHelp(): string {
     lines.push(`  /${cmd.name}${hint}${aliases} — ${cmd.description}`);
   }
   lines.push("");
-  lines.push("/connect (or /providers) — add API keys · /provider — switch saved profile");
+  lines.push("/provider — switch saved profile or add gateway (API key flow)");
   lines.push("Type / to see suggestions · Tab/Enter to accept · ↑↓ to browse");
   lines.push("? for full hotkeys · Ctrl+C/D exit · Esc closes popups");
   return lines.join("\n");

@@ -43,6 +43,8 @@ export interface InputBoxOptions {
   shortcuts?: InputShortcutHandlers;
   slashPopup?: SlashPopupHandle;
   getSlashSuggestions?: (value: string) => Promise<SlashSuggestion[]>;
+  /** Start provider BYOK setup immediately (slash catalog pick). */
+  onSetupProvider?: (catalogId: string) => void | Promise<void>;
 }
 
 export function createInputBox(
@@ -141,11 +143,20 @@ export function createInputBox(
     const { mode } = detectSlashInputMode(value);
     if (mode === "none") return false;
 
+    if (suggestion.connectProvider && options.onSetupProvider) {
+      hideSlashPopup();
+      lineEditor.clear();
+      lastSlashValue = "";
+      screen.render();
+      notify();
+      void options.onSetupProvider(suggestion.connectProvider);
+      return true;
+    }
+
     const next = applySuggestion(value, suggestion, mode);
     lineEditor.setText(next);
     lastSlashValue = next;
     hideSlashPopup();
-    input.focus();
     screen.render();
     notify();
     return true;
@@ -168,7 +179,6 @@ export function createInputBox(
     draft = "";
     lineEditor.clear();
     onSubmit(trimmed);
-    input.focus();
     notify();
   };
 

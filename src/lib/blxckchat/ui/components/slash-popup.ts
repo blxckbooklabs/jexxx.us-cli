@@ -178,7 +178,7 @@ export function applySuggestion(
   }
 
   if (suggestion.connectProvider) {
-    return `/connect ${suggestion.connectProvider} `;
+    return `/provider ${suggestion.connectProvider} `;
   }
 
   const spaceIdx = currentValue.indexOf(" ");

@@ -23,26 +23,27 @@ import { resolveProvider } from "../lib/blxckchat/providers/registry.js";
 
 test("resolveSlashCommandName resolves aliases", () => {
   assert.equal(resolveSlashCommandName("mo"), "model");
-  assert.equal(resolveSlashCommandName("providers"), "connect");
+  assert.equal(resolveSlashCommandName("providers"), "provider");
+  assert.equal(resolveSlashCommandName("connect"), "provider");
   assert.equal(resolveSlashCommandName("quit"), "exit");
   assert.equal(resolveSlashCommandName("clear"), "reset");
 });
 
 test("resolveExactCommandToken matches full command tokens", () => {
-  assert.equal(resolveExactCommandToken("providers"), "connect");
-  assert.equal(resolveExactCommandToken("connect"), "connect");
+  assert.equal(resolveExactCommandToken("providers"), "provider");
+  assert.equal(resolveExactCommandToken("connect"), "provider");
   assert.equal(resolveExactCommandToken("mod"), null);
 });
 
 test("coerceSlashLine expands unambiguous partial commands", () => {
   assert.equal(coerceSlashLine("/mod"), "/model");
-  assert.equal(coerceSlashLine("/prov"), "/prov");
+  assert.equal(coerceSlashLine("/prov"), "/provider");
 });
 
-test("detectSlashInputMode treats /providers as connect arguments", () => {
+test("detectSlashInputMode treats /providers as provider arguments", () => {
   assert.deepEqual(detectSlashInputMode("/providers"), {
     mode: "argument",
-    commandName: "connect",
+    commandName: "provider",
     commandFilter: "",
     argFilter: "",
   });
@@ -76,8 +77,8 @@ test("getCommandSuggestions fuzzy-filters commands", () => {
 
 test("getCommandSuggestions lists all commands for bare slash", () => {
   const results = getCommandSuggestions("");
-  assert.ok(results.length >= 9);
-  assert.ok(results.some((r) => r.label === "/connect"));
+  assert.ok(results.length >= 8);
+  assert.ok(results.some((r) => r.label === "/provider"));
   assert.ok(results.some((r) => r.label === "/help"));
   assert.ok(results.some((r) => r.label === "/model"));
 });
@@ -191,7 +192,7 @@ test("dispatchSlashCommand /provider switches config", async () => {
 
   // May fail if beta not in credentials file — test only structure when unknown
   if (result.messages[0]?.includes("Unknown")) {
-    assert.match(result.messages[0], /Unknown provider/);
+    assert.match(result.messages[0], /Unknown profile/);
     return;
   }
 

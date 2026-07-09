@@ -13,7 +13,7 @@ export interface SlashSuggestion {
   value: string;
   label: string;
   description: string;
-  /** Apply as /connect <id> instead of the current command prefix. */
+  /** Start BYOK setup for this catalog id (does not fill input). */
   connectProvider?: string;
 }
 
@@ -82,22 +82,7 @@ export async function getArgumentSuggestions(
     }));
   }
 
-  if (commandName === "connect" || commandName === "login") {
-    const entries = listCatalogEntries();
-    const filtered = fuzzyFilter(
-      [...entries],
-      argFilter,
-      (e) => `${e.id} ${e.label}`,
-      12,
-    );
-    return filtered.map((e) => ({
-      value: e.id,
-      label: e.id,
-      description: e.label,
-    }));
-  }
-
-  if (commandName === "provider") {
+  if (commandName === "provider" || commandName === "providers") {
     const providers = listProvidersRedacted();
     const saved = fuzzyFilter(
       providers,

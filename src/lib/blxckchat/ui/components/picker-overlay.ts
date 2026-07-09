@@ -163,10 +163,6 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
 
   list.on("set items", () => wireAllItems());
 
-  list.on("select", (_item, idx) => {
-    if (typeof idx === "number") pickIndex(idx);
-  });
-
   list.key(["up", "k"], () => {
     highlightIndex(stepListIndex(selectedIndex, -1, filteredItems.length));
   });
