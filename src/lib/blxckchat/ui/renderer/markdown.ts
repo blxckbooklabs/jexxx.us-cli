@@ -11,7 +11,7 @@ export function escapeBlessed(text: string): string {
   return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
 }
 
-/** Short empire href for TUI — avoids mid-slug line wraps on long URLs. */
+/** Short kingdom/garden href for TUI — avoids mid-slug line wraps on long URLs. */
 export function formatHrefForDisplay(href: string): string {
   if (href.length <= 56) return href;
   try {

@@ -1,18 +1,18 @@
-/** Canonical empire surface URLs collected from tool/prefetch output. */
-export interface EmpireUrlEntry {
+/** Canonical kingdom surface URLs collected from tool/prefetch output. */
+export interface KingdomUrlEntry {
   url: string;
   slug: string;
   title?: string;
   surface: "tv" | "veil";
 }
 
-const EMPIRE_TV_URL = /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/[a-z0-9-]+/gi;
-const EMPIRE_VEIL_URL = /https?:\/\/veil\.jexxx\.us\/articles\/[a-z0-9-]+/gi;
+const KINGDOM_TV_URL = /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/[a-z0-9-]+/gi;
+const KINGDOM_VEIL_URL = /https?:\/\/veil\.jexxx\.us\/articles\/[a-z0-9-]+/gi;
 const TV_LINE_URL = /^\s*https?:\/\/tv\.jexxx\.us\/video\/([a-z0-9-]+)\s*$/im;
 const VEIL_LINE_URL = /^\s*https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9-]+)\s*$/im;
 
 /** Split URLs glued without separators (common small-model failure). */
-export function splitGluedEmpireUrls(text: string): string {
+export function splitGluedKingdomUrls(text: string): string {
   let out = text;
   out = out.replace(
     /(https?:\/\/(?:veil\.jexxx\.us\/articles|tv\.jexxx\.us\/video)\/[a-z0-9-]+)(?=https?:\/\/)/gi,
@@ -34,20 +34,20 @@ function extractSlug(url: string, surface: "tv" | "veil"): string {
 }
 
 /** Pull canonical TV/VEIL URLs from tool results or prefetch blocks. */
-export function extractEmpireUrlsFromText(text: string): EmpireUrlEntry[] {
+export function extractKingdomUrlsFromText(text: string): KingdomUrlEntry[] {
   const seen = new Set<string>();
-  const entries: EmpireUrlEntry[] = [];
+  const entries: KingdomUrlEntry[] = [];
 
   const add = (surface: "tv" | "veil", url: string, slug: string, title?: string): void => {
     const key = `${surface}:${slug}`;
     if (seen.has(key)) return;
     seen.add(key);
-    const entry: EmpireUrlEntry = { surface, url, slug };
+    const entry: KingdomUrlEntry = { surface, url, slug };
     if (title) entry.title = title;
     entries.push(entry);
   };
 
-  const lines = splitGluedEmpireUrls(text).split("\n");
+  const lines = splitGluedKingdomUrls(text).split("\n");
   let pendingTitle: string | undefined;
   for (const line of lines) {
     const numbered = line.match(/^\d+\.\s+(.+)$/);
@@ -67,12 +67,12 @@ export function extractEmpireUrlsFromText(text: string): EmpireUrlEntry[] {
     }
   }
 
-  const split = splitGluedEmpireUrls(text);
-  for (const url of split.match(EMPIRE_TV_URL) ?? []) {
+  const split = splitGluedKingdomUrls(text);
+  for (const url of split.match(KINGDOM_TV_URL) ?? []) {
     const slug = extractSlug(url, "tv");
     add("tv", `https://tv.jexxx.us/video/${slug}`, slug);
   }
-  for (const url of split.match(EMPIRE_VEIL_URL) ?? []) {
+  for (const url of split.match(KINGDOM_VEIL_URL) ?? []) {
     const slug = extractSlug(url, "veil");
     add("veil", `https://veil.jexxx.us/articles/${slug}`, slug);
   }
@@ -101,7 +101,7 @@ function levenshtein(a: string, b: string): number {
 
 function closestCatalogSlug(
   compact: string,
-  catalog: EmpireUrlEntry[],
+  catalog: KingdomUrlEntry[],
   surface: "tv" | "veil",
 ): string {
   const exact = catalog.find((e) => e.surface === surface && e.slug === compact);
@@ -121,7 +121,7 @@ function closestCatalogSlug(
   return best ?? compact;
 }
 
-function canonicalizeUrl(raw: string, catalog: EmpireUrlEntry[]): string {
+function canonicalizeUrl(raw: string, catalog: KingdomUrlEntry[]): string {
   const tv = raw.match(/^https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/([a-z0-9-]+)$/i);
   if (tv?.[1]) {
     const slug = closestCatalogSlug(tv[1].toLowerCase(), catalog, "tv");
@@ -136,7 +136,7 @@ function canonicalizeUrl(raw: string, catalog: EmpireUrlEntry[]): string {
 }
 
 /** `• Title [https://veil...]` → `• [Title](https://veil...)` for shorter TUI wraps. */
-export function compactEmpireBulletLinks(text: string): string {
+export function compactKingdomBulletLinks(text: string): string {
   return text.replace(
     /^(\s*[•*-]\s+)(.+?)\s*\[(https?:\/\/(?:veil|tv)\.jexxx\.us\/[^\]\n]+)\]\s*$/gm,
     (_full, bullet: string, title: string, url: string) =>
@@ -157,13 +157,13 @@ export function repairMarkdownUrlBlobs(text: string): string {
 }
 
 /**
- * Repair model-hallucinated empire URLs (wv host, spaced/glued slugs) using
+ * Repair model-hallucinated kingdom URLs (wv host, spaced/glued slugs) using
  * canonical URLs from the same turn's tool/prefetch output.
  */
-export function sanitizeEmpireUrls(response: string, catalog: EmpireUrlEntry[]): string {
+export function sanitizeKingdomUrls(response: string, catalog: KingdomUrlEntry[]): string {
   if (!response.trim()) return response;
 
-  let out = splitGluedEmpireUrls(response);
+  let out = splitGluedKingdomUrls(response);
   out = out.replace(/https?:\/\/wv\.jexxx\.us/gi, "https://tv.jexxx.us");
   out = out.replace(/https?:\/\/tw\.jexxx\.us/gi, "https://tv.jexxx.us");
 
@@ -174,7 +174,7 @@ export function sanitizeEmpireUrls(response: string, catalog: EmpireUrlEntry[]):
       return `https://tv.jexxx.us/video/${slug}`;
     },
   );
-  out = out.replace(EMPIRE_TV_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
+  out = out.replace(KINGDOM_TV_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
   out = out.replace(
     /https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9][a-z0-9\s-]*[a-z0-9]|[a-z0-9])(?=[\s\]\),.;!?]|$)/gi,
     (_full, slugPart: string) => {
@@ -182,9 +182,9 @@ export function sanitizeEmpireUrls(response: string, catalog: EmpireUrlEntry[]):
       return `https://veil.jexxx.us/articles/${slug}`;
     },
   );
-  out = out.replace(EMPIRE_VEIL_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
+  out = out.replace(KINGDOM_VEIL_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
 
   out = repairMarkdownUrlBlobs(out);
-  out = compactEmpireBulletLinks(out);
+  out = compactKingdomBulletLinks(out);
   return out;
 }

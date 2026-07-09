@@ -27,7 +27,7 @@ export interface AccountToolPlan {
 }
 
 /**
- * Phrase → account_query routing table. Mirrors empire-routing's PHRASE_COLLISIONS
+ * Phrase → account_query routing table. Mirrors kingdom-routing's PHRASE_COLLISIONS
  * pattern for TV/VEIL — deterministic, testable, appended to the system prompt.
  */
 export const ACCOUNT_PHRASE_COLLISIONS: readonly AccountPhraseCollision[] = [
@@ -192,7 +192,7 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
   };
 }
 
-/** True when the user prompt is a private vault/data question (not empire TV/VEIL/Docs/Law). */
+/** True when the user prompt is a private vault/data question (not kingdom/garden TV/VEIL/Docs/Law). */
 export function isVaultPrimaryPrompt(userPrompt: string): boolean {
   if (isKingdomSurfacePrompt(userPrompt)) return false;
   return planAccountTools(userPrompt).tools.length > 0;

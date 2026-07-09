@@ -79,16 +79,25 @@ Owned by the JEXXXUS platform / tooling team.
   `account-data/tv-playlists.ts` (TV custom playlists). Slash: `/account status`, `/account export`.
   Query catalog: Obsidian `Account-Data-Query-Catalog.md`. Tests: `account-routing.test.ts`,
   `account-data.test.ts`, `super-admin.test.ts`.
-- BLXCKCHAT empire routing (`src/lib/blxckchat/empire-routing.ts`) plans multi-tool replies:
+- BLXCKCHAT kingdom/garden routing (`src/lib/blxckchat/kingdom-routing.ts`) plans multi-tool replies:
   thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) and `tvSearchQuery`
-  (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `empire-prefetch.ts`
+  (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `garden-prefetch.ts`
   pre-loads scripture + TV/VEIL search into the system prompt for smaller models. Routing scans
   recent conversation history for short persona follow-ups (Proverbs 31, drafts, corruption beats).
-  `empire-url-sanitize.ts` repairs model-hallucinated URLs on final replies. Regression tests:
-  `src/__tests__/empire-routing.test.ts`, `src/__tests__/empire-url-sanitize.test.ts`.
+  `kingdom-url-sanitize.ts` repairs model-hallucinated URLs on final replies. Regression tests:
+  `src/__tests__/kingdom-routing.test.ts`, `src/__tests__/kingdom-url-sanitize.test.ts`.
 - BLXCKCHAT **Docs/Law routing** (`kingdom-surfaces.ts`, `kingdom-routing.ts`): prompts like
   "tell me about Docs and Law" must not hit `account_query` contact lookup — use RAG docs context
   + `law_query` instead.
+- **Breaking rename (July 2026):** internal `Empire*` identifiers/files under `src/lib/blxckchat/`
+  were renamed to `Kingdom*`/`Garden*` to match the linguistic style guide ("empire" is retired as
+  a brand descriptor everywhere, including code identifiers not just prose). Old paths
+  `empire-routing.ts`/`empire-url-sanitize.ts` → `kingdom-routing.ts`/`kingdom-url-sanitize.ts`;
+  `empire-prefetch.ts`/`empire-synthesis.ts` → `garden-prefetch.ts`/`garden-synthesis.ts`. No
+  external API or cookie contract changed — this is source-only, scoped to `jexxx.us-cli`. Cross-repo
+  shared infra (`empire-theme.ts`, `EmpireThemeClerkBridge`, `jexxxus-theme` cookie, `empire_navigate`
+  analytics event) is **out of scope** here and still pending a coordinated rollout across
+  VEIL/TV/Law/Docs/BLXCKBOOK — do not rename those without updating all consuming repos in lockstep.
 - BLXCKCHAT TUI **startup LLM resolution** (`resolveStartupProvider` in `config.ts`):
   pinned default (`isDefault` from provider setup **y**) beats `lastUsed` profile;
   without a pin, reopens with the last active provider/model from the previous session.

@@ -4,7 +4,7 @@ import { planAccountTools } from "./account-routing.js";
 
 /**
  * Pre-load a compact vault summary when the user is signed in and the prompt
- * matches account routing — same role as empire-prefetch for TV/VEIL.
+ * matches account routing — same role as garden-prefetch for TV/VEIL.
  */
 export async function prefetchAccountContext(userPrompt: string): Promise<string | null> {
   const plan = planAccountTools(userPrompt);

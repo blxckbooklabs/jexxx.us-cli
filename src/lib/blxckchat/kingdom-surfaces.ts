@@ -1,12 +1,12 @@
 /**
- * JEXXXUS empire surface names — must not be mistaken for BLXCKBOOK contact names
+ * JEXXXUS kingdom/garden surface names — must not be mistaken for BLXCKBOOK contact names
  * when users ask "tell me about Docs and Law" etc.
  */
 
 const KINGDOM_SURFACE_NAME =
   /^(?:jexxxus\s*\|\s*)?(?:docs?|law|veil|tv|blxckbook|nxt|mamabase|bible|docs\.jexxx\.us|law\.jexxx\.us|veil\.jexxx\.us|tv\.jexxx\.us)$/i;
 
-/** True when a captured "contact" name is actually an empire surface. */
+/** True when a captured "contact" name is actually a kingdom/garden surface. */
 export function isKingdomSurfaceName(name: string): boolean {
   const trimmed = name.trim();
   if (!trimmed) return false;

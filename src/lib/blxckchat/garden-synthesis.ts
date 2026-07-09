@@ -1,11 +1,11 @@
 import type { ChatMessage } from "./providers/types.js";
 
-export interface EmpireToolResultSummary {
+export interface GardenToolResultSummary {
   tool: "veil_query" | "tv_query" | "bible_query";
   result: string;
 }
 
-export const EMPIRE_SYNTHESIS_NUDGE =
+export const GARDEN_SYNTHESIS_NUDGE =
   "Rewrite your last in-character reply using the kingdom/garden tool results above. " +
   "Quote bible_query verse text, link VEIL/TV with [Title](url), and end on an in-world beat. " +
   "Do not ask whether to continue the scene or offer meta pivots.";
@@ -18,7 +18,7 @@ export function stripMetaContinuationPrompts(content: string): string {
   return content.replace(CONTINUATION_TAIL, "").trimEnd();
 }
 
-function classifyEmpireToolResult(content: string): EmpireToolResultSummary | null {
+function classifyGardenToolResult(content: string): GardenToolResultSummary | null {
   const trimmed = content.trim();
   if (!trimmed || trimmed.startsWith("Error:") || trimmed.startsWith("No verse found")) {
     return null;
@@ -43,17 +43,17 @@ function lastUserIndex(messages: ChatMessage[]): number {
 }
 
 /** Successful veil/tv/bible tool payloads since the latest user message. */
-export function collectEmpireToolResultsSinceUser(
+export function collectGardenToolResultsSinceUser(
   messages: ChatMessage[],
-): EmpireToolResultSummary[] {
+): GardenToolResultSummary[] {
   const start = lastUserIndex(messages);
   if (start < 0) return [];
 
-  const out: EmpireToolResultSummary[] = [];
+  const out: GardenToolResultSummary[] = [];
   for (let i = start + 1; i < messages.length; i++) {
     const msg = messages[i];
     if (msg?.role !== "tool") continue;
-    const classified = classifyEmpireToolResult(msg.content);
+    const classified = classifyGardenToolResult(msg.content);
     if (classified) out.push(classified);
   }
   return out;
@@ -73,10 +73,10 @@ function bibleResultReferenced(content: string, result: string): boolean {
   return false;
 }
 
-/** True when empire tools returned data but the assistant reply ignored them. */
-export function needsEmpireSynthesis(
+/** True when garden tools returned data but the assistant reply ignored them. */
+export function needsGardenSynthesis(
   assistantContent: string,
-  toolResults: EmpireToolResultSummary[],
+  toolResults: GardenToolResultSummary[],
 ): boolean {
   if (toolResults.length === 0 || !assistantContent.trim()) return false;
 
