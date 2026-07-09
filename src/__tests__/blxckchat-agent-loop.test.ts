@@ -110,7 +110,8 @@ test("runAgent continues after chatStream returns tool_calls and streams the fin
     async chat(): Promise<ChatResult> {
       throw new Error("chat should not be used when chatStream handles tool calls");
     },
-    async chatStream(_messages, _tools, onChunk): Promise<ChatResult> {
+    async chatStream(_messages, _tools, callbacks): Promise<ChatResult> {
+      const onChunk = typeof callbacks === "function" ? callbacks : callbacks.onChunk;
       callCount++;
       if (callCount === 1) {
         onChunk("Let me check the scripture.");

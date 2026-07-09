@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import blessed from "blessed";
 
 import { AgentAbortedError, runAgent } from "../agent-loop.js";
@@ -41,7 +43,12 @@ import {
 import { autosaveSession, loadAutosaveSession, shouldAutosave } from "./session/autosave.js";
 import { branchUndo } from "./session/branch.js";
 import { escapeBlessed } from "./renderer/markdown.js";
-import { StreamBuffer, formatStreamingChunk } from "./renderer/streaming.js";
+import { StreamBuffer } from "./renderer/streaming.js";
+import {
+  StreamThinkingParser,
+  formatLiveStreamDisplay,
+  formatThinkingWaitState,
+} from "./renderer/stream-thinking.js";
 import { extractThinkingBlocks } from "./components/thinking-block.js";
 import {
   buildChromeDigestPlain,
@@ -448,7 +455,24 @@ export async function startTerminalChat(
     messageBox.appendUser(trimmed);
 
     const assistantBlockIndex = messageBox.appendAssistantStart();
+    messageBox.updateAssistantStream(
+      assistantBlockIndex,
+      formatThinkingWaitState(),
+      "",
+      "",
+    );
     const streamBuffer = new StreamBuffer();
+    const thinkingParser = new StreamThinkingParser();
+
+    const pushStreamToUi = (): void => {
+      const state = thinkingParser.getState();
+      messageBox.updateAssistantStream(
+        assistantBlockIndex,
+        formatLiveStreamDisplay(state),
+        state.visible,
+        state.thinking,
+      );
+    };
 
     const showToolPending = (toolName: string): void => {
       addToolResult(session, toolName, "Running...", "pending");
@@ -485,19 +509,36 @@ export async function startTerminalChat(
         {
           ...(persona ? { persona } : {}),
           signal: abortController.signal,
-          onStream: (chunk) => {
-            streamBuffer.append(chunk);
+          onStreamReset: () => {
+            streamBuffer.reset();
+            thinkingParser.reset();
             messageBox.updateAssistantStream(
               assistantBlockIndex,
-              formatStreamingChunk(streamBuffer.getContent()),
-              streamBuffer.getContent(),
+              formatThinkingWaitState(),
+              "",
+              "",
             );
+          },
+          onThinkingStream: (chunk) => {
+            thinkingParser.appendThinking(chunk);
+            pushStreamToUi();
+          },
+          onStream: (chunk) => {
+            streamBuffer.append(chunk);
+            thinkingParser.append(chunk);
+            pushStreamToUi();
           },
           onToolStart: showToolPending,
           onToolComplete: showToolComplete,
           onSynthesisRetry: () => {
             streamBuffer.reset();
-            messageBox.updateAssistantStream(assistantBlockIndex, "", "");
+            thinkingParser.reset();
+            messageBox.updateAssistantStream(
+              assistantBlockIndex,
+              formatThinkingWaitState(),
+              "",
+              "",
+            );
           },
           confirmToolCall: (toolName, args) =>
             createBlessedConfirm(screen, toolName, args),
@@ -507,7 +548,16 @@ export async function startTerminalChat(
       session.conversationHistory = history;
 
       const parsed = extractThinkingBlocks(response);
-      session.thinkingBlocks.push(...parsed.blocks);
+      const apiThinking = thinkingParser.getState().thinking.trim();
+      const mergedBlocks = [...parsed.blocks];
+      if (apiThinking && !mergedBlocks.some((b) => b.content === apiThinking)) {
+        mergedBlocks.unshift({
+          id: randomUUID(),
+          content: apiThinking,
+          collapsed: true,
+        });
+      }
+      session.thinkingBlocks.push(...mergedBlocks);
 
       const visible =
         parsed.visibleContent || response || streamBuffer.getContent();
@@ -515,7 +565,7 @@ export async function startTerminalChat(
       messageBox.finalizeAssistant(
         assistantBlockIndex,
         visible,
-        parsed.blocks,
+        mergedBlocks,
       );
       maybeAutosave();
     } catch (err) {

@@ -86,6 +86,10 @@ Owned by the JEXXXUS platform / tooling team.
   recent conversation history for short persona follow-ups (Proverbs 31, drafts, corruption beats).
   `empire-url-sanitize.ts` repairs model-hallucinated URLs on final replies. Regression tests:
   `src/__tests__/empire-routing.test.ts`, `src/__tests__/empire-url-sanitize.test.ts`.
+- BLXCKCHAT TUI streams LLM **thinking in real time** (Pi/OpenCode parity): gray `[▼ think]`
+  block via `stream-thinking.ts` (`StreamThinkingParser` for `<think>`/API reasoning deltas;
+  `formatThinkingWaitState` between tool passes). Toggle collapsed blocks: `Space` / `Ctrl+T`.
+  Tests: `blxckchat-stream-thinking.test.ts`.
 
 ## 6. Child DOX Index
 

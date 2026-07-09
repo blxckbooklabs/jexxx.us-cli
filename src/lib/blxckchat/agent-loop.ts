@@ -74,6 +74,10 @@ export interface RunAgentOptions {
   ) => void;
   /** Clear streamed assistant text before a synthesis retry pass. */
   onSynthesisRetry?: () => void;
+  /** Called at the start of each provider stream (e.g. after tools, before synthesis). */
+  onStreamReset?: () => void;
+  /** API-native reasoning tokens, distinct from <think> tags in content. */
+  onThinkingStream?: (chunk: string) => void;
   confirmToolCall?: (
     toolName: string,
     args: Record<string, unknown>,
@@ -269,6 +273,8 @@ export async function runAgent(
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     assertNotAborted(options.signal);
 
+    options.onStreamReset?.();
+
     // Use streaming for text responses if available
     let result;
     if (provider.chatStream) {
@@ -277,11 +283,21 @@ export async function runAgent(
         ((chunk: string) => {
           process.stdout.write(chunk);
         });
+      const baseOnThinking = options.onThinkingStream;
       const onChunk = (chunk: string): void => {
         assertNotAborted(options.signal);
         baseOnChunk(chunk);
       };
-      result = await provider.chatStream(messages, toolDefs, onChunk);
+      const onThinkingChunk = baseOnThinking
+        ? (chunk: string): void => {
+            assertNotAborted(options.signal);
+            baseOnThinking(chunk);
+          }
+        : undefined;
+      result = await provider.chatStream(messages, toolDefs, {
+        onChunk,
+        ...(onThinkingChunk ? { onThinkingChunk } : {}),
+      });
     } else {
       result = await provider.chat(messages, toolDefs);
     }

@@ -53,10 +53,10 @@ export function formatThinkingBlockPlain(block: ThinkingBlock): string {
   return `${label}\n${body}\n`;
 }
 
-export function formatThinkingBlock(block: ThinkingBlock): string {
-  const indicator = block.collapsed ? "▶" : "▼";
+export function formatThinkingBlock(block: ThinkingBlock, expanded = false): string {
+  const indicator = expanded || !block.collapsed ? "▼" : "▶";
   const label = `{#525252-fg}[${indicator}{/}{#ec4899-fg} think{/}{#525252-fg}]{/}`;
-  if (block.collapsed) {
+  if (block.collapsed && !expanded) {
     const preview =
       block.content.length > 80
         ? `${block.content.slice(0, 77)}…`

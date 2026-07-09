@@ -4,9 +4,33 @@ import type {
   ChatResult,
   Provider,
   ProviderConfig,
+  StreamCallbacks,
   ToolCall,
   ToolDefinition,
 } from "./types.js";
+
+function resolveStreamCallbacks(
+  callbacks: StreamCallbacks | ((chunk: string) => void),
+): StreamCallbacks {
+  return typeof callbacks === "function"
+    ? { onChunk: callbacks }
+    : callbacks;
+}
+
+function readReasoningDelta(delta: Record<string, unknown> | undefined): string {
+  if (!delta) return "";
+  const candidates = [
+    delta.reasoning_content,
+    delta.reasoning,
+    delta.reasoning_text,
+  ];
+  for (const value of candidates) {
+    if (typeof value === "string" && value.length > 0) {
+      return value;
+    }
+  }
+  return "";
+}
 import {
   accumulateStreamingToolCalls,
   finalizeStreamingToolCalls,
@@ -108,8 +132,9 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
     async chatStream(
       messages: ChatMessage[],
       tools: ToolDefinition[],
-      onChunk: (chunk: string) => void
+      callbacks: StreamCallbacks | ((chunk: string) => void),
     ): Promise<ChatResult> {
+      const { onChunk, onThinkingChunk } = resolveStreamCallbacks(callbacks);
       const stream = await (
         tools.length > 0
           ? client.chat.completions.create({
@@ -135,6 +160,12 @@ export function createOpenAIProvider(config: ProviderConfig): Provider {
           const delta = choice?.delta;
           if (choice?.finish_reason) {
             finishReason = choice.finish_reason;
+          }
+          const reasoning = readReasoningDelta(
+            delta as Record<string, unknown> | undefined,
+          );
+          if (reasoning) {
+            onThinkingChunk?.(reasoning);
           }
           if (delta?.content) {
             fullContent += delta.content;

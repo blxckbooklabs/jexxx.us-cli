@@ -25,7 +25,8 @@ function makeStreamingProvider(response: string): Provider {
         stopReason: "stop",
       };
     },
-    async chatStream(_messages, _tools, onChunk): Promise<ChatResult> {
+    async chatStream(_messages, _tools, callbacks): Promise<ChatResult> {
+      const onChunk = typeof callbacks === "function" ? callbacks : callbacks.onChunk;
       for (const ch of response) {
         onChunk(ch);
       }

@@ -46,6 +46,7 @@ export interface MessageBlock {
   blessedContent?: string;
   thinkingBlocks?: ThinkingBlock[];
   assistantRaw?: string;
+  streamThinkingRaw?: string;
   toolEntries?: ToolResult[];
 }
 
@@ -63,7 +64,12 @@ export interface MessageBoxHandle {
   appendWelcome: (plainContent: string) => void;
   appendUser: (text: string) => void;
   appendAssistantStart: () => number;
-  updateAssistantStream: (blockIndex: number, partial: string, rawPlain?: string) => void;
+  updateAssistantStream: (
+    blockIndex: number,
+    partial: string,
+    rawPlain?: string,
+    rawThinking?: string,
+  ) => void;
   finalizeAssistant: (
     blockIndex: number,
     content: string,
@@ -436,14 +442,28 @@ export function createMessageBox(
     },
     appendAssistantStart() {
       invalidateBlessedCache();
-      blocks.push({ type: "assistant", content: "", assistantRaw: "", thinkingBlocks: [] });
+      blocks.push({
+        type: "assistant",
+        content: "",
+        assistantRaw: "",
+        streamThinkingRaw: "",
+        thinkingBlocks: [],
+      });
       return blocks.length - 1;
     },
-    updateAssistantStream(blockIndex: number, partial: string, rawPlain?: string) {
+    updateAssistantStream(
+      blockIndex: number,
+      partial: string,
+      rawPlain?: string,
+      rawThinking?: string,
+    ) {
       const block = blocks[blockIndex];
       if (block?.type === "assistant") {
         block.content = partial;
         block.assistantRaw = rawPlain ?? partial;
+        if (rawThinking !== undefined) {
+          block.streamThinkingRaw = rawThinking;
+        }
         if (streamRenderTimer) clearTimeout(streamRenderTimer);
         streamRenderTimer = setTimeout(() => {
           streamRenderTimer = null;
@@ -461,6 +481,7 @@ export function createMessageBox(
         block.assistantRaw = content;
         block.content = markdownToBlessed(content);
         block.thinkingBlocks = thinkingBlocks;
+        block.streamThinkingRaw = "";
         const snapshot = captureScrollSnapshot();
         invalidateBlessedCache();
         setBoxContentWithScroll(getBlessedContent(), { snapshot });

@@ -33,12 +33,18 @@ export interface ChatResult {
   stopReason: "stop" | "tool_calls";
 }
 
+export interface StreamCallbacks {
+  onChunk: (chunk: string) => void;
+  /** API-native reasoning tokens (OpenAI reasoning_content, OpenRouter reasoning, etc.). */
+  onThinkingChunk?: (chunk: string) => void;
+}
+
 export interface Provider {
   id: ProviderName;
   chat(messages: ChatMessage[], tools: ToolDefinition[]): Promise<ChatResult>;
   chatStream?(
     messages: ChatMessage[],
     tools: ToolDefinition[],
-    onChunk: (chunk: string) => void,
+    callbacks: StreamCallbacks | ((chunk: string) => void),
   ): Promise<ChatResult>;
 }
