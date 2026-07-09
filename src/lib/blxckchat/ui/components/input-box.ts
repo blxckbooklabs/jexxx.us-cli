@@ -10,6 +10,7 @@ import { attachBlessedLineEditor } from "../editor/blessed-line-editor.js";
 import { bindFocusedKey } from "../editor/focused-key.js";
 import { frameTransmitInput } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
+import { isModalOverlayActive } from "../menu-mutex.js";
 import { THEME } from "../theme.js";
 
 export interface InputBoxHandle {
@@ -59,12 +60,18 @@ export function createInputBox(
   let slashSuggestions: SlashSuggestion[] = [];
   let slashDebounce: ReturnType<typeof setTimeout> | null = null;
   let lastSlashValue = "";
+  let slashRequestGen = 0;
 
   const notify = (): void => {
     options.onUpdate?.();
   };
 
   const hideSlashPopup = (): void => {
+    if (slashDebounce) {
+      clearTimeout(slashDebounce);
+      slashDebounce = null;
+    }
+    slashRequestGen++;
     options.slashPopup?.hide();
     slashSuggestions = [];
     lastSlashValue = "";
@@ -73,6 +80,11 @@ export function createInputBox(
   const refreshSlashSuggestions = (value: string): void => {
     if (!options.getSlashSuggestions || !options.slashPopup) return;
 
+    if (isModalOverlayActive()) {
+      hideSlashPopup();
+      return;
+    }
+
     const { mode } = detectSlashInputMode(value);
     if (mode === "none") {
       hideSlashPopup();
@@ -80,13 +92,23 @@ export function createInputBox(
     }
 
     if (slashDebounce) clearTimeout(slashDebounce);
+    const requestGen = ++slashRequestGen;
+    const requestedValue = value;
     slashDebounce = setTimeout(() => {
+      slashDebounce = null;
       const preserveIndex =
-        value === lastSlashValue && options.slashPopup!.isVisible();
+        requestedValue === lastSlashValue && options.slashPopup!.isVisible();
       const startIndex = preserveIndex ? options.slashPopup!.getSelectedIndex() : 0;
-      lastSlashValue = value;
+      lastSlashValue = requestedValue;
 
-      void options.getSlashSuggestions!(value).then((suggestions) => {
+      void options.getSlashSuggestions!(requestedValue).then((suggestions) => {
+        if (requestGen !== slashRequestGen) return;
+        if (lineEditor.getText() !== requestedValue) return;
+        if (isModalOverlayActive()) {
+          hideSlashPopup();
+          return;
+        }
+
         slashSuggestions = suggestions;
         if (suggestions.length > 0) {
           const index = preserveIndex

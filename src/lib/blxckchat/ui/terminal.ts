@@ -54,6 +54,10 @@ import { createModelPickerOverlay } from "./components/model-picker-overlay.js";
 import { createProviderOverlay } from "./components/provider-overlay.js";
 import { getDivinityPersonaById } from "../divinities/source.js";
 import { MessageQueue } from "./message-queue.js";
+import {
+  registerOverlayActiveCheck,
+  registerSlashMenuDismiss,
+} from "./menu-mutex.js";
 import { openExternalEditor } from "./external-editor.js";
 import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
 
@@ -608,6 +612,16 @@ export async function startTerminalChat(
         }),
       onSetupProvider: (catalogId) => providerOverlay.setup(catalogId),
     },
+  );
+
+  registerSlashMenuDismiss(() => inputBox.hideSlashPopup());
+  registerOverlayActiveCheck(
+    () =>
+      modelPickerOverlay.isVisible() ||
+      providerOverlay.isVisible() ||
+      divinityPickerOverlay.isVisible() ||
+      searchOverlay.isVisible() ||
+      hotkeysOverlay.isVisible(),
   );
 
   const handleEscapeLayer = (): boolean => {

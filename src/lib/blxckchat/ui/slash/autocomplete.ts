@@ -10,6 +10,7 @@ import {
 } from "./registry.js";
 import { listDivinityPersonas } from "../../divinities/source.js";
 import { fuzzyFilter } from "./fuzzy.js";
+import { shouldSuppressSlashArgumentSuggestions } from "./picker-commands.js";
 
 export interface SlashSuggestion {
   value: string;
@@ -74,6 +75,10 @@ export async function getArgumentSuggestions(
   argFilter: string,
   ctx: SlashAutocompleteContext,
 ): Promise<SlashSuggestion[]> {
+  if (shouldSuppressSlashArgumentSuggestions(commandName, argFilter)) {
+    return [];
+  }
+
   if (commandName === "model" || commandName === "models" || commandName === "mo") {
     const options = ctx.modelOptions ?? (await listModelOptions(ctx.activeConfig));
     const filtered = fuzzyFilter(options, argFilter, (o) => `${o.label} ${o.id} ${o.provider}`, 12);

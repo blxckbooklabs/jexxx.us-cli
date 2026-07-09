@@ -9,6 +9,7 @@ import { createModalKeypress, type BlessedKey } from "../editor/modal-keypress.j
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { readClipboard } from "../session/tui-snapshot.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
+import { dismissSlashMenuBeforeOverlay } from "../menu-mutex.js";
 import { THEME } from "../theme.js";
 
 export interface SearchOverlayHandle {
@@ -105,6 +106,7 @@ export function createSearchOverlay(
 
   return {
     open() {
+      dismissSlashMenuBeforeOverlay();
       searchInput.setText("");
       box.setFront();
       box.show();

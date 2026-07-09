@@ -3,6 +3,7 @@ import blessed from "blessed";
 import type { SlashSuggestion } from "../slash/autocomplete.js";
 import { bindFocusedKey } from "../editor/focused-key.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
+import { isModalOverlayActive } from "../menu-mutex.js";
 import { THEME } from "../theme.js";
 
 export interface SlashPopupHandle {
@@ -138,6 +139,9 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
 
   return {
     show(suggestions: SlashSuggestion[], index: number) {
+      if (isModalOverlayActive()) {
+        return;
+      }
       selectedIndex = Math.min(index, Math.max(0, suggestions.length - 1));
       if (suggestions.length === 0) {
         list.hide();

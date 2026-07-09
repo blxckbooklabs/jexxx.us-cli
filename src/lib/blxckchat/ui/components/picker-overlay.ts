@@ -9,6 +9,7 @@ import { createModalKeypress, type BlessedKey } from "../editor/modal-keypress.j
 import { readClipboard } from "../session/tui-snapshot.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
+import { dismissSlashMenuBeforeOverlay } from "../menu-mutex.js";
 import { THEME } from "../theme.js";
 import { stepListIndex } from "./slash-popup.js";
 
@@ -316,6 +317,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
 
   return {
     open(items, options) {
+      dismissSlashMenuBeforeOverlay();
       allItems = items;
       filteredItems = [...items];
       selectedIndex = options?.selectedIndex ?? 0;

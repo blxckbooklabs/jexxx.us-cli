@@ -1,6 +1,7 @@
 import blessed from "blessed";
 
 import { formatHotkeysOverlay } from "../keybindings.js";
+import { dismissSlashMenuBeforeOverlay } from "../menu-mutex.js";
 import { THEME } from "../theme.js";
 
 export interface HotkeysOverlayHandle {
@@ -50,6 +51,7 @@ export function createHotkeysOverlay(
       if (visible) {
         hide();
       } else {
+        dismissSlashMenuBeforeOverlay();
         overlay.setContent(formatHotkeysOverlay());
         overlay.show();
         overlay.focus();

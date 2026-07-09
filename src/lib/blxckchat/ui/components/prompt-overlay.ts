@@ -10,6 +10,7 @@ import {
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { readClipboard } from "../session/tui-snapshot.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
+import { dismissSlashMenuBeforeOverlay } from "../menu-mutex.js";
 import { THEME } from "../theme.js";
 import type { BlessedKey } from "../editor/modal-keypress.js";
 
@@ -266,6 +267,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
         );
         box.height = options.height ?? (options.hint ? 11 : 9);
 
+        dismissSlashMenuBeforeOverlay();
         box.setFront();
         box.show();
         takeOverlayFocus(screen, inputArea);
