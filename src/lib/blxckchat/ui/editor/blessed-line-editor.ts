@@ -6,6 +6,7 @@ import {
   applyLineEditorAction,
   charIndexFromMouseX,
   createLineEditorState,
+  getSelectionRange,
   insertText,
   renderLineEditorView,
   resolveInsertChar,
@@ -13,6 +14,7 @@ import {
   selectWordAt,
   type LineEditorState,
 } from "./line-editor.js";
+import { copyToClipboard } from "../session/tui-snapshot.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 
 type InputBoxElement = blessed.Widgets.BoxElement & {
@@ -31,6 +33,8 @@ export interface BlessedLineEditorOptions {
   onChange?: (text: string) => void;
   /** `?` on an empty field — show hotkeys instead of inserting. */
   onHotkeyHelp?: () => void;
+  onCopied?: () => void;
+  onCopyFailed?: () => void;
 }
 
 /**
@@ -122,7 +126,45 @@ export function attachBlessedLineEditor(
 
   if (isBlessedMouseEnabled()) {
     let lastClick = { at: 0, x: -1, y: -1 };
+    let mouseDragging = false;
+    let mouseMoved = false;
     const DOUBLE_CLICK_MS = 450;
+
+    const copyEditorSelection = async (): Promise<void> => {
+      const range = getSelectionRange(state);
+      if (!range || range.start >= range.end) return;
+      const text = state.text.slice(range.start, range.end).trim();
+      if (!text) return;
+      const copied = await copyToClipboard(text);
+      if (copied) options.onCopied?.();
+      else options.onCopyFailed?.();
+      state = { ...state, selectionAnchor: null };
+      render();
+    };
+
+    box.on("mousedown", (data: { x?: number; button?: string }) => {
+      if (data.button && data.button !== "left") return;
+      if (!focused) box.focus();
+      const index = charIndexFromMouseX(data.x ?? 0, state, innerWidth());
+      mouseDragging = true;
+      mouseMoved = false;
+      state = { ...state, cursor: index, selectionAnchor: index };
+      render();
+    });
+
+    box.on("mousemove", (data: { x?: number }) => {
+      if (!mouseDragging || !focused) return;
+      mouseMoved = true;
+      const index = charIndexFromMouseX(data.x ?? 0, state, innerWidth());
+      state = { ...state, cursor: index };
+      render();
+    });
+
+    box.on("mouseup", () => {
+      if (!mouseDragging) return;
+      mouseDragging = false;
+      if (mouseMoved) void copyEditorSelection();
+    });
 
     box.on("click", (data: { x?: number; y?: number }) => {
       const x = data.x ?? 0;
@@ -141,6 +183,7 @@ export function attachBlessedLineEditor(
       const index = charIndexFromMouseX(x, state, innerWidth());
       if (isDouble) {
         state = selectWordAt(state, index);
+        void copyEditorSelection();
       } else {
         state = { ...state, cursor: index, selectionAnchor: null };
       }

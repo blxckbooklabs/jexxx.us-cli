@@ -57,8 +57,18 @@ export function readClipboard(): Promise<string> {
   });
 }
 
+/** OSC 52 — clipboard over SSH/tmux (OpenCode parity). */
+export function writeClipboardOsc52(text: string): void {
+  if (!process.stdout.isTTY || !text) return;
+  const sequence = `\x1b]52;c;${Buffer.from(text, "utf8").toString("base64")}\x07`;
+  const wrapped =
+    process.env.TMUX || process.env.STY ? `\x1bPtmux;\x1b${sequence}\x1b\\` : sequence;
+  process.stdout.write(wrapped);
+}
+
 /** Copy plain text to the system clipboard (best-effort). */
 export function copyToClipboard(text: string): Promise<boolean> {
+  writeClipboardOsc52(text);
   return new Promise((resolve) => {
     const platform = process.platform;
     let cmd: string;

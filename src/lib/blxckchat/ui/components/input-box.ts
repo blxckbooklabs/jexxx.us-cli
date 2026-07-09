@@ -41,6 +41,8 @@ export interface InputBoxOptions {
   onUpdate?: () => void;
   onExit?: () => void;
   onShowHotkeys?: () => void;
+  onCopied?: () => void;
+  onCopyFailed?: () => void;
   onQueueIfProcessing?: () => boolean;
   onOpenExternalEditor?: () => void;
   shortcuts?: InputShortcutHandlers;
@@ -153,6 +155,8 @@ export function createInputBox(
       });
     },
     onHotkeyHelp: () => options.onShowHotkeys?.(),
+    onCopied: () => options.onCopied?.(),
+    onCopyFailed: () => options.onCopyFailed?.(),
   });
 
   const applySlashSuggestionAt = (idx: number): boolean => {

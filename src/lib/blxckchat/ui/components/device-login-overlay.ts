@@ -12,7 +12,10 @@ import {
 import { createModalKeypress, type BlessedKey } from "../editor/modal-keypress.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { dismissSlashMenuBeforeOverlay } from "../menu-mutex.js";
+import { stripBlessedTags } from "../renderer/plain-text.js";
+import { attachBlessedTextSelection } from "../selection/attach-blessed-text-selection.js";
 import { copyToClipboard } from "../session/tui-snapshot.js";
+import { isBlessedMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 
 export class DeviceLoginCancelledError extends Error {
@@ -52,7 +55,7 @@ export function formatDeviceLoginOverlayContent(input: {
     `${browserLine}{gray-fg}${input.status}{/}`,
     `{gray-fg}Expires in ${input.expiresMinutes} minutes{/}`,
     "",
-    `{gray-fg}C copy code · Esc cancel{/}`,
+    `{gray-fg}Drag to select · auto-copies · C recopy · Esc cancel{/}`,
   ].join("\n");
 }
 
@@ -66,8 +69,14 @@ function writeDeviceCodeFallback(userCode: string): string {
   return path;
 }
 
+export interface DeviceLoginOverlayOptions {
+  onCopied?: () => void;
+  onCopyFailed?: () => void;
+}
+
 export function createDeviceLoginOverlay(
   screen: blessed.Widgets.Screen,
+  options: DeviceLoginOverlayOptions = {},
 ): DeviceLoginOverlayHandle {
   let visible = false;
   let cancelled = false;
@@ -76,6 +85,8 @@ export function createDeviceLoginOverlay(
   let copyHint =
     "{gray-fg}Copying code to clipboard…{/}";
   const modalKeys = createModalKeypress(screen);
+
+  let richContent = "";
 
   const modal = blessed.box({
     parent: screen,
@@ -87,6 +98,7 @@ export function createDeviceLoginOverlay(
     label: " ░ device authorization ░ ",
     tags: true,
     hidden: true,
+    mouse: isBlessedMouseEnabled(),
     padding: { left: 1, right: 1, top: 0, bottom: 0 },
     style: {
       fg: THEME.text,
@@ -96,9 +108,24 @@ export function createDeviceLoginOverlay(
   });
 
   const render = (content: string): void => {
+    richContent = content;
     modal.setContent(content);
     screen.render();
   };
+
+  const textSelection = attachBlessedTextSelection({
+    element: modal,
+    screen,
+    getScroll: () => 0,
+    getSourceLines: () => stripBlessedTags(richContent).split("\n"),
+    restoreRichContent: () => {
+      modal.setContent(richContent);
+      screen.render();
+    },
+    onCopied: () => options.onCopied?.(),
+    onCopyFailed: () => options.onCopyFailed?.(),
+    enabled: () => visible && isBlessedMouseEnabled(),
+  });
 
   const stopDotTimer = (): void => {
     if (dotTimer) {
@@ -109,6 +136,7 @@ export function createDeviceLoginOverlay(
 
   const close = (): void => {
     stopDotTimer();
+    textSelection.clear();
     modal.hide();
     visible = false;
     modalKeys.stop();
@@ -128,6 +156,8 @@ export function createDeviceLoginOverlay(
     copyHint = copied
       ? "{#67e8f9-fg}Code copied — paste in browser (Cmd+V / Ctrl+V){/}"
       : `{#f87171-fg}Clipboard unavailable — code saved to ${fallbackPath}{/}`;
+    if (copied) options.onCopied?.();
+    else options.onCopyFailed?.();
     renderView(status);
   };
 

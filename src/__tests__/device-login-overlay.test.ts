@@ -14,5 +14,5 @@ test("formatDeviceLoginOverlayContent includes code and copy hint", () => {
   });
   assert.match(text, /ABCD1234/);
   assert.match(text, /Code copied/);
-  assert.match(text, /C copy code/);
+  assert.match(text, /Drag to select/);
 });

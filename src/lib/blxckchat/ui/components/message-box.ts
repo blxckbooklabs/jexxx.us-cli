@@ -11,7 +11,8 @@ import { escapeBlessed } from "../renderer/markdown.js";
 import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/markdown.js";
 import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult, TerminalSession } from "../session/session-store.js";
-import { framePanel, wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
+import { framePanel, stripBlessedTags, wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
+import { attachBlessedTextSelection } from "../selection/attach-blessed-text-selection.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 import { TAG, THEME } from "../theme.js";
 import { centerHeroVertically } from "./jexxxus-hero.js";
@@ -97,6 +98,8 @@ export interface MessageBoxHandle {
 export interface MessageBoxOptions {
   onUpdate?: () => void;
   onScrollChange?: (state: ScrollState) => void;
+  onCopied?: () => void;
+  onCopyFailed?: () => void;
 }
 
 const SCROLL_PIN_THRESHOLD = 3;
@@ -341,6 +344,7 @@ export function createMessageBox(
   };
 
   const refreshContent = (forceBottom = false): void => {
+    textSelection.clear();
     const snapshot = captureScrollSnapshot();
     invalidateBlessedCache();
     setBoxContentWithScroll(renderBlessedContent(), { forceBottom, snapshot });
@@ -366,7 +370,23 @@ export function createMessageBox(
     return x >= width - iright - 1;
   };
 
+  const textSelection = attachBlessedTextSelection({
+    element: box,
+    screen,
+    getScroll: () => box.getScroll() ?? 0,
+    getSourceLines: () => stripBlessedTags(getBlessedContent()).split("\n"),
+    restoreRichContent: () => {
+      const snapshot = captureScrollSnapshot();
+      setBoxContentWithScroll(getBlessedContent(), { snapshot });
+    },
+    onCopied: () => options.onCopied?.(),
+    onCopyFailed: () => options.onCopyFailed?.(),
+    shouldIgnoreMouse: isScrollbarColumn,
+    enabled: () => isBlessedMouseEnabled(),
+  });
+
   box.on("mousedown", (data: { x: number; y: number }) => {
+    if (textSelection.isDragging()) return;
     if (isScrollbarColumn(data)) {
       pinnedToBottom = false;
     } else {

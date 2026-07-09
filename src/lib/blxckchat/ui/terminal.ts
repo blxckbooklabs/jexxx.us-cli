@@ -70,6 +70,7 @@ import {
 import { openExternalEditor } from "./external-editor.js";
 import { createAuthPickerOverlay } from "./components/auth-picker-overlay.js";
 import { createDeviceLoginOverlay } from "./components/device-login-overlay.js";
+import { createToastOverlay } from "./components/toast-overlay.js";
 import { createAuthTuiActions } from "./auth-tui.js";
 import {
   isBlessedMouseEnabled,
@@ -175,6 +176,15 @@ export async function startTerminalChat(
   let inputBox!: ReturnType<typeof createInputBox>;
   const slashPopup = createSlashPopup(screen);
   const hotkeysOverlay = createHotkeysOverlay(screen);
+  const toastOverlay = createToastOverlay(screen);
+
+  const showCopiedToast = (): void => {
+    toastOverlay.show("Copied to clipboard");
+  };
+
+  const showCopyFailedToast = (): void => {
+    toastOverlay.show("Copy failed — see ~/.jexxxus snapshot", "error");
+  };
   const messageQueue = new MessageQueue();
 
   let modelPickerOverlay!: ReturnType<typeof createModelPickerOverlay>;
@@ -212,7 +222,10 @@ export async function startTerminalChat(
     syncSnapshot();
   };
 
-  deviceLoginOverlay = createDeviceLoginOverlay(screen);
+  deviceLoginOverlay = createDeviceLoginOverlay(screen, {
+    onCopied: showCopiedToast,
+    onCopyFailed: showCopyFailedToast,
+  });
 
   const authActions = createAuthTuiActions({
     screen,
@@ -633,6 +646,8 @@ export async function startTerminalChat(
   messageBox = createMessageBox(screen, {
     onUpdate: onSnapshotUpdate,
     onScrollChange: () => updateScrollStatus(),
+    onCopied: showCopiedToast,
+    onCopyFailed: showCopyFailedToast,
   });
   statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
 
@@ -657,6 +672,8 @@ export async function startTerminalChat(
         return false;
       },
       onOpenExternalEditor: () => void openEditorDraft(),
+      onCopied: showCopiedToast,
+      onCopyFailed: showCopyFailedToast,
       shortcuts: {
         onSave: () => void runSlash("/save"),
         onCopyTui: async () => {
