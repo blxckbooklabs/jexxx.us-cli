@@ -1,7 +1,7 @@
 import blessed from "blessed";
 
 import { dismissSlashMenuBeforeOverlay } from "../menu-mutex.js";
-import { THEME } from "../theme.js";
+import { TAG, THEME } from "../theme.js";
 
 export type ToastVariant = "info" | "error";
 
@@ -30,7 +30,7 @@ export function createToastOverlay(screen: blessed.Widgets.Screen): ToastOverlay
     style: {
       fg: THEME.text,
       bg: THEME.bgElevated,
-      border: { fg: THEME.cyan },
+      border: { fg: THEME.pinkDim },
     },
   });
 
@@ -47,11 +47,11 @@ export function createToastOverlay(screen: blessed.Widgets.Screen): ToastOverlay
   return {
     show(message, variant = "info") {
       dismissSlashMenuBeforeOverlay();
-      const border = variant === "error" ? THEME.error : THEME.cyan;
+      const border = variant === "error" ? THEME.error : THEME.pink;
       box.style.border = { fg: border };
       const clipped =
         message.length > 120 ? `${message.slice(0, 117)}…` : message;
-      box.setContent(`{#67e8f9-fg}${escapeToast(clipped)}{/}`);
+      box.setContent(`${TAG.pink}${escapeToast(clipped)}${TAG.pinkEnd}`);
       box.setFront();
       box.show();
       visible = true;
