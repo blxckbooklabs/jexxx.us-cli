@@ -34,6 +34,11 @@ export function summarizeToolResultForDisplay(
   const trimmed = result.trim();
   if (!trimmed) return "(empty)";
 
+  // Full tool output — chat pane scrolls (mouse scrollbar + wheel).
+  if (toolName === "veil_query" && status === "success") {
+    return trimmed;
+  }
+
   const isVeilCatalog =
     toolName === "veil_query" &&
     (trimmed.startsWith("VEIL articles") ||

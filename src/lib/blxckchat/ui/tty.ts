@@ -26,16 +26,15 @@ function parseMouseEnv(): string {
   return process.env.BLXCKCHAT_MOUSE?.trim().toLowerCase() ?? "";
 }
 
-/** Opt-in mouse for all blessed widgets (chat scroll, etc.). */
+/**
+ * Mouse for chat scrollbar drag, wheel scroll, and overlays.
+ * On by default (accessibility). Set BLXCKCHAT_MOUSE=0 to disable all tracking.
+ */
 export function isBlessedMouseEnabled(): boolean {
-  const raw = parseMouseEnv();
-  return raw === "1" || raw === "true" || raw === "yes";
+  return isSlashPopupMouseEnabled();
 }
 
-/**
- * Mouse on slash-command popup — on by default for hover/click picks.
- * Set BLXCKCHAT_MOUSE=0 to disable all TUI mouse tracking.
- */
+/** Alias — slash popup and chat history share the same mouse policy. */
 export function isSlashPopupMouseEnabled(): boolean {
   const raw = parseMouseEnv();
   if (raw === "0" || raw === "false" || raw === "no") return false;

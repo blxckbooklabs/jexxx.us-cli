@@ -17,6 +17,7 @@ export const BLXCKCHAT_HOTKEYS: readonly HotkeyDef[] = [
     source: "pi",
   },
   { keys: "Shift+↑↓ / Ctrl+↑↓", action: "Scroll chat history from input", source: "blxckchat" },
+  { keys: "Scrollbar ▌ (mouse)", action: "Click/drag chat history (default on)", source: "blxckchat" },
   { keys: "PgUp / PgDn", action: "Scroll history by page (Ctrl+B focus)", source: "opencode" },
   { keys: "Home / End", action: "Jump to top / latest message", source: "opencode" },
   { keys: "Ctrl+F", action: "Search messages", source: "opencode" },

@@ -13,10 +13,10 @@ afterEach(() => {
   else process.env.BLXCKCHAT_MOUSE = prior;
 });
 
-test("isSlashPopupMouseEnabled defaults to true", () => {
+test("chat and slash popup mouse default to enabled for scrollbar access", () => {
   delete process.env.BLXCKCHAT_MOUSE;
   assert.equal(isSlashPopupMouseEnabled(), true);
-  assert.equal(isBlessedMouseEnabled(), false);
+  assert.equal(isBlessedMouseEnabled(), true);
 });
 
 test("BLXCKCHAT_MOUSE=0 disables slash popup mouse", () => {

@@ -288,6 +288,26 @@ export function createMessageBox(
     emitScrollChange();
   };
 
+  const isScrollbarColumn = (data: { x: number }): boolean => {
+    const left = box.aleft as number;
+    const width = box.width as number;
+    const iright = (box as { iright?: number }).iright ?? 1;
+    const x = data.x - left;
+    return x >= width - iright - 1;
+  };
+
+  box.on("mousedown", (data: { x: number; y: number }) => {
+    if (isScrollbarColumn(data)) {
+      pinnedToBottom = false;
+    } else {
+      box.focus();
+    }
+    setImmediate(() => {
+      markScrolled();
+      screen.render();
+    });
+  });
+
   box.on("wheeldown", () => {
     box.scroll(3);
     pinnedToBottom = false;
