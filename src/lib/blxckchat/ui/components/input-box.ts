@@ -118,7 +118,7 @@ export function createInputBox(
         bg: THEME.bgPanel,
       },
     },
-    inputOnFocus: true,
+    inputOnFocus: false,
     keys: true,
     mouse: isBlessedMouseEnabled(),
     vi: false,

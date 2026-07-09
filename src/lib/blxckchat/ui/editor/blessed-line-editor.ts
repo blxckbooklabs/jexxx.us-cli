@@ -1,6 +1,7 @@
 import type blessed from "blessed";
 
 import { readClipboard } from "../session/tui-snapshot.js";
+import { createModalKeypress, type BlessedKey } from "./modal-keypress.js";
 import {
   applyLineEditorAction,
   createLineEditorState,
@@ -10,26 +11,15 @@ import {
   type LineEditorState,
 } from "./line-editor.js";
 
-type BlessedKey = {
-  name?: string;
-  shift?: boolean;
-  meta?: boolean;
-  ctrl?: boolean;
-};
-
 type TextboxElement = blessed.Widgets.TextboxElement & {
-  __listener?: (ch: string, key: BlessedKey) => void;
-  _listener: (ch: string, key: BlessedKey) => void;
-  _done?: (err: unknown, value: string | null) => void;
-  _reading?: boolean;
-  _value?: string;
-  value: string;
+  emit: (event: string, ...args: unknown[]) => boolean;
   ileft: number;
-  iright: number;
   iwidth: number;
   itop: number;
   width: number;
   _updateCursor: (get?: boolean) => void;
+  _value?: string;
+  value: string;
 };
 
 export interface BlessedLineEditorHandle {
@@ -43,6 +33,10 @@ export interface BlessedLineEditorOptions {
   onChange?: (text: string) => void;
 }
 
+/**
+ * Transmit row editor — program-level key capture (not blessed readInput) so
+ * macOS ⌥⇧← word select, ⌘⌫ line kill, and paste work reliably.
+ */
 export function attachBlessedLineEditor(
   input: blessed.Widgets.TextboxElement,
   screen: blessed.Widgets.Screen,
@@ -50,6 +44,9 @@ export function attachBlessedLineEditor(
 ): BlessedLineEditorHandle {
   const box = input as TextboxElement;
   let state = createLineEditorState(box.getValue() ?? "");
+  let captureActive = false;
+  let focused = false;
+  const modalKeys = createModalKeypress(screen);
 
   const innerWidth = (): number =>
     Math.max(8, ((box.width as number) || 80) - (box.iwidth || 0) - 2);
@@ -89,15 +86,17 @@ export function attachBlessedLineEditor(
     options.onChange?.(state.text);
   };
 
-  const editorListener = (ch: string, key: BlessedKey): void => {
-    if (key.name === "escape") {
-      box._done?.(null, null);
+  const handleKeypress = (ch: string, key: BlessedKey): void => {
+    if (!captureActive || !focused) return;
+
+    // History / slash / exit layers handle these on the transmit element.
+    if (key.name === "escape" || key.name === "up" || key.name === "down") {
       return;
     }
 
     const action = resolveLineEditorKey({ ...key, ch });
     if (action.type === "submit") {
-      box._done?.(null, state.text);
+      box.emit("submit", state.text);
       return;
     }
     if (action.type === "paste") {
@@ -115,22 +114,29 @@ export function attachBlessedLineEditor(
     render();
   };
 
-  const installListener = (): void => {
-    if (!box._reading) return;
-    if (box.__listener) {
-      box.removeListener("keypress", box.__listener);
-    }
-    box.__listener = editorListener;
-    box.on("keypress", editorListener);
+  const startCapture = (): void => {
+    if (captureActive) return;
+    captureActive = true;
+    modalKeys.start(handleKeypress);
+    screen.grabKeys = true;
+  };
+
+  const stopCapture = (): void => {
+    if (!captureActive) return;
+    captureActive = false;
+    modalKeys.stop();
   };
 
   box.on("focus", () => {
-    setImmediate(() => setImmediate(installListener));
+    focused = true;
+    startCapture();
+    render();
   });
 
-  if (box._reading) {
-    installListener();
-  }
+  box.on("blur", () => {
+    focused = false;
+    stopCapture();
+  });
 
   return {
     getText: () => state.text,
