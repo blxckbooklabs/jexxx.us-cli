@@ -121,6 +121,11 @@ export function saveCredentials(creds: Credentials): void {
     2,
   );
   fs.writeFileSync(CREDS_PATH, content, { mode: 0o600 });
+  try {
+    fs.chmodSync(CREDS_PATH, 0o600);
+  } catch {
+    // Best-effort — some filesystems ignore mode on write
+  }
 }
 
 /**
@@ -197,12 +202,14 @@ export function getTokenExpiryMinutes(creds: Credentials): number {
 }
 
 /**
- * Ensure token is valid, auto-refresh if needed
+ * Ensure token is valid — refreshes via secure.jexxx.us when expired or
+ * expiring within 5 minutes (Clerk session JWTs are often ~60s TTL).
  */
 export async function ensureValidToken(
   refreshFn?: (refreshToken: string) => Promise<Credentials>,
+  options: LoadCredentialsOptions = {},
 ): Promise<Credentials> {
-  const creds = loadCredentials();
+  const creds = loadCredentials(options);
 
   if (!creds) {
     throw new Error(
@@ -210,27 +217,39 @@ export async function ensureValidToken(
     );
   }
 
-  if (!isTokenValid(creds)) {
-    throw new Error(
-      "Token expired. Run: " +
-        chalk.cyan("jexxxus auth login") +
-        " to re-authenticate.",
-    );
-  }
+  const expired = !isTokenValid(creds);
+  const expiringSoon = shouldRefreshToken(creds);
 
-  if (shouldRefreshToken(creds) && refreshFn) {
+  if ((expired || expiringSoon) && refreshFn) {
     try {
       const newCreds = await refreshFn(creds.refreshToken);
       saveCredentials(newCreds);
       return newCreds;
     } catch (err) {
-      console.warn(
-        chalk.yellow("⚠️  Failed to auto-refresh token:"),
-        String(err),
-      );
-      // Fall back to current creds if refresh fails
+      const detail = err instanceof Error ? err.message : String(err);
+      if (expired) {
+        throw new Error(
+          `Token expired and refresh failed: ${detail}. Run /auth login or ` +
+            chalk.cyan("jexxxus auth login") +
+            " to re-authenticate.",
+        );
+      }
+      if (!options.quiet) {
+        console.warn(
+          chalk.yellow("⚠️  Failed to auto-refresh token:"),
+          detail,
+        );
+      }
       return creds;
     }
+  }
+
+  if (expired) {
+    throw new Error(
+      "Token expired. Run /auth refresh, /auth login, or " +
+        chalk.cyan("jexxxus auth login") +
+        " to re-authenticate.",
+    );
   }
 
   return creds;

@@ -48,9 +48,10 @@ export async function resolveAuthenticatedAccountSession(): Promise<AccountSessi
   }
 
   try {
-    const creds = await ensureValidToken(refreshAccessTokenViaServer);
+    const quiet = { quiet: true } as const;
+    const creds = await ensureValidToken(refreshAccessTokenViaServer, quiet);
     const getAccessToken = async () => {
-      const fresh = await ensureValidToken(refreshAccessTokenViaServer);
+      const fresh = await ensureValidToken(refreshAccessTokenViaServer, quiet);
       return fresh.accessToken;
     };
 
