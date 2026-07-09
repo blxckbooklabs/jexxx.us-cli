@@ -66,6 +66,10 @@ Owned by the JEXXXUS platform / tooling team.
   `feed.xml`). Outbound fetch is host-locked to `tv.jexxx.us` (or localhost dev). Never exposes
   `embed_url`/stream URLs, Supabase, or internal Obsidian TV docs. Env: `TV_CONTENT_PATH`,
   `TV_PUBLIC_BASE_URL`.
+- BLXCKCHAT empire routing (`src/lib/blxckchat/empire-routing.ts`) plans multi-tool replies:
+  thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) for separate
+  `bible_query` calls — never pass series titles (e.g. Forgive Me Father) as bible queries.
+  Regression tests: `src/__tests__/empire-routing.test.ts`.
 
 ## 6. Child DOX Index
 

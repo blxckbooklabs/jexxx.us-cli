@@ -9,16 +9,27 @@ export type RoutableTool =
   | "import_contacts"
   | "send_notification";
 
+/** Thematic scripture to pair with TV/VEIL results (explicit Book Ch:V refs). */
+export const COMPANION_VERSE_SETS = {
+  forgiveness: ["1 John 1:9", "Luke 23:34", "Psalm 51:1"],
+  confession: ["1 John 1:9", "James 5:16"],
+  clergy: ["1 Timothy 3:2", "Hebrews 13:17"],
+  jezebel: ["1 Kings 21:25", "Revelation 2:20"],
+  crucifixion: ["Luke 23:34", "Matthew 27:46"],
+  adultery: ["Proverbs 6:32", "Hebrews 13:4"],
+  church: ["1 Corinthians 6:19", "Ephesians 5:23"],
+} as const;
+
+export const MAX_COMPANION_VERSES = 4;
+
 export interface PhraseCollision {
-  /** Stable id for tests and logging. */
   id: string;
-  /** Case-insensitive pattern — any match activates the row. */
   pattern: RegExp;
   tools: RoutableTool[];
-  /** Tools to strip from the plan when this row matches (false friends). */
   exclude?: RoutableTool[];
-  /** Optional /divinities or other slash hints (not tool calls). */
   slashHints?: string[];
+  /** Fitting bible_query refs to fetch alongside TV/VEIL (not instead of them). */
+  companionVerses?: readonly string[];
   note: string;
 }
 
@@ -26,27 +37,25 @@ export interface EmpireToolPlan {
   tools: RoutableTool[];
   exclude: RoutableTool[];
   slashHints: string[];
+  /** Distinct verse refs for separate bible_query action=query calls. */
+  companionVerses: string[];
   matchedRules: string[];
 }
 
-/**
- * Compact collision table — biblical-sounding empire vocabulary that routes to
- * different surfaces. Order matters: later exclude rules can remove false tools.
- */
 export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
   {
     id: "tv-series-forgive-me-father",
     pattern: /forgive\s+me\s+father/i,
-    tools: ["tv_query"],
-    exclude: ["bible_query"],
-    note: "Forgive Me Father is a TV tag/series (Deviante), not a verse lookup.",
+    tools: ["tv_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.forgiveness,
+    note: "Forgive Me Father TV series + forgiveness scripture companions.",
   },
   {
     id: "tv-channels-mormon-girlz-deviante",
     pattern: /\b(mormon\s+girlz|deviante)\b/i,
     tools: ["tv_query"],
-    exclude: ["bible_query"],
-    note: "TV channel/tag names — search tv.jexxx.us.",
+    companionVerses: COMPANION_VERSE_SETS.church,
+    note: "TV channel/tag search with light church-themed companions.",
   },
   {
     id: "tv-categories",
@@ -58,23 +67,24 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
   {
     id: "veil-categories",
     pattern: /\b(corruption|confessions?|the\s+altar|clergy)\b/i,
-    tools: ["veil_query"],
-    note: "VEIL article category or theme.",
+    tools: ["veil_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.confession,
+    note: "VEIL confession/corruption theme + matching verses.",
   },
   {
     id: "veil-pastor-wife-read",
     pattern: /pastor'?s?\s+wife.*\b(read|article|story)\b/i,
-    tools: ["veil_query", "tv_query"],
-    exclude: ["bible_query"],
-    note: "Pastor's wife spans VEIL clergy posts and TV category.",
+    tools: ["veil_query", "tv_query", "bible_query"],
+    companionVerses: [...COMPANION_VERSE_SETS.clergy, ...COMPANION_VERSE_SETS.adultery],
+    note: "Pastor's wife across VEIL + TV + clergy/adultery verses.",
   },
   {
     id: "persona-biblical-women",
     pattern: /\b(jezebel|delilah|bathsheba|hannah|mary\s+magdalene|bithiah)\b/i,
-    tools: ["veil_query"],
-    exclude: ["bible_query"],
+    tools: ["veil_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.jezebel,
     slashHints: ["/divinities"],
-    note: "Biblical figure names — VEIL authors/personas; use /divinities unless user cites Book Ch:V.",
+    note: "Biblical figure — VEIL/persona + canonical verse companions.",
   },
   {
     id: "intent-watch",
@@ -92,7 +102,7 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
     id: "intent-scripture-words",
     pattern: /\b(verse|scripture|passage|chapter)\b/i,
     tools: ["bible_query"],
-    note: "Explicit scripture language → bible_query when reference present.",
+    note: "Explicit scripture language → bible_query.",
   },
   {
     id: "operator-doctor",
@@ -116,7 +126,7 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
     id: "catalog-latest-both",
     pattern: /\b(latest|recent|new)\b.*\b(veil|tv)\b/i,
     tools: ["veil_query", "tv_query"],
-    note: "Latest across surfaces — list both catalogs (action=list, skip discover).",
+    note: "Latest catalogs — list both; scripture companions optional unless theme named.",
   },
 ] as const;
 
@@ -132,11 +142,53 @@ function removeTools(set: Set<RoutableTool>, tools: RoutableTool[]): void {
   for (const t of tools) set.delete(t);
 }
 
+function mergeCompanionVerses(target: Set<string>, verses: readonly string[]): void {
+  for (const v of verses) {
+    if (target.size >= MAX_COMPANION_VERSES) break;
+    target.add(v);
+  }
+}
+
+/** Infer fitting companions when TV/VEIL matched but no row supplied verses. */
+export function inferThemeCompanionVerses(prompt: string): string[] {
+  const verses = new Set<string>();
+  if (/forgive|confession/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.forgiveness);
+  }
+  if (/pastor|priest|clergy/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.clergy);
+  }
+  if (/crucifixion|cross/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.crucifixion);
+  }
+  if (/adultery|cheat|cuck/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.adultery);
+  }
+  if (/\b(jezebel)\b/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.jezebel);
+  }
+  if (/\b(nuns?|in\s+church|church)\b/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.church);
+  }
+  if (/\b(corruption|confess)\b/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.confession);
+  }
+  return [...verses].slice(0, MAX_COMPANION_VERSES);
+}
+
+function isCatalogOnlyPrompt(prompt: string): boolean {
+  return (
+    /\b(latest|recent|list)\b/i.test(prompt) &&
+    !/forgive|pastor|jezebel|corruption|confession|nuns|crucifixion|adultery/i.test(prompt)
+  );
+}
+
 /** Plan which empire tools fit a user message (deterministic, testable). */
 export function planEmpireTools(userPrompt: string): EmpireToolPlan {
   const tools = new Set<RoutableTool>();
   const exclude = new Set<RoutableTool>();
   const slashHints = new Set<string>();
+  const companionVerses = new Set<string>();
   const matchedRules: string[] = [];
 
   const prompt = userPrompt.trim();
@@ -155,15 +207,20 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     if (row.slashHints) {
       for (const h of row.slashHints) slashHints.add(h);
     }
+    if (row.companionVerses) {
+      mergeCompanionVerses(companionVerses, row.companionVerses);
+    }
   }
 
   if (WATCH_CATEGORY_ON_TV.test(prompt)) {
     addTools(tools, ["tv_query"]);
+    mergeCompanionVerses(companionVerses, COMPANION_VERSE_SETS.church);
     matchedRules.push("tv-category-on-tv-surface");
   }
 
   if (VEIL_SURFACE.test(prompt) && /\b(article|corruption)\b/i.test(prompt)) {
     addTools(tools, ["veil_query"]);
+    mergeCompanionVerses(companionVerses, COMPANION_VERSE_SETS.confession);
     matchedRules.push("veil-surface-explicit");
   }
 
@@ -177,26 +234,56 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     matchedRules.push("verse-reference-detected");
   }
 
-  // Scripture + watch in one message → both (regression #3).
   if (
     /\b(scripture|verse)\b/i.test(prompt) &&
     /\b(watch|video|something\s+to\s+watch)\b/i.test(prompt)
   ) {
     addTools(tools, ["bible_query", "tv_query"]);
+    mergeCompanionVerses(companionVerses, COMPANION_VERSE_SETS.forgiveness);
     matchedRules.push("scripture-and-watch-bundle");
   }
 
-  // Pastor's wife read + watch bundle (regression #4).
   if (/pastor'?s?\s+wife/i.test(prompt) && /\b(read|watch)\b/i.test(prompt)) {
-    addTools(tools, ["veil_query", "tv_query"]);
-    exclude.add("bible_query");
+    addTools(tools, ["veil_query", "tv_query", "bible_query"]);
+    mergeCompanionVerses(companionVerses, [
+      ...COMPANION_VERSE_SETS.clergy,
+      ...COMPANION_VERSE_SETS.adultery,
+    ]);
     matchedRules.push("pastor-wife-read-watch-bundle");
+  }
+
+  const hasContentSurface = tools.has("tv_query") || tools.has("veil_query");
+  if (hasContentSurface && !isCatalogOnlyPrompt(prompt) && companionVerses.size === 0) {
+    for (const v of inferThemeCompanionVerses(prompt)) {
+      companionVerses.add(v);
+    }
+    if (companionVerses.size > 0) matchedRules.push("theme-companions-inferred");
+  }
+
+  if (companionVerses.size > 0) {
+    addTools(tools, ["bible_query"]);
+    matchedRules.push("companion-scripture-bundle");
   }
 
   removeTools(tools, [...exclude]);
 
-  // Never suggest bible_query without a verse-shaped reference unless scripture words + explicit ref elsewhere.
-  if (!hasVerseRef && !/\b(scripture|verse|passage)\b/i.test(prompt)) {
+  // Pure verse lookup — no TV/VEIL unless user also asked to watch/read.
+  if (
+    hasVerseRef &&
+    !tools.has("tv_query") &&
+    !tools.has("veil_query") &&
+    companionVerses.size === 0
+  ) {
+    tools.clear();
+    tools.add("bible_query");
+  }
+
+  // Scripture words without a ref still warrant bible_query when companions exist.
+  if (
+    companionVerses.size === 0 &&
+    !hasVerseRef &&
+    !/\b(scripture|verse|passage)\b/i.test(prompt)
+  ) {
     tools.delete("bible_query");
   }
 
@@ -204,6 +291,7 @@ export function planEmpireTools(userPrompt: string): EmpireToolPlan {
     tools: [...tools],
     exclude: [...exclude],
     slashHints: [...slashHints],
+    companionVerses: [...companionVerses],
     matchedRules,
   };
 }
@@ -223,30 +311,39 @@ export function formatEmpireRoutingHint(userPrompt: string): string | null {
   if (plan.slashHints.length > 0) {
     lines.push(`Slash hints: ${plan.slashHints.join(", ")}`);
   }
+  if (plan.companionVerses.length > 0) {
+    lines.push(
+      `Companion scripture — call bible_query action=query separately for each: ${plan.companionVerses.join("; ")}`,
+    );
+    lines.push(
+      "Quote 2–3 of these verses in your final reply alongside TV/VEIL links. " +
+        "Do not pass series titles (e.g. Forgive Me Father) to bible_query — only the Book Ch:V refs above.",
+    );
+  }
   lines.push(
-    "Synthesize all relevant results in one reply. Do not retry a failed bible_query with format variants.",
+    "Synthesize TV + VEIL + scripture in one answer. Do not retry a failed bible_query with format variants.",
   );
   return lines.join("\n");
 }
 
-/** Collision table excerpt embedded in the static system prompt. */
 export const EMPIRE_COLLISION_TABLE_EXCERPT = `### Phrase collision quick reference
-| Phrase | Tools |
-| Forgive Me Father, Mormon Girlz, Deviante | tv_query (not bible_query) |
-| Pastor's Wife, Nuns, In Church, Crucifixion | tv_query category search |
-| corruption, confession, clergy (read) | veil_query |
-| Jezebel, Hannah, Bathsheba (who/what) | veil_query + /divinities (not bible_query unless Book Ch:V) |
-| 1 John 1:9, Genesis 1:1 | bible_query only |
-| watch + scripture in one ask | tv_query + bible_query |
-| latest VEIL and TV | veil_query list + tv_query list |
+| Phrase | Tools + companions |
+| Forgive Me Father, Deviante | tv_query search + bible_query (1 John 1:9, Luke 23:34, Psalm 51:1) |
+| Pastor's Wife, Nuns, In Church | tv_query + fitting bible_query verses |
+| corruption, confession (VEIL) | veil_query + bible_query (1 John 1:9, James 5:16) |
+| Jezebel, Hannah, Bathsheba | veil_query + /divinities + bible_query companions |
+| 1 John 1:9 alone | bible_query only |
+| latest VEIL and TV (catalog) | veil_query list + tv_query list (no scripture unless themed) |
 | database up / doctor | run_doctor |`;
 
 export const EMPIRE_CONTENT_ROUTING = `## Empire content routing (pick every relevant tool)
 
-- **tv_query** — JEXXXUS | TV videos on tv.jexxx.us. Use for watch recommendations, channels, series, tags, and titles (e.g. "Forgive Me Father", "Mormon Girlz", "Nuns", Pastor/Priest). Prefer action=search with the phrase the user named.
-- **veil_query** — VEIL articles on veil.jexxx.us. Use for written erotica topics and article links.
-- **bible_query** — Scripture vault only. action=query with an explicit reference: "Genesis 1:1", "1 John 1:9", "John 3 16". Never use bible_query for video/series/channel names or general themes.
+- **tv_query** — JEXXXUS | TV videos on tv.jexxx.us. Channels, series, tags, titles (Forgive Me Father, Deviante, categories).
+- **veil_query** — VEIL articles on veil.jexxx.us.
+- **bible_query** — Scripture vault. action=query with explicit **Book Chapter:Verse** only (e.g. "1 John 1:9") — never pass video series titles as the query string.
 
-When the user names something that exists on TV (uploaders, tags, series), call **tv_query** even if the phrase sounds biblical. Synthesize one reply from **all** tool results (TV links + verses + articles). If bible_query fails once, do not spam format variants — try tv_query or veil_query instead.
+**Empire synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links.
+
+If bible_query fails once, do not spam format variants — use the listed Book Ch:V refs only.
 
 ${EMPIRE_COLLISION_TABLE_EXCERPT}`;

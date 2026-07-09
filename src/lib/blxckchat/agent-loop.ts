@@ -257,9 +257,10 @@ export async function runAgent(
           bibleQueryMissCount++;
           if (bibleQueryMissCount >= 2) {
             toolResult +=
-              "\n\n(Stop retrying bible_query for this question. If the user named a video channel, " +
-              "series, or title — e.g. \"Forgive Me Father\" on JEXXXUS | TV — use tv_query " +
-              "action=search. Combine TV + Bible + VEIL results in your final answer.)";
+              "\n\n(Stop retrying bible_query with malformed queries. Use tv_query for series/channel " +
+              "names (e.g. Forgive Me Father), and bible_query only with Book Chapter:Verse refs " +
+              "from the routing hint companions — e.g. 1 John 1:9. Combine TV + VEIL + quoted " +
+              "scripture in your final answer.)";
           }
         }
         recordAudit({
