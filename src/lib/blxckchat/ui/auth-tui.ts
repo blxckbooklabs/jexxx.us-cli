@@ -9,15 +9,7 @@ import {
   saveCredentials,
 } from "../../auth.js";
 import { THEME } from "./theme.js";
-
-type BlessedProgramVisibility = {
-  hide: () => void;
-  show: () => void;
-};
-
-function blessedProgram(screen: blessed.Widgets.Screen): BlessedProgramVisibility {
-  return screen.program as unknown as BlessedProgramVisibility;
-}
+import { pauseBlessedForConsole } from "./tty.js";
 
 export function promptBlessedYesNo(
   screen: blessed.Widgets.Screen,
@@ -76,13 +68,16 @@ export function createAuthTuiActions(
 ): AuthTuiActions {
   const { screen, onAuthChanged } = options;
 
+  let resumeBlessed: (() => void) | null = null;
+
   const restoreTui = (): void => {
-    blessedProgram(screen).show();
+    resumeBlessed?.();
+    resumeBlessed = null;
     screen.render();
   };
 
   const hideTui = (): void => {
-    blessedProgram(screen).hide();
+    resumeBlessed = pauseBlessedForConsole(screen);
   };
 
   return {

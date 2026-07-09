@@ -70,17 +70,12 @@ import {
 import { openExternalEditor } from "./external-editor.js";
 import { createAuthPickerOverlay } from "./components/auth-picker-overlay.js";
 import { createAuthTuiActions } from "./auth-tui.js";
-import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
-
-/** Blessed program hide/show exist at runtime but are missing from @types. */
-type BlessedProgramVisibility = {
-  hide: () => void;
-  show: () => void;
-};
-
-function blessedProgram(screen: blessed.Widgets.Screen): BlessedProgramVisibility {
-  return screen.program as unknown as BlessedProgramVisibility;
-}
+import {
+  isBlessedMouseEnabled,
+  pauseBlessedForConsole,
+  restoreTerminalForReadline,
+  suspendBlessedToShell,
+} from "./tty.js";
 
 export interface TerminalChatOptions {
   providerLabel?: string;
@@ -594,11 +589,9 @@ export async function startTerminalChat(
   const openEditorDraft = async (): Promise<void> => {
     if (isProcessing) return;
     const draft = inputBox.getValue();
+    const resumeBlessed = pauseBlessedForConsole(screen);
     try {
-      blessedProgram(screen).hide();
       const edited = await openExternalEditor(draft);
-      blessedProgram(screen).show();
-      screen.render();
       if (edited !== null) {
         inputBox.setValue(edited);
         statusBar.setMessage("Draft updated from editor");
@@ -606,22 +599,18 @@ export async function startTerminalChat(
         statusBar.setMessage("Set $EDITOR or $VISUAL for external editor");
       }
     } catch {
-      blessedProgram(screen).show();
-      screen.render();
       statusBar.setMessage("External editor failed");
+    } finally {
+      resumeBlessed();
+      screen.render();
     }
   };
 
   const suspendTui = (): void => {
-    blessedProgram(screen).hide();
-    const onCont = (): void => {
-      process.off("SIGCONT", onCont);
-      blessedProgram(screen).show();
+    suspendBlessedToShell(screen, () => {
       screen.render();
       inputBox.focus();
-    };
-    process.on("SIGCONT", onCont);
-    process.kill(process.pid, "SIGTSTP");
+    });
   };
 
   const runBranchUndo = (): void => {

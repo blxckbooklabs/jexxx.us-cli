@@ -54,6 +54,50 @@ type BlessedProgramTeardown = {
   normalBuffer: () => void;
 };
 
+type BlessedProgramPause = {
+  pause: () => (() => void) | undefined;
+  resume: () => void;
+  sigtstp: (callback?: () => void) => void;
+};
+
+function blessedProgram(screen: blessed.Widgets.Screen): BlessedProgramPause & BlessedProgramTeardown {
+  return screen.program as unknown as BlessedProgramPause & BlessedProgramTeardown;
+}
+
+/**
+ * Release the alternate screen and cooked TTY so console.log / readline can run.
+ * Returns a function that restores the blessed session (call in finally).
+ */
+export function pauseBlessedForConsole(screen: blessed.Widgets.Screen): () => void {
+  const program = blessedProgram(screen);
+  const resume = program.pause?.();
+  return () => {
+    if (typeof resume === "function") {
+      resume();
+      return;
+    }
+    program.resume?.();
+  };
+}
+
+/** Ctrl+Z style suspend — uses blessed program.sigtstp when available. */
+export function suspendBlessedToShell(
+  screen: blessed.Widgets.Screen,
+  onResume?: () => void,
+): void {
+  const program = blessedProgram(screen);
+  if (typeof program.sigtstp === "function") {
+    program.sigtstp(onResume);
+    return;
+  }
+  const resume = pauseBlessedForConsole(screen);
+  process.kill(process.pid, "SIGTSTP");
+  process.once("SIGCONT", () => {
+    resume();
+    onResume?.();
+  });
+}
+
 /** ANSI belt-and-suspenders when blessed teardown is partial or unavailable. */
 export function writeTerminalResetSequences(): void {
   if (!process.stdout.isTTY) return;
@@ -71,7 +115,7 @@ export function writeTerminalResetSequences(): void {
 export function teardownBlessedScreen(screen?: blessed.Widgets.Screen): void {
   if (screen) {
     try {
-      const program = screen.program as unknown as BlessedProgramTeardown;
+      const program = blessedProgram(screen);
       program.disableMouse?.();
       program.clear();
       program.showCursor();
