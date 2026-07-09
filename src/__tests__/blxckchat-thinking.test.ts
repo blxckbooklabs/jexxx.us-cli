@@ -23,7 +23,8 @@ test("formatThinkingBlock shows collapsed preview", () => {
     collapsed: true,
   };
   const out = formatThinkingBlock(block);
-  assert.match(out, /▶ Thinking/);
+  assert.match(out, /▶/);
+  assert.match(out, /think/);
   assert.match(out, /100 chars/);
 });
 

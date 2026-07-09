@@ -12,6 +12,7 @@ import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult, TerminalSession } from "../session/session-store.js";
 import { wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
+import { TAG, THEME } from "../theme.js";
 
 function highlightSearch(text: string, query: string): string {
   if (!query) return text;
@@ -80,25 +81,25 @@ export function createMessageBox(
 
   const box = blessed.box({
     parent: screen,
-    top: 1,
-    left: 0,
-    width: "100%",
-    bottom: 3,
+    top: 2,
+    left: 1,
+    width: "100%-2",
+    bottom: 4,
     tags: true,
     scrollable: true,
     alwaysScroll: true,
     scrollbar: {
-      ch: " ",
-      style: { bg: "#ec4899" },
+      ch: "▌",
+      style: { bg: THEME.pink },
     },
     keys: true,
     mouse: isBlessedMouseEnabled(),
     vi: false,
     style: {
-      fg: "white",
-      bg: "#0d0d0d",
+      fg: THEME.text,
+      bg: THEME.bgInset,
     },
-    padding: { left: 1, right: 1, top: 0, bottom: 0 },
+    padding: { left: 1, right: 1, top: 0, bottom: 1 },
   });
 
   const allThinkingBlocks = (): ThinkingBlock[] =>
@@ -117,27 +118,33 @@ export function createMessageBox(
           parts.push(renderUserMessageBox(block.content));
           break;
         case "assistant": {
-          parts.push("{bold}Assistant:{/bold}\n");
+          parts.push(
+            `${TAG.dim}╭─{/} ${TAG.cyan}blxckchat${TAG.cyanEnd} ${TAG.dim}${"─".repeat(18)}{/}`,
+          );
           if (block.thinkingBlocks) {
             for (const tb of block.thinkingBlocks) {
               const marker =
-                thinkIdx === focusedThinkingIndex ? "{#ec4899-fg}▸{/} " : "";
+                thinkIdx === focusedThinkingIndex ? `${TAG.pink}▸ ${TAG.pinkEnd}` : "  ";
               parts.push(marker + formatThinkingBlock(tb));
               thinkIdx++;
             }
           }
           parts.push(block.content);
-          parts.push("\n");
+          parts.push(`${TAG.dim}╰${"─".repeat(24)}{/}\n`);
           break;
         }
         case "tool":
           parts.push(block.content);
           break;
         case "error":
-          parts.push(`${highlightSearch(`{red-fg}${block.content}{/red-fg}`, searchQuery)}\n`);
+          parts.push(
+            `${highlightSearch(`${TAG.pink}⚡ ${TAG.pinkEnd}{#f87171-fg}${block.content}{/}`, searchQuery)}\n`,
+          );
           break;
         case "system":
-          parts.push(`${highlightSearch(`{gray-fg}${block.content}{/gray-fg}`, searchQuery)}\n`);
+          parts.push(
+            `${highlightSearch(`${TAG.dim}░ ${TAG.dimEnd}${TAG.muted}${block.content}${TAG.mutedEnd}`, searchQuery)}\n`,
+          );
           break;
       }
     }
@@ -156,7 +163,7 @@ export function createMessageBox(
           parts.push(renderUserMessageBoxPlain(block.content));
           break;
         case "assistant": {
-          parts.push("Assistant:");
+          parts.push("blxckchat:");
           if (block.thinkingBlocks) {
             for (const tb of block.thinkingBlocks) {
               parts.push(formatThinkingBlockPlain(tb));

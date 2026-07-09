@@ -1,9 +1,12 @@
 import blessed from "blessed";
 
+import { THEME, TAG, glitchNoise, crtCorner } from "../theme.js";
+
 export interface TopBarHandle {
   element: blessed.Widgets.BoxElement;
   setSubtitle: (text: string) => void;
   getPlainText: () => string;
+  tickGlitch: () => void;
 }
 
 export interface TopBarOptions {
@@ -15,17 +18,17 @@ export function createTopBar(
   options: TopBarOptions = {},
 ): TopBarHandle {
   let subtitle = "Welcome to the kingdom.";
-
+  let glitchSeed = 0;
   const bar = blessed.box({
     parent: screen,
     top: 0,
     left: 0,
     width: "100%",
-    height: 1,
+    height: 2,
     tags: true,
     style: {
-      fg: "white",
-      bg: "#0a0a0a",
+      fg: THEME.text,
+      bg: THEME.bg,
       bold: true,
     },
     content: "",
@@ -33,18 +36,28 @@ export function createTopBar(
 
   const getPlainText = (): string => {
     const cols = screen.width as number;
-    const closeHint = cols > 50 ? "  ✕" : "";
-    const title = `BLXCKCHAT — ${subtitle}`;
-    const pad = Math.max(1, cols - title.length - closeHint.length);
-    return `${title}${" ".repeat(pad)}${closeHint}`;
+    const model = subtitle;
+    const title = `BLXCKCHAT ╱ ${model}`;
+    const pad = Math.max(1, cols - title.length - 6);
+    return `${title}${" ".repeat(pad)} LIVE`;
   };
 
   const render = (): void => {
     const cols = screen.width as number;
-    const closeHint = cols > 50 ? "  ✕" : "";
-    const title = `{#ec4899-fg}BLXCKCHAT{/} — {gray-fg}${subtitle}{/gray-fg}`;
-    const pad = Math.max(1, cols - title.replace(/\{[^}]+\}/g, "").length - closeHint.length);
-    bar.setContent(`${title}${" ".repeat(pad)}${closeHint}`);
+    const noise = glitchNoise(Math.min(cols - 2, 64), glitchSeed);
+    const model =
+      subtitle.length > cols - 28
+        ? `${subtitle.slice(0, Math.max(8, cols - 31))}…`
+        : subtitle;
+
+    const line1Left = `${crtCorner("tl")} ${TAG.pinkBold}BLXCKCHAT${TAG.pinkBoldEnd} ${TAG.dim}│${TAG.dimEnd} ${TAG.muted}${model}${TAG.mutedEnd}`;
+    const line1PlainLen = `BLXCKCHAT │ ${model}`.length;
+    const livePad = Math.max(2, cols - line1PlainLen - 6);
+    const line1 = `${line1Left}${" ".repeat(livePad)}${TAG.pink}▮ LIVE${TAG.pinkEnd} ${crtCorner("tr")}`;
+
+    const line2 = `${TAG.pink}${noise}${TAG.pinkEnd}`;
+
+    bar.setContent(`${line1}\n${line2}`);
     screen.render();
     options.onUpdate?.();
   };
@@ -58,5 +71,9 @@ export function createTopBar(
       render();
     },
     getPlainText,
+    tickGlitch() {
+      glitchSeed = (glitchSeed + 1) % 9;
+      render();
+    },
   };
 }

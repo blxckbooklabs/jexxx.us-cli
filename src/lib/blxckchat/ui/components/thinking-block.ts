@@ -55,7 +55,7 @@ export function formatThinkingBlockPlain(block: ThinkingBlock): string {
 
 export function formatThinkingBlock(block: ThinkingBlock): string {
   const indicator = block.collapsed ? "▶" : "▼";
-  const label = `{gray-fg}[${indicator} Thinking]{/gray-fg}`;
+  const label = `{#525252-fg}[${indicator}{/}{#ec4899-fg} think{/}{#525252-fg}]{/}`;
   if (block.collapsed) {
     const preview =
       block.content.length > 80

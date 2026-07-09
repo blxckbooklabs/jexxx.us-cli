@@ -1,3 +1,5 @@
+import { glitchNoise } from "../theme.js";
+
 /** Strip blessed inline tags, restoring {open} escapes. */
 export function stripBlessedTags(text: string): string {
   return text.replace(/\{open\}/g, "{").replace(/\{[^}]*\}/g, "");
@@ -5,30 +7,34 @@ export function stripBlessedTags(text: string): string {
 
 export function buildWelcomeBannerPlain(authEmail: string, toolCount: number): string {
   const email =
-    authEmail.length > 18 ? `${authEmail.slice(0, 15)}...` : authEmail || "operator";
+    authEmail.length > 22 ? `${authEmail.slice(0, 19)}…` : authEmail || "operator";
+  const width = 52;
+  const innerW = width - 4;
+  const staticBar = glitchNoise(innerW, 3);
   const inner = [
+    "  ▄▀▄  JEXXXUS KINGDOM FEED  ▄▀▄",
+    "",
     "  Welcome to the kingdom.",
     "",
-    `  You are authenticated as ${email}`,
-    `  BLXCKCHAT loaded with ${toolCount} tools.`,
+    `  Auth: ${email}`,
+    `  Tools online: ${toolCount}`,
     "",
-    "  Type a message to begin, or",
-    "  /help or /model for commands.",
+    "  › Type a message or /help",
+    `  ${staticBar.slice(0, innerW - 2)}`,
   ];
-  const width = 42;
   const lines = [
-    `╔${"═".repeat(width - 2)}╗`,
+    `╔═╤${"═".repeat(innerW)}╤═╗`,
     ...inner.map((line) => {
-      const padded = line.padEnd(width - 4);
-      return `║${padded}║`;
+      const padded = line.padEnd(innerW);
+      return `║░│${padded}│░║`;
     }),
-    `╚${"═".repeat(width - 2)}╝`,
+    `╚═╧${"═".repeat(innerW)}╧═╝`,
   ];
   return lines.join("\n");
 }
 
 export function wrapWelcomeBannerBlessed(plain: string): string {
-  return `{#ec4899-fg}${plain}{/}`;
+  return `{#ec4899-fg}${plain.replace(/\n/g, "{/}\n{#ec4899-fg}")}{/}`;
 }
 
 export interface TuISnapshotParts {

@@ -84,24 +84,29 @@ export function markdownToBlessed(markdown: string): string {
   return renderBlocks(tokens).trimEnd();
 }
 
-/** Render a user message inside a pink-bordered box (plain text). */
+/** Render a user message — Pi-style compact pill (plain text). */
 export function renderUserMessageBoxPlain(text: string): string {
-  const label = `You: ${text}`;
-  const width = Math.min(72, Math.max(label.length + 4, 24));
-  const border = "─".repeat(width - 2);
-  return [`┌${border}┐`, `│ ${label}`, `└${border}┘`, ""].join("\n");
-}
-
-/** Render a user message inside a pink-bordered box. */
-export function renderUserMessageBox(text: string): string {
-  const inner = escapeBlessed(text);
-  const label = `{#ec4899-fg}{bold}You:{/bold}{/} ${inner}`;
-  const width = Math.min(72, Math.max(`You: ${text}`.length + 4, 24));
+  const inner = text.replace(/\n/g, "\n│ ");
+  const width = Math.min(68, Math.max(inner.length + 14, 28));
   const border = "─".repeat(width - 2);
   return [
-    `{#ec4899-fg}┌${border}┐{/}`,
-    `{#ec4899-fg}│{/} ${label}`,
-    `{#ec4899-fg}└${border}┘{/}`,
+    `╭─ you ${"─".repeat(Math.max(0, width - 8))}╮`,
+    `│ ${inner}`,
+    `╰${border}╯`,
+    "",
+  ].join("\n");
+}
+
+/** Render a user message — pink retro TV pill. */
+export function renderUserMessageBox(text: string): string {
+  const inner = escapeBlessed(text.replace(/\n/g, "\n{#ec4899-fg}│{/} "));
+  const width = Math.min(68, Math.max(text.length + 14, 28));
+  const topRule = "─".repeat(Math.max(0, width - 8));
+  const bottom = "─".repeat(width - 2);
+  return [
+    `{#ec4899-fg}╭─ {bold}you{/bold} ${topRule}╮{/}`,
+    `{#ec4899-fg}│{/} ${inner}`,
+    `{#ec4899-fg}╰${bottom}╯{/}`,
     "",
   ].join("\n");
 }

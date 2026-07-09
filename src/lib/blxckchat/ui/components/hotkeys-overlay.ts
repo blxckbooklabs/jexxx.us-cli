@@ -1,6 +1,7 @@
 import blessed from "blessed";
 
 import { formatHotkeysOverlay } from "../keybindings.js";
+import { THEME } from "../theme.js";
 
 export interface HotkeysOverlayHandle {
   toggle: () => void;
@@ -20,13 +21,13 @@ export function createHotkeysOverlay(
     width: "85%",
     height: 22,
     border: { type: "line" },
-    label: " Hotkeys ",
+    label: " ░ hotkeys ░ ",
     tags: true,
     hidden: true,
     style: {
-      fg: "white",
-      bg: "#111111",
-      border: { fg: "#ec4899" },
+      fg: THEME.text,
+      bg: THEME.bgElevated,
+      border: { fg: THEME.pink },
     },
     content: formatHotkeysOverlay(),
     padding: { left: 1, right: 1, top: 0, bottom: 0 },

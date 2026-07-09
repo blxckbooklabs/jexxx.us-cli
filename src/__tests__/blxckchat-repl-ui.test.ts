@@ -54,9 +54,9 @@ test("session store tracks messages and exports JSON", () => {
 });
 
 test("formatToolLine color-codes pending, success, and error", () => {
-  assert.match(formatToolLine("run_shell", "Running...", "pending"), /yellow-fg/);
-  assert.match(formatToolLine("import_contacts", "42 imported", "success"), /green-fg/);
-  assert.match(formatToolLine("run_shell", "blocked", "blocked"), /red-fg/);
+  assert.match(formatToolLine("run_shell", "Running...", "pending"), /facc15-fg/);
+  assert.match(formatToolLine("import_contacts", "42 imported", "success"), /4ade80-fg/);
+  assert.match(formatToolLine("run_shell", "blocked", "blocked"), /f87171-fg/);
 });
 
 test("runAgent onStream callback receives streamed tokens", async () => {

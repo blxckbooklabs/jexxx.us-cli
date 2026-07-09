@@ -2,6 +2,7 @@ import blessed from "blessed";
 
 import type { SlashSuggestion } from "../slash/autocomplete.js";
 import { isBlessedMouseEnabled } from "../tty.js";
+import { THEME } from "../theme.js";
 
 export interface SlashPopupHandle {
   show: (suggestions: SlashSuggestion[], selectedIndex: number) => void;
@@ -19,22 +20,22 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
 
   const list = blessed.list({
     parent: screen,
-    bottom: 3,
-    left: 0,
-    width: "70%",
+    bottom: 4,
+    left: 1,
+    width: "68%",
     height: 10,
     border: { type: "line" },
-    label: " Commands ",
+    label: " /commands ",
     tags: true,
     hidden: true,
     keys: false,
     mouse: isBlessedMouseEnabled(),
     vi: false,
     style: {
-      fg: "white",
-      bg: "#111111",
-      border: { fg: "#ec4899" },
-      selected: { bg: "#ec4899", fg: "white", bold: true },
+      fg: THEME.text,
+      bg: THEME.bgElevated,
+      border: { fg: THEME.pink },
+      selected: { bg: THEME.pink, fg: THEME.text, bold: true },
     },
   });
 

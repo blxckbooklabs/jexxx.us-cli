@@ -33,7 +33,7 @@ test("markdownToBlessed renders links as label [url]", () => {
 test("renderUserMessageBox wraps content in pink border", () => {
   const out = renderUserMessageBox("hello kingdom");
   assert.match(out, /\{#ec4899-fg\}/);
-  assert.match(out, /You:/);
+  assert.match(out, /you/);
   assert.match(out, /hello kingdom/);
-  assert.match(out, /┌/);
+  assert.match(out, /╭/);
 });

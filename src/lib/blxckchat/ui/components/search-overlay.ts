@@ -1,5 +1,7 @@
 import blessed from "blessed";
 
+import { THEME } from "../theme.js";
+
 export interface SearchOverlayHandle {
   open: () => void;
   close: () => void;
@@ -15,19 +17,20 @@ export function createSearchOverlay(
 
   const box = blessed.textbox({
     parent: screen,
-    top: 1,
-    left: 0,
-    width: "100%",
+    top: 2,
+    left: 1,
+    width: "100%-2",
     height: 3,
     border: { type: "line" },
-    label: " Search ",
+    label: " ░ search ░ ",
     tags: true,
     hidden: true,
     inputOnFocus: true,
     style: {
-      fg: "white",
-      bg: "#1a1a1a",
-      border: { fg: "cyan" },
+      fg: THEME.text,
+      bg: THEME.bgElevated,
+      border: { fg: THEME.cyan },
+      focus: { border: { fg: THEME.pinkGlow } },
     },
   });
 

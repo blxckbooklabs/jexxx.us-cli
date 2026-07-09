@@ -7,6 +7,7 @@ import {
   type SlashSuggestion,
 } from "../slash/autocomplete.js";
 import { isBlessedMouseEnabled } from "../tty.js";
+import { THEME } from "../theme.js";
 
 export interface InputBoxHandle {
   element: blessed.Widgets.TextboxElement;
@@ -35,7 +36,6 @@ export interface InputBoxOptions {
   onUpdate?: () => void;
   onExit?: () => void;
   onShowHotkeys?: () => void;
-  /** Return true when input was queued instead of tab-completing (agent busy). */
   onQueueIfProcessing?: () => boolean;
   onOpenExternalEditor?: () => void;
   shortcuts?: InputShortcutHandlers;
@@ -61,13 +61,16 @@ export function createInputBox(
     width: "100%",
     height: 3,
     border: { type: "line" },
-    label: " Message ",
+    label: " transmit ",
     tags: true,
     style: {
-      fg: "white",
-      bg: "#111111",
-      border: { fg: "#ec4899" },
-      focus: { border: { fg: "#ec4899" } },
+      fg: THEME.text,
+      bg: THEME.bgElevated,
+      border: { fg: THEME.pink },
+      focus: {
+        border: { fg: THEME.pinkGlow },
+        bg: THEME.bgPanel,
+      },
     },
     inputOnFocus: true,
     keys: true,
@@ -220,7 +223,7 @@ export function createInputBox(
     const cols = Math.max(40, screen.width as number);
     const value = input.getValue();
     const border = "─".repeat(Math.max(10, cols - 2));
-    return [`┌${border}┐`, `│ > ${value}_`, `└${border}┘`].join("\n");
+    return [`╭${border}╮`, `│ › ${value}▌`, `╰${border}╯`].join("\n");
   };
 
   return {

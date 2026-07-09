@@ -10,6 +10,8 @@ import { resolveProvider } from "../providers/registry.js";
 import { cycleModelOption, listModelOptions } from "../providers/models.js";
 
 import { createTopBar } from "./components/top-bar.js";
+import { createCrtBackdrop } from "./components/crt-backdrop.js";
+import { THEME } from "./theme.js";
 import { createMessageBox } from "./components/message-box.js";
 import { createInputBox } from "./components/input-box.js";
 import { createStatusBar } from "./components/status-bar.js";
@@ -77,16 +79,17 @@ function createBlessedConfirm(
       tags: true,
       label: " Confirm Tool ",
       style: {
-        fg: "white",
-        bg: "#1a1a1a",
-        border: { fg: "yellow" },
+        fg: THEME.text,
+        bg: THEME.bgElevated,
+        border: { fg: THEME.pink },
       },
       content: [
-        `{yellow-fg}BLXCKCHAT wants to run:{/yellow-fg} {bold}${toolName}{/bold}`,
+        `{#ec4899-fg}░░ tool confirm ░░{/}`,
+        `{#ec4899-fg}BLXCKCHAT{/} wants to run {bold}${toolName}{/bold}`,
         "",
         `{gray-fg}${argsPreview.replace(/\{/g, "{open}")}{/gray-fg}`,
         "",
-        "{cyan-fg}Press Y to allow, N to decline{/cyan-fg}",
+        "{#67e8f9-fg}Y{/} allow  {#f87171-fg}N{/} decline",
       ].join("\n"),
     });
 
@@ -133,8 +136,12 @@ export async function startTerminalChat(
       title: "BLXCKCHAT",
       fullUnicode: true,
       mouse: isBlessedMouseEnabled(),
+      terminal: process.env.TERM,
+      style: { bg: THEME.bg },
     });
     screenRef = screen;
+
+    const crtBackdrop = createCrtBackdrop(screen, { top: 2, bottom: 4 });
 
   let activeConfig: StoredProviderConfig = { ...options.storedConfig };
   let activeProvider: Provider = provider;
@@ -195,7 +202,11 @@ export async function startTerminalChat(
     statusBar.setMessage(copied ? "Last reply copied" : "Copy failed — see TUI snapshot");
   };
 
+  const canSnapshot = (): boolean =>
+    Boolean(topBar && messageBox && statusBar && inputBox);
+
   const syncSnapshot = (): void => {
+    if (!canSnapshot()) return;
     const snapshot = buildTuISnapshot({
       width: (screen.width as number) || 80,
       topBar: topBar.getPlainText(),
@@ -207,6 +218,9 @@ export async function startTerminalChat(
   };
 
   const copySnapshot = async (): Promise<{ path: string; copied: boolean }> => {
+    if (!canSnapshot()) {
+      return { path: getSnapshotPath(), copied: false };
+    }
     const snapshot = buildTuISnapshot({
       width: (screen.width as number) || 80,
       topBar: topBar.getPlainText(),
@@ -540,6 +554,15 @@ export async function startTerminalChat(
 
   inputBox.focus();
   screen.render();
+
+  const glitchTimer = setInterval(() => {
+    topBar.tickGlitch();
+    crtBackdrop.setGlitchSeed(Date.now() % 9);
+  }, 2800);
+
+  screen.on("destroy", () => {
+    clearInterval(glitchTimer);
+  });
 
   await new Promise<void>(() => {
     // Keep process alive until exit shortcut

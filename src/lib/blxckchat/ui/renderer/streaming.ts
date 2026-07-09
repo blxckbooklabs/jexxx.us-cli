@@ -24,14 +24,14 @@ export class StreamBuffer {
 
 /**
  * Format a partial stream buffer for live display (plain text, no full markdown parse).
- * Full markdown rendering happens on finalize.
+ * Pink CRT cursor — full markdown rendering happens on finalize.
  */
 export function formatStreamingChunk(buffer: string): string {
   if (!buffer) {
-    return `{gray-fg}▌{/gray-fg}`;
+    return `{#ec4899-fg}▌{/}`;
   }
   const escaped = buffer.replace(/\{/g, "{open}").replace(/@/g, "@");
-  return `${escaped}{gray-fg}▌{/gray-fg}`;
+  return `${escaped}{#ec4899-fg}{bold}▌{/bold}{/}`;
 }
 
 /** Finalize streamed assistant text with markdown rendering. */

@@ -1,20 +1,21 @@
 import type { ToolResult, ToolStatus } from "../session/session-store.js";
 import { escapeBlessed } from "../renderer/markdown.js";
+import { TAG } from "../theme.js";
 
 const STATUS_ICONS: Record<ToolStatus, string> = {
-  pending: "⏳",
-  success: "✓",
-  error: "✗",
-  declined: "✗",
-  blocked: "✗",
+  pending: "◌",
+  success: "◆",
+  error: "◇",
+  declined: "◇",
+  blocked: "◇",
 };
 
 const STATUS_COLORS: Record<ToolStatus, string> = {
-  pending: "yellow-fg",
-  success: "green-fg",
-  error: "red-fg",
-  declined: "red-fg",
-  blocked: "red-fg",
+  pending: "#facc15-fg",
+  success: "#4ade80-fg",
+  error: "#f87171-fg",
+  declined: "#f87171-fg",
+  blocked: "#f87171-fg",
 };
 
 export function formatToolLinePlain(
@@ -23,15 +24,15 @@ export function formatToolLinePlain(
   status: ToolStatus,
 ): string {
   const icon = STATUS_ICONS[status];
-  const label = status === "pending" ? "Running..." : result;
-  return `[${icon} Tool: ${toolName}] ${label}\n`;
+  const label = status === "pending" ? "running…" : result;
+  return `  ${icon} tool:${toolName} → ${label}\n`;
 }
 
 export function formatToolLine(toolName: string, result: string, status: ToolStatus): string {
   const icon = STATUS_ICONS[status];
   const color = STATUS_COLORS[status];
-  const label = status === "pending" ? "Running..." : escapeBlessed(result);
-  return `{${color}}[${icon} Tool: ${toolName}] ${label}{/${color}}\n`;
+  const label = status === "pending" ? "running…" : escapeBlessed(result);
+  return `  {${color}}${icon}{/} ${TAG.pink}${toolName}${TAG.pinkEnd} {gray-fg}→{/gray-fg} {${color}}${label}{/${color}}\n`;
 }
 
 export function formatToolResult(entry: ToolResult): string {

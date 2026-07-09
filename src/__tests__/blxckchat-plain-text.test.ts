@@ -17,9 +17,10 @@ test("stripBlessedTags removes blessed inline tags", () => {
 test("buildWelcomeBannerPlain renders copyable welcome box", () => {
   const out = buildWelcomeBannerPlain("alice@example.com", 5);
   assert.match(out, /Welcome to the kingdom/);
-  assert.match(out, /authenticated as alice@example\.com/);
-  assert.match(out, /5 tools/);
-  assert.match(out, /╔/);
+  assert.match(out, /Auth: alice@example\.com/);
+  assert.match(out, /Tools online: 5/);
+  assert.match(out, /JEXXXUS KINGDOM FEED/);
+  assert.match(out, /╔═╤/);
 });
 
 test("buildTuISnapshot assembles full TUI plain text", () => {
