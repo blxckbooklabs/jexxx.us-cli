@@ -15,6 +15,23 @@ they can make an informed choice.`;
 
 const MAX_TURNS = 8;
 
+// Caps how many prior turns are replayed to the model each call. Prevents
+// unbounded context growth in long interactive REPL sessions; the system
+// prompt (with fresh RAG context for the *current* query) is always
+// prepended separately and doesn't count against this.
+const MAX_HISTORY_MESSAGES = 40;
+
+export interface AgentTurnResult {
+  /** The final natural-language answer for this turn. */
+  response: string;
+  /**
+   * Updated conversation transcript (user/assistant/tool messages, no system
+   * prompt) — pass this back into the next runAgent() call as `history` to
+   * keep multi-turn context (follow-ups, confirmations, "yes"/"no" replies).
+   */
+  history: ChatMessage[];
+}
+
 function buildSystemPrompt(userPrompt: string): string {
   const docChunks = searchDocs(userPrompt, 5);
   if (docChunks.length === 0) return SYSTEM_PROMPT_BASE;
@@ -30,19 +47,35 @@ function buildSystemPrompt(userPrompt: string): string {
  * Core agent loop: prime with RAG context, send messages + tool defs to the
  * provider, execute any tool calls (with confirmation gating), feed results
  * back, and repeat until the model stops calling tools or MAX_TURNS is hit.
+ *
+ * Accepts and returns `history` (the prior conversation, sans system prompt)
+ * so callers — e.g. the interactive REPL in index.ts — can carry context
+ * across turns. Without this, a follow-up like "yes" has nothing to refer
+ * to, since each call otherwise starts from a blank slate.
  */
 export async function runAgent(
   provider: Provider,
   tools: BlxckchatTool[],
   userPrompt: string,
   history: ChatMessage[] = []
-): Promise<string> {
+): Promise<AgentTurnResult> {
+  const trimmedHistory =
+    history.length > MAX_HISTORY_MESSAGES
+      ? history.slice(history.length - MAX_HISTORY_MESSAGES)
+      : history;
+
   const systemPrompt = buildSystemPrompt(userPrompt);
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
-    ...history,
+    ...trimmedHistory,
     { role: "user", content: userPrompt },
   ];
+
+  // Everything pushed onto `messages` after this point (user query onward)
+  // becomes the new history returned to the caller; the system prompt is
+  // rebuilt fresh every call (it's keyed to the *current* query's RAG
+  // context), so it's excluded from what gets carried forward.
+  const conversationStartIndex = 1;
 
   const toolDefs = tools.map((t) => ({
     name: t.name,
@@ -58,6 +91,15 @@ export async function runAgent(
   let repeatCount = 0;
   let lastSuccessfulResult: string | null = null;
 
+  // Wraps a final answer with the transcript to hand back as next-turn
+  // history — every early-return path below must go through this so the
+  // REPL's conversation memory stays consistent regardless of how the turn
+  // ended (clean stop, repeat-loop short-circuit, or MAX_TURNS exhaustion).
+  const finish = (response: string): AgentTurnResult => {
+    messages.push({ role: "assistant", content: response });
+    return { response, history: messages.slice(conversationStartIndex) };
+  };
+
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     // Use streaming for text responses if available
     let result;
@@ -71,7 +113,7 @@ export async function runAgent(
 
     if (result.stopReason === "stop" || result.toolCalls.length === 0) {
       console.log(); // Newline after streamed output
-      return result.message.content;
+      return finish(result.message.content);
     }
 
     messages.push({
@@ -103,7 +145,7 @@ export async function runAgent(
       if (repeatCount >= 2 && lastSuccessfulResult) {
         // The model already has this result and is looping instead of
         // answering. Return it directly rather than exhausting MAX_TURNS.
-        return `Based on the ${tool.name} result: ${lastSuccessfulResult}`;
+        return finish(`Based on the ${tool.name} result: ${lastSuccessfulResult}`);
       }
 
       let confirmed = true;
@@ -169,7 +211,9 @@ export async function runAgent(
     }
   }
 
-  return lastSuccessfulResult
-    ? `Based on the available tool result: ${lastSuccessfulResult}`
-    : "BLXCKCHAT stopped after reaching the maximum number of tool-call turns.";
+  return finish(
+    lastSuccessfulResult
+      ? `Based on the available tool result: ${lastSuccessfulResult}`
+      : "BLXCKCHAT stopped after reaching the maximum number of tool-call turns."
+  );
 }

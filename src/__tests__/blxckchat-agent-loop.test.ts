@@ -58,14 +58,14 @@ function makeLoopingProvider(): Provider {
 test("runAgent executes a tool call and returns the model's final answer", async () => {
   const provider = makeSingleToolCallProvider();
   const tools = [makeEchoTool()];
-  const response = await runAgent(provider, tools, "please echo hello");
+  const { response } = await runAgent(provider, tools, "please echo hello");
   assert.match(response, /Final answer using: echoed: hello/);
 });
 
 test("runAgent short-circuits when the model repeats an identical tool call", async () => {
   const provider = makeLoopingProvider();
   const tools = [makeEchoTool()];
-  const response = await runAgent(provider, tools, "please echo stuck");
+  const { response } = await runAgent(provider, tools, "please echo stuck");
   assert.match(response, /echoed: stuck/);
 });
 
@@ -86,6 +86,41 @@ test("runAgent reports an error for an unrecognized tool name", async () => {
       };
     },
   };
-  const response = await runAgent(provider, [makeEchoTool()], "call a bad tool");
+  const { response } = await runAgent(provider, [makeEchoTool()], "call a bad tool");
   assert.equal(response, "done");
+});
+
+test("runAgent returns history that a follow-up call can use for context", async () => {
+  const provider = makeSingleToolCallProvider();
+  const tools = [makeEchoTool()];
+  const first = await runAgent(provider, tools, "please echo hello");
+  assert.ok(first.history.length > 0, "history should include the first turn's messages");
+  assert.equal(first.history[0]?.role, "user");
+  assert.equal(first.history[0]?.content, "please echo hello");
+
+  const last = first.history[first.history.length - 1];
+  assert.equal(last?.role, "assistant");
+  assert.match(last?.content ?? "", /Final answer using: echoed: hello/);
+});
+
+test("runAgent caps replayed history so long sessions don't grow context unbounded", async () => {
+  const provider: Provider = {
+    id: "anthropic",
+    async chat(messages: ChatMessage[]): Promise<ChatResult> {
+      // Report how many non-system messages the model actually saw this turn.
+      const nonSystemCount = messages.filter((m) => m.role !== "system").length;
+      return {
+        message: { role: "assistant", content: `saw ${nonSystemCount} messages` },
+        toolCalls: [],
+        stopReason: "stop",
+      };
+    },
+  };
+  const longHistory: ChatMessage[] = Array.from({ length: 100 }, (_, i) => ({
+    role: i % 2 === 0 ? "user" : "assistant",
+    content: `turn ${i}`,
+  }));
+  const { response } = await runAgent(provider, [], "new question", longHistory);
+  // 40 replayed history messages (trimmed from 100) + this turn's user message = 41
+  assert.match(response, /saw 41 messages/);
 });

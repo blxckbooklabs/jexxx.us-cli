@@ -605,17 +605,22 @@ blxckchatCmd
     }
 
     if (prompt) {
-      const response = await runAgent(provider, tools, prompt);
+      const { response } = await runAgent(provider, tools, prompt);
       console.log(chalk.white(`\n${response}\n`));
       process.exit(0);
     }
 
-    // Interactive REPL mode
+    // Interactive REPL mode — conversationHistory persists across turns
+    // within this process so follow-ups ("yes", "the other one", etc.) and
+    // multi-step tool confirmations have the prior turns to refer back to.
+    // One-shot mode above stays intentionally stateless.
     console.log(
       chalk.cyan(
-        `[BLXCKCHAT] Interactive mode — provider: ${storedConfig.provider}/${storedConfig.model}. Type /exit to quit.\n`
+        `[BLXCKCHAT] Interactive mode — provider: ${storedConfig.provider}/${storedConfig.model}. Type /exit to quit, /reset to clear conversation history.\n`
       )
     );
+
+    let conversationHistory: import("./lib/blxckchat/providers/types.js").ChatMessage[] = [];
 
     const readline = await import("readline");
     const rl = readline.createInterface({
@@ -631,17 +636,36 @@ blxckchatCmd
         rl.close();
         return;
       }
+      if (trimmed === "/reset") {
+        conversationHistory = [];
+        console.log(chalk.dim("\n[BLXCKCHAT] Conversation history cleared.\n"));
+        rl.prompt();
+        return;
+      }
       if (!trimmed) {
         rl.prompt();
         return;
       }
 
       try {
-        const response = await runAgent(provider, tools, trimmed);
-        console.log(chalk.white(`\nblxckchat> ${response}\n`));
+        process.stdout.write(chalk.white("\nblxckchat> "));
+        const { response, history } = await runAgent(
+          provider,
+          tools,
+          trimmed,
+          conversationHistory
+        );
+        conversationHistory = history;
+        // Streaming providers already wrote the response as it arrived;
+        // non-streaming providers (or fallback paths) haven't printed
+        // anything yet, so print it here.
+        if (!provider.chatStream) {
+          console.log(response);
+        }
+        console.log();
       } catch (err) {
         console.error(
-          chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+          chalk.red(`\n[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
         );
       }
       rl.prompt();
