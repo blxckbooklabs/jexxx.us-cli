@@ -5,7 +5,7 @@ import { findTool } from "./tools/registry.js";
 import { confirmToolCall as defaultConfirmToolCall } from "./confirm.js";
 import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
-import { EMPIRE_CONTENT_ROUTING } from "./empire-routing.js";
+import { EMPIRE_CONTENT_ROUTING, formatEmpireRoutingHint } from "./empire-routing.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
 
@@ -87,14 +87,17 @@ function buildSystemPrompt(userPrompt: string, persona?: PersonaContext): string
     ? `${persona.systemPrompt.trim()}\n\n---\n\n${PERSONA_CLI_BRIDGE}`
     : SYSTEM_PROMPT_BASE;
 
+  const routingHint = formatEmpireRoutingHint(userPrompt);
+  let prompt = routingHint ? `${base}\n\n${routingHint}` : base;
+
   const docChunks = searchDocs(userPrompt, 5);
-  if (docChunks.length === 0) return base;
+  if (docChunks.length === 0) return prompt;
 
   const context = docChunks
     .map((c) => `### ${c.source} — ${c.heading}\n${c.text}`)
     .join("\n\n");
 
-  return `${base}\n\nRelevant JEXXXUS documentation context:\n\n${context}`;
+  return `${prompt}\n\nRelevant JEXXXUS documentation context:\n\n${context}`;
 }
 
 /**
