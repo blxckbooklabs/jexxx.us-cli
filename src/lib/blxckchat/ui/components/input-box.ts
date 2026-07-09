@@ -13,7 +13,7 @@ import { isBlessedMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 
 export interface InputBoxHandle {
-  element: blessed.Widgets.TextboxElement;
+  element: blessed.Widgets.BoxElement;
   focus: () => void;
   clear: () => void;
   setValue: (value: string) => void;
@@ -100,7 +100,7 @@ export function createInputBox(
     }, 50);
   };
 
-  const input = blessed.textbox({
+  const input = blessed.box({
     parent: screen,
     bottom: 0,
     left: 0,
@@ -109,6 +109,8 @@ export function createInputBox(
     border: { type: "line" },
     label: " transmit ",
     tags: true,
+    keys: true,
+    mouse: isBlessedMouseEnabled(),
     style: {
       fg: THEME.text,
       bg: THEME.bgElevated,
@@ -118,10 +120,6 @@ export function createInputBox(
         bg: THEME.bgPanel,
       },
     },
-    inputOnFocus: false,
-    keys: true,
-    mouse: isBlessedMouseEnabled(),
-    vi: false,
   });
 
   const lineEditor = attachBlessedLineEditor(input, screen, {

@@ -11,15 +11,9 @@ import {
   type LineEditorState,
 } from "./line-editor.js";
 
-type TextboxElement = blessed.Widgets.TextboxElement & {
+type InputBoxElement = blessed.Widgets.BoxElement & {
   emit: (event: string, ...args: unknown[]) => boolean;
-  ileft: number;
-  iwidth: number;
-  itop: number;
   width: number;
-  _updateCursor: (get?: boolean) => void;
-  _value?: string;
-  value: string;
 };
 
 export interface BlessedLineEditorHandle {
@@ -34,54 +28,25 @@ export interface BlessedLineEditorOptions {
 }
 
 /**
- * Transmit row editor — program-level key capture (not blessed readInput) so
- * macOS ⌥⇧← word select, ⌘⌫ line kill, and paste work reliably.
+ * Transmit row editor — plain box + program-level key capture.
+ * Avoids blessed textbox/textarea (typing `e` or Ctrl+E spawns `$EDITOR` / vi).
  */
 export function attachBlessedLineEditor(
-  input: blessed.Widgets.TextboxElement,
+  input: blessed.Widgets.BoxElement,
   screen: blessed.Widgets.Screen,
   options: BlessedLineEditorOptions = {},
 ): BlessedLineEditorHandle {
-  const box = input as TextboxElement;
-  let state = createLineEditorState(box.getValue() ?? "");
+  const box = input as InputBoxElement;
+  let state = createLineEditorState("");
   let captureActive = false;
   let focused = false;
   const modalKeys = createModalKeypress(screen);
 
-  const innerWidth = (): number =>
-    Math.max(8, ((box.width as number) || 80) - (box.iwidth || 0) - 2);
-
-  const positionCursor = (column: number): void => {
-    const coords = (box as { _getCoords?: () => { xi: number; yi: number } })._getCoords?.();
-    if (!coords) return;
-    const program = screen.program as {
-      y: number;
-      x: number;
-      cup: (y: number, x: number) => void;
-      cuf: (n: number) => void;
-      cub: (n: number) => void;
-    };
-    const cy = coords.yi + (box.itop || 0);
-    const cx = coords.xi + (box.ileft || 0) + column;
-    if (cy === program.y) {
-      if (cx > program.x) program.cuf(cx - program.x);
-      else if (cx < program.x) program.cub(program.x - cx);
-    } else {
-      program.cup(cy, cx);
-    }
-  };
-
-  const syncBlessedValue = (): void => {
-    box.value = state.text;
-    box._value = state.text;
-  };
+  const innerWidth = (): number => Math.max(8, ((box.width as number) || 80) - 4);
 
   const render = (): void => {
-    syncBlessedValue();
-    const view = renderLineEditorView(state, innerWidth());
-    box.setContent(view.content);
-    box._updateCursor?.();
-    positionCursor(view.cursorColumn);
+    const view = renderLineEditorView(state, innerWidth(), { showCursor: focused });
+    box.setContent(view.content.length > 0 ? ` ${view.content}` : " ");
     screen.render();
     options.onChange?.(state.text);
   };
@@ -136,6 +101,7 @@ export function attachBlessedLineEditor(
   box.on("blur", () => {
     focused = false;
     stopCapture();
+    render();
   });
 
   return {

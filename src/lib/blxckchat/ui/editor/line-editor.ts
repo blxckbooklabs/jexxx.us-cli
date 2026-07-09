@@ -334,13 +334,28 @@ export interface LineEditorView {
   cursorColumn: number;
 }
 
+export interface RenderLineEditorOptions {
+  selectionTag?: string;
+  selectionEndTag?: string;
+  /** Draw a block cursor at the caret (for box widgets without readInput). */
+  showCursor?: boolean;
+  cursorChar?: string;
+}
+
 /** Render visible slice with optional pink inverse selection. */
 export function renderLineEditorView(
   state: LineEditorState,
   viewWidth: number,
-  selectionTag = "{#ec4899-fg}{inverse}",
+  selectionTagOrOptions: string | RenderLineEditorOptions = "{#ec4899-fg}{inverse}",
   selectionEndTag = "{/}{/}",
 ): LineEditorView {
+  const options: RenderLineEditorOptions =
+    typeof selectionTagOrOptions === "string"
+      ? { selectionTag: selectionTagOrOptions, selectionEndTag }
+      : selectionTagOrOptions;
+  const selTag = options.selectionTag ?? "{#ec4899-fg}{inverse}";
+  const selEndTag = options.selectionEndTag ?? "{/}{/}";
+  const cursorChar = options.cursorChar ?? "▌";
   const width = Math.max(8, viewWidth);
   const range = getSelectionRange(state);
   let start = 0;
@@ -353,9 +368,15 @@ export function renderLineEditorView(
   let content = "";
   for (let i = 0; i < slice.length; i++) {
     const abs = start + i;
+    if (options.showCursor && abs === state.cursor) {
+      content += `{inverse}${cursorChar}{/inverse}`;
+    }
     const ch = slice[i] ?? "";
     const selected = range && abs >= range.start && abs < range.end;
-    content += selected ? `${selectionTag}${ch}${selectionEndTag}` : ch;
+    content += selected ? `${selTag}${ch}${selEndTag}` : ch;
+  }
+  if (options.showCursor && state.cursor === end) {
+    content += `{inverse}${cursorChar}{/inverse}`;
   }
 
   return { content, cursorColumn: state.cursor - start };
