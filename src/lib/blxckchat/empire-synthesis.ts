@@ -6,7 +6,7 @@ export interface EmpireToolResultSummary {
 }
 
 export const EMPIRE_SYNTHESIS_NUDGE =
-  "Rewrite your last in-character reply using the empire tool results above. " +
+  "Rewrite your last in-character reply using the kingdom/garden tool results above. " +
   "Quote bible_query verse text, link VEIL/TV with [Title](url), and end on an in-world beat. " +
   "Do not ask whether to continue the scene or offer meta pivots.";
 

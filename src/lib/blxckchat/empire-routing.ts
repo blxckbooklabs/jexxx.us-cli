@@ -470,7 +470,7 @@ export function formatEmpireRoutingHint(
   const plan = planEmpireTools(userPrompt, options);
   if (plan.tools.length === 0 && plan.slashHints.length === 0) return null;
 
-  const lines = ["## Routing hint for this message (empire collision table)"];
+  const lines = ["## Routing hint for this message (kingdom/garden content routing)"];
   if (plan.tools.length > 0) {
     lines.push(`Prefer tools: ${plan.tools.join(", ")}`);
   }
@@ -534,13 +534,13 @@ export const EMPIRE_COLLISION_TABLE_EXCERPT = `### Phrase collision quick refere
 | latest VEIL and TV (catalog) | veil_query list + tv_query list (no scripture unless themed) |
 | database up / doctor | run_doctor |`;
 
-export const EMPIRE_CONTENT_ROUTING = `## Empire content routing (pick every relevant tool)
+export const EMPIRE_CONTENT_ROUTING = `## Kingdom/Garden content routing (pick every relevant tool)
 
 - **tv_query** — JEXXXUS | TV videos on tv.jexxx.us. Channels, series, tags, titles (Forgive Me Father, Deviante, categories).
 - **veil_query** — VEIL articles on veil.jexxx.us.
 - **bible_query** — Scripture vault. action=query with explicit **Book Chapter:Verse** only (e.g. "1 John 1:9") — never pass video series titles as the query string.
 
-**Empire synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, Proverbs 31, church girl, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links. During **persona roleplay**, still call tools when the scene cites scripture bookmarks, VEIL drafts/articles, or TV sacraments — cite real catalog URLs in dialogue; do not invent article numbers without veil_query.
+**Kingdom/Garden synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, Proverbs 31, church girl, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links. During **persona roleplay**, still call tools when the scene cites scripture bookmarks, VEIL drafts/articles, or TV sacraments — cite real catalog URLs in dialogue; do not invent article numbers without veil_query.
 
 **URL rule (strict):** Copy https://tv.jexxx.us/video/... and https://veil.jexxx.us/articles/... links **exactly** from tool or pre-fetched output — **one URL per line**, never glue two URLs together. Use markdown [Title](url) in lists, not Title [url]. Never use wv.jexxx.us, never insert spaces inside URLs or slugs, never invent paths. In persona roleplay, weave 2–3 links into the scene — avoid raw catalog dumps with ALL-CAPS headers unless the user asks for a list.
 
