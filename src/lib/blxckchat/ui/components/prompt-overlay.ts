@@ -1,5 +1,6 @@
 import blessed from "blessed";
 
+import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { readClipboard } from "../session/tui-snapshot.js";
 import { THEME } from "../theme.js";
 
@@ -21,8 +22,7 @@ export interface PromptOverlayHandle {
 type PromptTextbox = blessed.Widgets.TextboxElement & {
   value: string;
   _value?: string;
-  secret?: boolean;
-  censor?: boolean;
+  _reading?: boolean;
   _updateCursor?: (get?: boolean) => void;
 };
 
@@ -38,6 +38,7 @@ function isPasteKey(key: { name?: string; meta?: boolean; ctrl?: boolean; shift?
 export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverlayHandle {
   let visible = false;
   let secretMode = false;
+  let pasteInFlight = false;
   let resolvePending: ((value: string | null) => void) | null = null;
 
   const box = blessed.box({
@@ -78,6 +79,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     label: " value ",
     tags: true,
     inputOnFocus: true,
+    keys: true,
     style: {
       fg: THEME.text,
       bg: THEME.bgInset,
@@ -138,30 +140,45 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
   };
 
   const pasteFromClipboard = async (): Promise<void> => {
-    const clip = await readClipboard();
-    const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
-    if (!normalized) {
-      refreshView("Clipboard empty");
-      return;
+    if (!visible || pasteInFlight) return;
+    pasteInFlight = true;
+    try {
+      const clip = await readClipboard();
+      const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
+      if (!normalized) {
+        refreshView("Clipboard empty — copy key first");
+        return;
+      }
+      const next = getRawValue() + normalized;
+      setRawValue(next);
+      refreshView(`Pasted ${normalized.length} char${normalized.length === 1 ? "" : "s"}`);
+    } finally {
+      pasteInFlight = false;
     }
-    const next = getRawValue() + normalized;
-    setRawValue(next);
-    refreshView(`Pasted ${normalized.length} char${normalized.length === 1 ? "" : "s"}`);
   };
 
   const finish = (value: string | null): void => {
-    box.hide();
     visible = false;
+    box.hide();
+    releaseOverlayFocus(screen);
     screen.render();
     const resolve = resolvePending;
     resolvePending = null;
     resolve?.(value);
   };
 
+  const handlePasteKey = (): void => {
+    if (!visible) return;
+    void pasteFromClipboard();
+  };
+
+  // Program-global — gate on prompt visibility (transmit uses keypress, not these).
+  screen.key(["C-v", "M-v", "S-insert"], handlePasteKey);
+
   input.on("keypress", (_ch, key) => {
     if (!visible) return;
     if (isPasteKey(key)) {
-      void pasteFromClipboard();
+      handlePasteKey();
       return;
     }
     if (secretMode) {
@@ -169,14 +186,12 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     }
   });
 
-  input.key(["C-v", "M-v", "S-insert"], () => {
-    if (!visible || screen.focused !== input) return;
-    void pasteFromClipboard();
-  });
-
   input.on("submit", (value: string) => finish(value.trim()));
 
-  input.key(["escape", "C-c"], () => finish(null));
+  input.key(["escape", "C-c"], () => {
+    if (!visible) return;
+    finish(null);
+  });
 
   return {
     ask(options) {
@@ -190,18 +205,16 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
         );
         box.height = options.height ?? (options.hint ? 11 : 9);
 
-        // Blessed `secret: true` renders nothing — use manual bullet masking.
-        input.secret = false;
-        input.censor = false;
-
         const initial = options.defaultValue ?? "";
         setRawValue(initial);
-        refreshView();
 
         box.setFront();
         box.show();
-        input.focus();
+
+        // Stop transmit readInput and own focus — otherwise paste goes to transmit.
+        takeOverlayFocus(screen, input);
         visible = true;
+        refreshView();
         screen.render();
       });
     },
