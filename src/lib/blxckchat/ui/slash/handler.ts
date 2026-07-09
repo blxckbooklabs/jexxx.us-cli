@@ -25,6 +25,10 @@ import {
   formatSlashHelp,
   resolveSlashCommandName,
 } from "./registry.js";
+import { loadCredentials as loadAuthCredentials } from "../../../auth.js";
+import { formatHeroHint, formatHeroSubtitle } from "../components/jexxxus-hero.js";
+import { buildChromeDigestPlain } from "../renderer/plain-text.js";
+import { copyToClipboard, writeChromeDigest } from "../session/tui-snapshot.js";
 
 export interface SlashHandlerState {
   session: TerminalSession;
@@ -32,6 +36,7 @@ export interface SlashHandlerState {
   toolCount: number;
   setActiveConfig: (config: StoredProviderConfig, provider: Provider) => void;
   copySnapshot: () => Promise<{ path: string; copied: boolean }>;
+  copyChromeDigest?: () => Promise<{ path: string; copied: boolean }>;
   openModelPicker?: () => void | Promise<void>;
   openProviderPicker?: () => void | Promise<void>;
   openDivinityPicker?: () => void | Promise<void>;
@@ -282,6 +287,46 @@ export async function dispatchSlashCommand(
       state.session.toolResults = [];
       state.session.thinkingBlocks = [];
       return { handled: true, messages: ["Conversation history cleared."] };
+
+    case "chrome": {
+      if (state.copyChromeDigest) {
+        const { path, copied } = await state.copyChromeDigest();
+        return {
+          handled: true,
+          messages: [
+            copied
+              ? `Chrome digest copied (${path})`
+              : `Chrome digest written to ${path}`,
+          ],
+        };
+      }
+      const liveAuth = loadAuthCredentials({ quiet: true })?.email ?? "not authenticated";
+      const providerLabel = `${state.activeConfig.provider}/${state.activeConfig.model}`;
+      const chrome = buildChromeDigestPlain({
+        topBarModel: providerLabel,
+        authEmail: liveAuth,
+        toolCount: state.toolCount,
+        heroSubtitle: formatHeroSubtitle({
+          authEmail: liveAuth,
+          toolCount: state.toolCount,
+          providerLabel,
+        }),
+        heroHint: formatHeroHint(),
+        statusBar: "(readline mode)",
+        inputValue: "",
+        divinity: state.session.activeDivinity?.name ?? null,
+      });
+      const path = writeChromeDigest(chrome);
+      const copied = await copyToClipboard(chrome);
+      return {
+        handled: true,
+        messages: [
+          copied ? `Chrome digest copied (${path})` : `Chrome digest written to ${path}`,
+          "",
+          chrome,
+        ],
+      };
+    }
 
     case "copy": {
       const { path, copied } = await state.copySnapshot();

@@ -6,6 +6,7 @@ import { THEME, TAG, glitchNoise, crtCorner } from "../theme.js";
 export interface TopBarHandle {
   element: blessed.Widgets.BoxElement;
   setSubtitle: (text: string) => void;
+  getSubtitle: () => string;
   getPlainText: () => string;
   tickGlitch: () => void;
 }
@@ -65,6 +66,9 @@ export function createTopBar(
     setSubtitle(text: string) {
       subtitle = text;
       render();
+    },
+    getSubtitle() {
+      return subtitle;
     },
     getPlainText,
     tickGlitch() {

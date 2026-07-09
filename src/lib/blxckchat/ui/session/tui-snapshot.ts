@@ -7,15 +7,27 @@ export function getSnapshotPath(): string {
   return `${getCredentialsDir()}/tui-snapshot.txt`;
 }
 
-/** Persist the latest plain-text TUI snapshot for debugging. */
-export function writeSnapshot(text: string): string {
-  const target = getSnapshotPath();
+export function getChromeDigestPath(): string {
+  return `${getCredentialsDir()}/chrome-digest.txt`;
+}
+
+function writeSnapshotFile(target: string, text: string): string {
   const dir = getCredentialsDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
   fs.writeFileSync(target, text, { encoding: "utf-8", mode: 0o600 });
   return target;
+}
+
+/** Persist the latest plain-text TUI snapshot for debugging. */
+export function writeSnapshot(text: string): string {
+  return writeSnapshotFile(getSnapshotPath(), text);
+}
+
+/** Persist the latest chrome digest (text indicators only). */
+export function writeChromeDigest(text: string): string {
+  return writeSnapshotFile(getChromeDigestPath(), text);
 }
 
 /** Read plain text from the system clipboard (best-effort). */

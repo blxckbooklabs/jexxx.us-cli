@@ -135,7 +135,9 @@ jexxxus blxckchat --provider my-ollama-config "check doctor status"
 jexxxus blxckchat --shell
 ```
 
-**Slash commands (interactive):** `/divinities` (persona picker), `/divinities <name>`, `/divinities clear`, `/reset`, `/exit`.
+**Slash commands (interactive):** `/divinities` (persona picker), `/chrome` (copy TUI text indicators), `/copy` (full snapshot), `/reset`, `/exit`.
+
+**Copy for debugging:** `/chrome` or `Ctrl+Shift+Y` copies plain-text chrome (model, auth, tool count, hero hints, status bar) to clipboard and `~/.jexxxus/chrome-digest.txt`. `Ctrl+Y` copies chrome + full visual snapshot.
 
 **Providers (v1):** `anthropic`, `openai`, `ollama`. Ollama needs no API key—just a running local
 server (default `http://localhost:11434/v1`). Credentials are stored in `~/.jexxxus/credentials.json`

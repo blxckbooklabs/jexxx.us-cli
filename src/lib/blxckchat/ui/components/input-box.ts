@@ -27,6 +27,7 @@ export interface InputBoxHandle {
 export interface InputShortcutHandlers {
   onSave?: () => void;
   onCopyTui?: () => void;
+  onCopyChrome?: () => void;
   onCopyLastReply?: () => void;
   onModelList?: () => void;
   onModelNext?: () => void;
@@ -226,6 +227,7 @@ export function createInputBox(
   const sc = options.shortcuts;
   if (sc?.onSave) input.key(["C-s"], () => sc.onSave!());
   if (sc?.onCopyTui) input.key(["C-y"], () => void sc.onCopyTui!());
+  if (sc?.onCopyChrome) input.key(["C-S-y"], () => void sc.onCopyChrome!());
   if (sc?.onCopyLastReply) input.key(["C-o"], () => void sc.onCopyLastReply!());
   if (sc?.onModelList) input.key(["C-l"], () => void sc.onModelList!());
   if (sc?.onModelNext) input.key(["C-p"], () => void sc.onModelNext!());

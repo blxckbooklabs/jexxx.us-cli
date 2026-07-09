@@ -21,7 +21,12 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
     argumentHint: "<name> | clear",
   },
   { name: "session", aliases: ["status"], description: "Show session stats and active provider" },
-  { name: "copy", description: "Copy full TUI snapshot to clipboard" },
+  {
+    name: "chrome",
+    aliases: ["indicators", "hud"],
+    description: "Copy TUI text indicators (model, auth, tools, hints) to clipboard",
+  },
+  { name: "copy", description: "Copy full TUI snapshot to clipboard (chrome digest + visual)" },
   { name: "save", aliases: ["export"], description: "Export session to JSON" },
   { name: "reset", aliases: ["clear", "new"], description: "Clear conversation history" },
   { name: "exit", aliases: ["quit", "q"], description: "Exit BLXCKCHAT" },

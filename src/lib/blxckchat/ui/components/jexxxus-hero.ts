@@ -22,6 +22,21 @@ export interface JexxxusHeroMeta {
   providerLabel: string;
 }
 
+function truncateAuthEmail(authEmail: string): string {
+  return authEmail.length > 24 ? `${authEmail.slice(0, 21)}…` : authEmail;
+}
+
+/** Hero subtitle line (model · auth · tool count)—copy-paste friendly, no block glyphs. */
+export function formatHeroSubtitle(meta: JexxxusHeroMeta): string {
+  const email = truncateAuthEmail(meta.authEmail);
+  return `${meta.providerLabel}  ·  ${email}  ·  ${meta.toolCount} tools`;
+}
+
+/** Hero hint line under the JEXXXUS wordmark. */
+export function formatHeroHint(): string {
+  return "Type a message to begin  ·  /help  ·  ? hotkeys";
+}
+
 function composeRow(letters: readonly string[], row: number): string {
   return letters.map((ch) => GLYPHS[ch]?.[row] ?? "      ").join(" ".repeat(LETTER_GAP));
 }
@@ -46,10 +61,8 @@ export function renderJexxxusHeroPlain(width: number, meta: JexxxusHeroMeta): st
   const logoWidth = logoLines[0]?.length ?? 0;
   const left = Math.max(0, Math.floor((width - logoWidth) / 2));
 
-  const email =
-    meta.authEmail.length > 24 ? `${meta.authEmail.slice(0, 21)}…` : meta.authEmail;
-  const subtitle = `${meta.providerLabel}  ·  ${email}  ·  ${meta.toolCount} tools`;
-  const hint = "Type a message to begin  ·  /help  ·  ? hotkeys";
+  const subtitle = formatHeroSubtitle(meta);
+  const hint = formatHeroHint();
 
   const lines: string[] = [];
   for (const row of logoLines) {
@@ -69,10 +82,8 @@ export function renderJexxxusHeroBlessed(width: number, meta: JexxxusHeroMeta): 
   const logoWidth = composeRow(WORD, 0).length;
   const left = Math.max(0, Math.floor((width - logoWidth) / 2));
 
-  const email =
-    meta.authEmail.length > 24 ? `${meta.authEmail.slice(0, 21)}…` : meta.authEmail;
-  const subtitle = `${meta.providerLabel}  ·  ${email}  ·  ${meta.toolCount} tools`;
-  const hint = "Type a message to begin  ·  /help  ·  ? hotkeys";
+  const subtitle = formatHeroSubtitle(meta);
+  const hint = formatHeroHint();
 
   const lines: string[] = [];
   for (const row of logoLines) {

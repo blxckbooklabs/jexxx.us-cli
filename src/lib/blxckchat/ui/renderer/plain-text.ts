@@ -94,3 +94,42 @@ export function buildTuISnapshot(parts: TuISnapshotParts): string {
     .filter((section) => section.length > 0)
     .join("\n");
 }
+
+/** Live chrome strings for debugging (no block glyphs, glitch noise, or borders). */
+export interface ChromeDigestInput {
+  topBarModel: string;
+  authEmail: string;
+  toolCount: number;
+  heroSubtitle: string;
+  heroHint: string;
+  statusBar: string;
+  inputValue: string;
+  divinity?: string | null;
+}
+
+/** One line per indicator—paste into tickets, Cursor, or logs. */
+export function buildChromeDigestPlain(input: ChromeDigestInput): string {
+  const lines = [
+    "BLXCKCHAT chrome digest",
+    `top_bar: ${input.topBarModel}`,
+    `auth: ${input.authEmail}`,
+    `tools: ${input.toolCount}`,
+    `hero_subtitle: ${input.heroSubtitle}`,
+    `hero_hint: ${input.heroHint}`,
+    `status_bar: ${input.statusBar}`,
+    `input: ${input.inputValue}`,
+  ];
+  if (input.divinity) {
+    lines.push(`divinity: ${input.divinity}`);
+  }
+  return lines.join("\n");
+}
+
+/** Chrome digest + visual snapshot for Ctrl+Y / /copy. */
+export function buildTuISnapshotWithChrome(
+  chrome: string,
+  parts: TuISnapshotParts,
+): string {
+  const visual = buildTuISnapshot(parts);
+  return `${chrome}\n\n---\n\n${visual}`;
+}

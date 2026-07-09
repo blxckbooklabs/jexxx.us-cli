@@ -3,15 +3,23 @@ import * as fs from "fs";
 import { test } from "node:test";
 
 import {
+  buildChromeDigestPlain,
   buildStatusBarPlain,
   buildTopBarPlain,
   buildTuISnapshot,
+  buildTuISnapshotWithChrome,
   buildWelcomeBannerPlain,
   framePanel,
   frameTransmitInput,
   stripBlessedTags,
 } from "../lib/blxckchat/ui/renderer/plain-text.js";
-import { getSnapshotPath, writeSnapshot } from "../lib/blxckchat/ui/session/tui-snapshot.js";
+import { formatHeroHint, formatHeroSubtitle } from "../lib/blxckchat/ui/components/jexxxus-hero.js";
+import {
+  getChromeDigestPath,
+  getSnapshotPath,
+  writeChromeDigest,
+  writeSnapshot,
+} from "../lib/blxckchat/ui/session/tui-snapshot.js";
 
 test("stripBlessedTags removes blessed inline tags", () => {
   const out = stripBlessedTags("{bold}Hi{/bold} {#ec4899-fg}there{/}");
@@ -65,6 +73,61 @@ test("buildTuISnapshot assembles full TUI plain text", () => {
   assert.match(out, /Ctrl\+Y copy/);
   assert.match(out, /transmit/);
   assert.match(out, /┌/);
+});
+
+test("buildChromeDigestPlain renders copy-paste debug lines", () => {
+  const meta = {
+    authEmail: "not authenticated",
+    toolCount: 6,
+    providerLabel: "ollama/gemma4:31b-cloud",
+  };
+  const out = buildChromeDigestPlain({
+    topBarModel: meta.providerLabel,
+    authEmail: meta.authEmail,
+    toolCount: meta.toolCount,
+    heroSubtitle: formatHeroSubtitle(meta),
+    heroHint: formatHeroHint(),
+    statusBar: "Shift+↑↓ scroll · Ctrl+Y copy · ? hotkeys",
+    inputValue: "",
+  });
+  assert.match(out, /^BLXCKCHAT chrome digest/);
+  assert.match(out, /top_bar: ollama\/gemma4:31b-cloud/);
+  assert.match(out, /auth: not authenticated/);
+  assert.match(out, /tools: 6/);
+  assert.match(out, /hero_subtitle: ollama\/gemma4:31b-cloud  ·  not authenticated  ·  6 tools/);
+  assert.match(out, /hero_hint: Type a message to begin/);
+  assert.match(out, /status_bar: Shift/);
+});
+
+test("buildTuISnapshotWithChrome prepends digest before visual snapshot", () => {
+  const chrome = "BLXCKCHAT chrome digest\ntop_bar: test";
+  const out = buildTuISnapshotWithChrome(chrome, {
+    width: 40,
+    topBar: "header",
+    messages: "body",
+    statusBar: "status",
+    input: "input",
+  });
+  assert.match(out, /^BLXCKCHAT chrome digest/);
+  assert.match(out, /---/);
+  assert.match(out, /header/);
+});
+
+test("writeChromeDigest persists chrome lines to disk", () => {
+  const text = buildChromeDigestPlain({
+    topBarModel: "openai/gpt-4",
+    authEmail: "dev@test",
+    toolCount: 4,
+    heroSubtitle: "openai/gpt-4  ·  dev@test  ·  4 tools",
+    heroHint: formatHeroHint(),
+    statusBar: "ready",
+    inputValue: "/help",
+  });
+  const written = writeChromeDigest(text);
+  assert.equal(written, getChromeDigestPath());
+  const saved = fs.readFileSync(getChromeDigestPath(), "utf-8");
+  assert.equal(saved, text);
+  assert.match(saved, /input: \/help/);
 });
 
 test("writeSnapshot persists plain TUI to disk", () => {

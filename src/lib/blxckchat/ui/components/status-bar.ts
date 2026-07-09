@@ -6,6 +6,7 @@ import { THEME, TAG, glitchNoise } from "../theme.js";
 export interface StatusBarHandle {
   element: blessed.Widgets.BoxElement;
   setMessage: (text: string) => void;
+  getMessage: () => string;
   getPlainText: () => string;
 }
 
@@ -51,6 +52,9 @@ export function createStatusBar(
     setMessage(text: string) {
       message = text;
       render();
+    },
+    getMessage() {
+      return message;
     },
     getPlainText() {
       return buildStatusBarPlain((screen.width as number) || 80, message);

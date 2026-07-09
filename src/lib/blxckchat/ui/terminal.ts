@@ -12,6 +12,8 @@ import { cycleModelOption, listModelOptions } from "../providers/models.js";
 import { createTopBar } from "./components/top-bar.js";
 import { createCrtBackdrop } from "./components/crt-backdrop.js";
 import {
+  formatHeroHint,
+  formatHeroSubtitle,
   renderJexxxusHeroBlessed,
   renderJexxxusHeroPlain,
   type JexxxusHeroMeta,
@@ -37,10 +39,17 @@ import { branchUndo } from "./session/branch.js";
 import { escapeBlessed } from "./renderer/markdown.js";
 import { StreamBuffer, formatStreamingChunk } from "./renderer/streaming.js";
 import { extractThinkingBlocks } from "./components/thinking-block.js";
-import { buildTuISnapshot } from "./renderer/plain-text.js";
+import {
+  buildChromeDigestPlain,
+  buildTuISnapshot,
+  buildTuISnapshotWithChrome,
+  type ChromeDigestInput,
+} from "./renderer/plain-text.js";
 import {
   copyToClipboard,
+  getChromeDigestPath,
   getSnapshotPath,
+  writeChromeDigest,
   writeSnapshot,
 } from "./session/tui-snapshot.js";
 import { getSlashSuggestions } from "./slash/autocomplete.js";
@@ -206,6 +215,7 @@ export async function startTerminalChat(
       toolCount,
       setActiveConfig,
       copySnapshot,
+      copyChromeDigest,
       openModelPicker: () => modelPickerOverlay.open(),
       openProviderPicker: () => providerOverlay.open(),
       openDivinityPicker: () => divinityPickerOverlay.open(),
@@ -260,29 +270,57 @@ export async function startTerminalChat(
   const canSnapshot = (): boolean =>
     Boolean(topBar && messageBox && statusBar && inputBox);
 
+  const collectChromeDigestInput = (): ChromeDigestInput => {
+    const liveAuth = loadCredentials({ quiet: true })?.email ?? "not authenticated";
+    const providerLabel = topBar.getSubtitle();
+    const meta: JexxxusHeroMeta = {
+      authEmail: liveAuth,
+      toolCount,
+      providerLabel,
+    };
+    return {
+      topBarModel: providerLabel,
+      authEmail: liveAuth,
+      toolCount,
+      heroSubtitle: formatHeroSubtitle(meta),
+      heroHint: formatHeroHint(),
+      statusBar: statusBar.getMessage(),
+      inputValue: inputBox.getValue(),
+      divinity: session.activeDivinity?.name ?? null,
+    };
+  };
+
+  const buildSnapshotParts = () => ({
+    width: (screen.width as number) || 80,
+    topBar: topBar.getPlainText(),
+    messages: messageBox.getPlainText(),
+    statusBar: statusBar.getPlainText(),
+    input: inputBox.getPlainText(),
+  });
+
   const syncSnapshot = (): void => {
     if (!canSnapshot()) return;
-    const snapshot = buildTuISnapshot({
-      width: (screen.width as number) || 80,
-      topBar: topBar.getPlainText(),
-      messages: messageBox.getPlainText(),
-      statusBar: statusBar.getPlainText(),
-      input: inputBox.getPlainText(),
-    });
-    writeSnapshot(snapshot);
+    const chrome = buildChromeDigestPlain(collectChromeDigestInput());
+    writeChromeDigest(chrome);
+    writeSnapshot(buildTuISnapshotWithChrome(chrome, buildSnapshotParts()));
+  };
+
+  const copyChromeDigest = async (): Promise<{ path: string; copied: boolean }> => {
+    if (!canSnapshot()) {
+      return { path: getChromeDigestPath(), copied: false };
+    }
+    const chrome = buildChromeDigestPlain(collectChromeDigestInput());
+    const path = writeChromeDigest(chrome);
+    const copied = await copyToClipboard(chrome);
+    return { path, copied };
   };
 
   const copySnapshot = async (): Promise<{ path: string; copied: boolean }> => {
     if (!canSnapshot()) {
       return { path: getSnapshotPath(), copied: false };
     }
-    const snapshot = buildTuISnapshot({
-      width: (screen.width as number) || 80,
-      topBar: topBar.getPlainText(),
-      messages: messageBox.getPlainText(),
-      statusBar: statusBar.getPlainText(),
-      input: inputBox.getPlainText(),
-    });
+    const chrome = buildChromeDigestPlain(collectChromeDigestInput());
+    const snapshot = buildTuISnapshotWithChrome(chrome, buildSnapshotParts());
     const path = writeSnapshot(snapshot);
     const copied = await copyToClipboard(snapshot);
     return { path, copied };
@@ -601,6 +639,12 @@ export async function startTerminalChat(
         onCopyTui: async () => {
           const { path, copied } = await copySnapshot();
           statusBar.setMessage(copied ? "TUI copied" : `Snapshot: ${path}`);
+        },
+        onCopyChrome: async () => {
+          const { path, copied } = await copyChromeDigest();
+          statusBar.setMessage(
+            copied ? "Chrome copied" : `Chrome digest: ${path}`,
+          );
         },
         onCopyLastReply: () => void copyLastReply(),
         onModelList: () => void modelPickerOverlay.open(),
