@@ -13,6 +13,7 @@ import type { ToolResult, TerminalSession } from "../session/session-store.js";
 import { wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
 import { isBlessedMouseEnabled } from "../tty.js";
 import { TAG, THEME } from "../theme.js";
+import { centerHeroVertically } from "./jexxxus-hero.js";
 
 function highlightSearch(text: string, query: string): string {
   if (!query) return text;
@@ -27,8 +28,10 @@ function highlightSearch(text: string, query: string): string {
 }
 
 export interface MessageBlock {
-  type: "welcome" | "user" | "assistant" | "tool" | "error" | "system";
+  type: "hero" | "welcome" | "user" | "assistant" | "tool" | "error" | "system";
   content: string;
+  /** Blessed-rendered hero (standstill logo). */
+  blessedContent?: string;
   thinkingBlocks?: ThinkingBlock[];
   assistantRaw?: string;
   toolEntries?: ToolResult[];
@@ -42,6 +45,9 @@ export interface ScrollState {
 
 export interface MessageBoxHandle {
   element: blessed.Widgets.BoxElement;
+  showHero: (plain: string, blessed: string) => void;
+  dismissHero: () => boolean;
+  hasHero: () => boolean;
   appendWelcome: (plainContent: string) => void;
   appendUser: (text: string) => void;
   appendAssistantStart: () => number;
@@ -71,6 +77,7 @@ export interface MessageBoxHandle {
   cancelInFlightAssistant: () => void;
   setSearchQuery: (query: string) => void;
   replaySession: (session: TerminalSession) => void;
+  clearChat: () => void;
   rebuild: () => void;
 }
 
@@ -158,6 +165,13 @@ export function createMessageBox(
         parts.push(`${TAG.dim}${"·".repeat(12)}${TAG.dimEnd}\n`);
       }
       switch (block.type) {
+        case "hero": {
+          const body = block.blessedContent ?? block.content;
+          const onlyHero = blocks.length === 1;
+          const viewH = Math.max(12, ((box.height as number) || 20) - 2);
+          parts.push(onlyHero ? centerHeroVertically(body, viewH) : body);
+          break;
+        }
         case "welcome":
           parts.push(wrapWelcomeBannerBlessed(block.content));
           break;
@@ -210,6 +224,9 @@ export function createMessageBox(
 
     for (const block of blocks) {
       switch (block.type) {
+        case "hero":
+          parts.push(block.content);
+          break;
         case "welcome":
           parts.push(block.content);
           break;
@@ -291,13 +308,30 @@ export function createMessageBox(
     markScrolled();
   };
 
+  const dismissHero = (): boolean => {
+    const idx = blocks.findIndex((b) => b.type === "hero");
+    if (idx < 0) return false;
+    blocks.splice(idx, 1);
+    return true;
+  };
+
   return {
     element: box,
+    showHero(plain: string, blessed: string) {
+      blocks.push({ type: "hero", content: plain, blessedContent: blessed });
+      pinnedToBottom = true;
+      rebuild();
+    },
+    dismissHero,
+    hasHero() {
+      return blocks.some((b) => b.type === "hero");
+    },
     appendWelcome(plainContent: string) {
       blocks.push({ type: "welcome", content: plainContent });
       rebuild();
     },
     appendUser(text: string) {
+      dismissHero();
       blocks.push({ type: "user", content: text });
       refreshContent(true);
     },
@@ -437,6 +471,13 @@ export function createMessageBox(
     },
     setSearchQuery(query: string) {
       searchQuery = query;
+      rebuild();
+    },
+    clearChat() {
+      blocks.length = 0;
+      focusedThinkingIndex = null;
+      searchQuery = "";
+      pinnedToBottom = true;
       rebuild();
     },
     replaySession(session: TerminalSession) {

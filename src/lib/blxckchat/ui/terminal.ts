@@ -11,7 +11,11 @@ import { cycleModelOption, listModelOptions } from "../providers/models.js";
 
 import { createTopBar } from "./components/top-bar.js";
 import { createCrtBackdrop } from "./components/crt-backdrop.js";
-import { createJexxxusSplash } from "./components/jexxxus-splash.js";
+import {
+  renderJexxxusHeroBlessed,
+  renderJexxxusHeroPlain,
+  type JexxxusHeroMeta,
+} from "./components/jexxxus-hero.js";
 import { THEME } from "./theme.js";
 import { createMessageBox } from "./components/message-box.js";
 import { createInputBox } from "./components/input-box.js";
@@ -31,15 +35,15 @@ import { autosaveSession, loadAutosaveSession, shouldAutosave } from "./session/
 import { branchUndo } from "./session/branch.js";
 import { StreamBuffer, formatStreamingChunk } from "./renderer/streaming.js";
 import { extractThinkingBlocks } from "./components/thinking-block.js";
-import { buildTuISnapshot, buildWelcomeBannerPlain } from "./renderer/plain-text.js";
+import { buildTuISnapshot } from "./renderer/plain-text.js";
 import {
   copyToClipboard,
   getSnapshotPath,
   writeSnapshot,
 } from "./session/tui-snapshot.js";
 import { getSlashSuggestions } from "./slash/autocomplete.js";
-import { dispatchSlashCommand, isSlashCommand } from "./slash/handler.js";
-import { formatSlashHelp } from "./slash/registry.js";
+import { dispatchSlashCommand, isSlashCommand, parseSlashInput } from "./slash/handler.js";
+
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
 import { MessageQueue } from "./message-queue.js";
@@ -160,7 +164,22 @@ export async function startTerminalChat(
 
   let cachedModelOptions = await listModelOptions(activeConfig);
 
+  const heroMeta: JexxxusHeroMeta = {
+    authEmail,
+    toolCount,
+    providerLabel: options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
+  };
+
+  const showIdleHero = (): void => {
+    const heroWidth = Math.max(40, (screen.width as number) - 4);
+    messageBox.showHero(
+      renderJexxxusHeroPlain(heroWidth, heroMeta),
+      renderJexxxusHeroBlessed(heroWidth, heroMeta),
+    );
+  };
+
   const runSlash = async (command: string): Promise<void> => {
+    const parsed = parseSlashInput(command);
     const result = await dispatchSlashCommand(command, {
       session,
       activeConfig,
@@ -168,6 +187,12 @@ export async function startTerminalChat(
       setActiveConfig,
       copySnapshot,
     });
+    if (parsed.command === "reset") {
+      messageBox.clearChat();
+      showIdleHero();
+      statusBar.setMessage("Session reset — type a message to begin");
+      return;
+    }
     for (const msg of result.messages) {
       messageBox.appendSystem(msg);
     }
@@ -588,13 +613,7 @@ export async function startTerminalChat(
     );
     updateScrollStatus();
   } else {
-    const splash = createJexxxusSplash(screen, { top: 2, bottom: 4 });
-    screen.render();
-    await splash.play();
-    splash.destroy();
-    messageBox.appendWelcome(buildWelcomeBannerPlain(authEmail, toolCount));
-    messageBox.appendSystem(formatSlashHelp());
-    messageBox.appendSystem("Press ? for keyboard shortcuts · Shift+↑↓ scroll history");
+    showIdleHero();
     updateScrollStatus();
   }
 
