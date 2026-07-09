@@ -22,10 +22,24 @@ export function canRunBlessedTui(): TtyCheckResult {
   return { ok: true };
 }
 
-/** Opt-in mouse for blessed widgets (off by default — mouse tracking leaks into readline on fallback). */
+function parseMouseEnv(): string {
+  return process.env.BLXCKCHAT_MOUSE?.trim().toLowerCase() ?? "";
+}
+
+/** Opt-in mouse for all blessed widgets (chat scroll, etc.). */
 export function isBlessedMouseEnabled(): boolean {
-  const raw = process.env.BLXCKCHAT_MOUSE?.trim().toLowerCase();
+  const raw = parseMouseEnv();
   return raw === "1" || raw === "true" || raw === "yes";
+}
+
+/**
+ * Mouse on slash-command popup — on by default for hover/click picks.
+ * Set BLXCKCHAT_MOUSE=0 to disable all TUI mouse tracking.
+ */
+export function isSlashPopupMouseEnabled(): boolean {
+  const raw = parseMouseEnv();
+  if (raw === "0" || raw === "false" || raw === "no") return false;
+  return true;
 }
 
 export function prepareStdinForTui(): void {

@@ -1,7 +1,7 @@
 import blessed from "blessed";
 
 import type { SlashSuggestion } from "../slash/autocomplete.js";
-import { isBlessedMouseEnabled } from "../tty.js";
+import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 
 export interface SlashPopupHandle {
@@ -20,11 +20,19 @@ export function stepListIndex(current: number, delta: number, total: number): nu
   return Math.max(0, Math.min(total - 1, current + delta));
 }
 
+type ListItem = blessed.Widgets.BoxElement & { __slashMouseWired?: boolean };
+
+type SlashList = blessed.Widgets.ListElement & {
+  items: ListItem[];
+  mouse: boolean;
+  getItemIndex: (child: blessed.Widgets.BoxElement) => number;
+};
+
 export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHandle {
   let selectedIndex = 0;
   let visible = false;
-  let currentSuggestions: SlashSuggestion[] = [];
   let onPickHandler: ((index: number) => void) | undefined;
+  const mouseEnabled = isSlashPopupMouseEnabled();
 
   const list = blessed.list({
     parent: screen,
@@ -37,7 +45,8 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     tags: true,
     hidden: true,
     keys: false,
-    mouse: isBlessedMouseEnabled(),
+    mouse: mouseEnabled,
+    interactive: true,
     vi: false,
     itemHoverEffects: { bg: THEME.pink, fg: THEME.text, bold: true },
     style: {
@@ -49,7 +58,7 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
       },
       selected: { bg: THEME.pink, fg: THEME.text, bold: true },
     },
-  });
+  }) as SlashList;
 
   const formatItem = (s: SlashSuggestion): string => {
     const desc =
@@ -57,24 +66,60 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     return `{bold}${s.label}{/bold} {gray-fg}${desc}{/gray-fg}`;
   };
 
-  list.on("select", (_item, index) => {
-    if (!visible || typeof index !== "number") return;
-    selectedIndex = index;
-    onPickHandler?.(index);
-  });
-
-  list.on("element mouseover", (el) => {
-    if (!visible) return;
-    const idx = list.getItemIndex(el);
-    if (idx < 0 || idx === selectedIndex) return;
+  const highlightIndex = (idx: number): void => {
+    if (idx < 0 || idx >= list.items.length) return;
     selectedIndex = idx;
     list.select(idx);
     screen.render();
+  };
+
+  const pickIndex = (idx: number): void => {
+    if (!visible || idx < 0) return;
+    highlightIndex(idx);
+    onPickHandler?.(idx);
+  };
+
+  const wireListItemMouse = (item: ListItem, idx: number): void => {
+    if (!mouseEnabled || item.__slashMouseWired) return;
+    item.__slashMouseWired = true;
+
+    item.on("mouseover", () => {
+      if (!visible || selectedIndex === idx) return;
+      highlightIndex(idx);
+    });
+
+    // Blessed list only emits `select` on a second click — pick on first click.
+    item.on("click", () => {
+      pickIndex(idx);
+    });
+  };
+
+  const wireAllItems = (): void => {
+    if (!mouseEnabled) return;
+    for (let i = 0; i < list.items.length; i++) {
+      const item = list.items[i] as ListItem | undefined;
+      if (item) wireListItemMouse(item, i);
+    }
+  };
+
+  const activateMouse = (): void => {
+    if (!mouseEnabled) return;
+    list.mouse = true;
+    screen.enableMouse(list);
+  };
+
+  list.on("add item", () => {
+    const idx = list.items.length - 1;
+    const item = list.items[idx] as ListItem | undefined;
+    if (item) wireListItemMouse(item, idx);
+  });
+
+  list.on("set items", () => {
+    wireAllItems();
   });
 
   return {
     show(suggestions: SlashSuggestion[], index: number) {
-      currentSuggestions = suggestions;
       selectedIndex = Math.min(index, Math.max(0, suggestions.length - 1));
       if (suggestions.length === 0) {
         list.hide();
@@ -82,7 +127,10 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
         screen.render();
         return;
       }
+
+      activateMouse();
       list.setItems(suggestions.map(formatItem));
+      wireAllItems();
       list.select(selectedIndex);
       list.setFront();
       list.show();
@@ -92,7 +140,6 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     hide() {
       list.hide();
       visible = false;
-      currentSuggestions = [];
       screen.render();
     },
     isVisible() {
