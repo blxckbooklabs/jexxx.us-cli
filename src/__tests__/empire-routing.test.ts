@@ -147,6 +147,15 @@ test("regression 10: short follow-up routes via conversation context (Proverbs 3
   assert.equal(plan.veilSearchQuery, "Proverbs 31");
 });
 
+test("regression 12: Rachel church girls routes VEIL + Genesis companions", () => {
+  const plan = planEmpireTools("church girls who still think they're Rachels", {
+    conversationContext: "leads her toward the vestry door",
+  });
+  assert.ok(plan.tools.includes("veil_query"));
+  assert.ok(plan.tools.includes("bible_query"));
+  assert.ok(plan.companionVerses.includes("Genesis 29:17"));
+});
+
 test("regression 11: blueprint corruption beat triggers VEIL search", () => {
   const plan = planEmpireTools("understanding is a blueprint", {
     conversationContext: "Hannah: Corruption Correspondent · Lil' Bible",

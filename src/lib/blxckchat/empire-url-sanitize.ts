@@ -135,6 +135,15 @@ function canonicalizeUrl(raw: string, catalog: EmpireUrlEntry[]): string {
   return raw;
 }
 
+/** `• Title [https://veil...]` → `• [Title](https://veil...)` for shorter TUI wraps. */
+export function compactEmpireBulletLinks(text: string): string {
+  return text.replace(
+    /^(\s*[•*-]\s+)(.+?)\s*\[(https?:\/\/(?:veil|tv)\.jexxx\.us\/[^\]\n]+)\]\s*$/gm,
+    (_full, bullet: string, title: string, url: string) =>
+      `${bullet}[${title.trim()}](${url.replace(/\s+/g, "")})`,
+  );
+}
+
 /** Turn `[url1\nurl2]` blobs into one bullet per URL. */
 export function repairMarkdownUrlBlobs(text: string): string {
   return text.replace(/\[((?:https?:\/\/[^\]\n]+(?:\nhttps?:\/\/[^\]\n]+)*))\]/g, (_full, inner: string) => {
@@ -176,5 +185,6 @@ export function sanitizeEmpireUrls(response: string, catalog: EmpireUrlEntry[]):
   out = out.replace(EMPIRE_VEIL_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
 
   out = repairMarkdownUrlBlobs(out);
+  out = compactEmpireBulletLinks(out);
   return out;
 }

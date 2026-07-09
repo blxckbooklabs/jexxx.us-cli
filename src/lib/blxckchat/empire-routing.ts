@@ -19,6 +19,7 @@ export const COMPANION_VERSE_SETS = {
   adultery: ["Proverbs 6:32", "Hebrews 13:4"],
   church: ["1 Corinthians 6:19", "Ephesians 5:23"],
   proverbs31: ["Proverbs 31:10", "Proverbs 31:30", "Proverbs 5:3"],
+  rachelLeah: ["Genesis 29:16", "Genesis 29:17", "Genesis 29:25"],
 } as const;
 
 export const MAX_COMPANION_VERSES = 4;
@@ -108,6 +109,14 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
     companionVerses: COMPANION_VERSE_SETS.church,
     veilSearchQuery: "church girl",
     note: "Church girl VEIL theme + church scripture.",
+  },
+  {
+    id: "veil-rachel-leah",
+    pattern: /\b(rachels?|leahs?)\b/i,
+    tools: ["veil_query", "bible_query"],
+    companionVerses: COMPANION_VERSE_SETS.rachelLeah,
+    veilSearchQuery: "Rachel Leah",
+    note: "Rachel/Leah arc — VEIL + Genesis companions.",
   },
   {
     id: "veil-draft-article",
@@ -254,6 +263,9 @@ export function inferThemeCompanionVerses(prompt: string): string[] {
   if (/proverbs\s*31/i.test(prompt)) {
     mergeCompanionVerses(verses, COMPANION_VERSE_SETS.proverbs31);
   }
+  if (/\b(rachels?|leahs?)\b/i.test(prompt)) {
+    mergeCompanionVerses(verses, COMPANION_VERSE_SETS.rachelLeah);
+  }
   if (/\b(corruption|confess)\b/i.test(prompt)) {
     mergeCompanionVerses(verses, COMPANION_VERSE_SETS.confession);
   }
@@ -264,6 +276,7 @@ export function inferThemeCompanionVerses(prompt: string): string[] {
 export function inferVeilSearchQuery(prompt: string, plan: EmpireToolPlan): string | null {
   if (plan.veilSearchQuery) return plan.veilSearchQuery;
   if (/proverbs\s*31/i.test(prompt)) return "Proverbs 31";
+  if (/\b(rachels?|leahs?)\b/i.test(prompt)) return "Rachel Leah";
   if (/\b(church\s+girl|churchy)\b/i.test(prompt)) return "church girl";
   if (/\b(corruption|confession|altar)\b/i.test(prompt)) return "corruption";
   if (/\bpastor'?s?\s+wife\b/i.test(prompt)) return "pastor's wife";
@@ -499,7 +512,7 @@ export const EMPIRE_CONTENT_ROUTING = `## Empire content routing (pick every rel
 
 **Empire synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, Proverbs 31, church girl, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links. During **persona roleplay**, still call tools when the scene cites scripture bookmarks, VEIL drafts/articles, or TV sacraments — cite real catalog URLs in dialogue; do not invent article numbers without veil_query.
 
-**URL rule (strict):** Copy https://tv.jexxx.us/video/... and https://veil.jexxx.us/articles/... links **exactly** from tool or pre-fetched output — **one URL per line**, never glue two URLs together. Never use wv.jexxx.us, never insert spaces inside URLs or slugs, never invent paths.
+**URL rule (strict):** Copy https://tv.jexxx.us/video/... and https://veil.jexxx.us/articles/... links **exactly** from tool or pre-fetched output — **one URL per line**, never glue two URLs together. Use markdown [Title](url) in lists, not Title [url]. Never use wv.jexxx.us, never insert spaces inside URLs or slugs, never invent paths. In persona roleplay, weave 2–3 links into the scene — avoid raw catalog dumps with ALL-CAPS headers unless the user asks for a list.
 
 If bible_query fails once, do not spam format variants — use the listed Book Ch:V refs only.
 

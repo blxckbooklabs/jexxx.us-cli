@@ -11,6 +11,19 @@ export function escapeBlessed(text: string): string {
   return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
 }
 
+/** Short empire href for TUI — avoids mid-slug line wraps on long URLs. */
+export function formatHrefForDisplay(href: string): string {
+  if (href.length <= 56) return href;
+  try {
+    const u = new URL(href);
+    const parts = u.pathname.split("/").filter(Boolean);
+    const tail = parts.slice(-2).join("/") || (parts.at(-1) ?? u.hostname);
+    return `${u.hostname}/…/${tail}`;
+  } catch {
+    return `${href.slice(0, 52)}…`;
+  }
+}
+
 function renderListItem(tokens: Token[]): string {
   const parts: string[] = [];
   for (const token of tokens) {
@@ -46,8 +59,12 @@ function renderToken(token: Token): string {
       return `{gray-fg}${escapeBlessed((token as Tokens.Codespan).text)}{/gray-fg}`;
     case "link": {
       const t = token as Tokens.Link;
-      const label = renderInline(t.tokens);
-      return `${label} {gray-fg}[${escapeBlessed(t.href)}]{/gray-fg}`;
+      const label = renderInline(t.tokens).trim();
+      const compact = formatHrefForDisplay(t.href);
+      if (label && label !== t.href && /\.jexxx\.us\//i.test(t.href)) {
+        return `{underline}${label}{/underline} {gray-fg}(${escapeBlessed(compact)}){/gray-fg}`;
+      }
+      return `${label} {gray-fg}[${escapeBlessed(compact)}]{/gray-fg}`;
     }
     case "br":
       return "\n";

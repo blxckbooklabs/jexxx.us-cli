@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  compactEmpireBulletLinks,
   extractEmpireUrlsFromText,
   repairMarkdownUrlBlobs,
   sanitizeEmpireUrls,
@@ -73,6 +74,14 @@ test("repairMarkdownUrlBlobs expands bracketed glued URLs to bullets", () => {
   assert.match(out, /• https:\/\/veil\.jexxx\.us\/articles\/one/);
   assert.match(out, /• https:\/\/veil\.jexxx\.us\/articles\/two/);
   assert.doesNotMatch(out, /\[https/);
+});
+
+test("compactEmpireBulletLinks converts Title [url] to markdown links", () => {
+  const input =
+    "• I Turned a Rachel Into a Leah [https://veil.jexxx.us/articles/i-turned-a-rachel-into-a-leah]";
+  const out = compactEmpireBulletLinks(input);
+  assert.match(out, /\[I Turned a Rachel Into a Leah\]\(https:\/\/veil\.jexxx\.us/);
+  assert.doesNotMatch(out, /\[https:\/\/veil/);
 });
 
 test("extractEmpireUrlsFromText extracts multiple glued veil URLs", () => {

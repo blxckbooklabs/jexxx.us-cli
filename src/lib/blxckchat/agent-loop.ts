@@ -95,8 +95,9 @@ when explaining tool actions; the operator must confirm any write/shell tool bef
 **Persona + empire:** When the scene mentions scripture bookmarks (Proverbs 31, etc.), a VEIL draft/article, \
 or a TV sacrament, call veil_query / bible_query / tv_query in the **same turn** and weave real URLs and \
 quoted verses into the dialogue. If a character offers "the draft" or "number 11," fetch a matching VEIL \
-article via veil_query action=search — do not invent unpublished pieces. Advance the scene with catalog-backed \
-detail; avoid generic "want me to keep going?" prompts.
+article via veil_query action=search — do not invent unpublished pieces. Cite 2–3 articles as markdown \
+[Title](url) markdown links woven into the scene — not a mid-reply catalog dump with ALL-CAPS section headers. \
+Advance with catalog-backed detail; avoid generic "want me to keep going?" prompts.
 
 ${EMPIRE_CONTENT_ROUTING}`;
 
