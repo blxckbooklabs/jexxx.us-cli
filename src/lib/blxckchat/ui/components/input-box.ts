@@ -129,6 +129,7 @@ export function createInputBox(
         notify();
       });
     },
+    onHotkeyHelp: () => options.onShowHotkeys?.(),
   });
 
   const applySlashSuggestionAt = (idx: number): boolean => {
@@ -198,10 +199,6 @@ export function createInputBox(
     hideSlashPopup();
     screen.render();
     notify();
-  });
-
-  input.key(["?"], () => {
-    options.onShowHotkeys?.();
   });
 
   const sc = options.shortcuts;

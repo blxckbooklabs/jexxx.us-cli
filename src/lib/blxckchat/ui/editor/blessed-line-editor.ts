@@ -7,6 +7,7 @@ import {
   createLineEditorState,
   insertText,
   renderLineEditorView,
+  resolveInsertChar,
   resolveLineEditorKey,
   type LineEditorState,
 } from "./line-editor.js";
@@ -25,6 +26,8 @@ export interface BlessedLineEditorHandle {
 
 export interface BlessedLineEditorOptions {
   onChange?: (text: string) => void;
+  /** `?` on an empty field — show hotkeys instead of inserting. */
+  onHotkeyHelp?: () => void;
 }
 
 /**
@@ -56,6 +59,16 @@ export function attachBlessedLineEditor(
 
     // History / slash / exit layers handle these on the transmit element.
     if (key.name === "escape" || key.name === "up" || key.name === "down") {
+      return;
+    }
+
+    const insertChar = resolveInsertChar({ ...key, ch });
+    if (
+      insertChar === "?" &&
+      state.text.length === 0 &&
+      options.onHotkeyHelp
+    ) {
+      options.onHotkeyHelp();
       return;
     }
 

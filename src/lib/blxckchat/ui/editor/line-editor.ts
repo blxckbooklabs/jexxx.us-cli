@@ -228,6 +228,78 @@ function parseKeyModifiers(key: LineEditorKey): {
   return { name, shift, meta, ctrl };
 }
 
+const SHIFTED_SLASH = new Map<string, string>([
+  ["1", "!"],
+  ["2", "@"],
+  ["3", "#"],
+  ["4", "$"],
+  ["5", "%"],
+  ["6", "^"],
+  ["7", "&"],
+  ["8", "*"],
+  ["9", "("],
+  ["0", ")"],
+  ["-", "_"],
+  ["=", "+"],
+  [",", "<"],
+  [".", ">"],
+  ["/", "?"],
+  [";", ":"],
+  ["'", '"'],
+  ["[", "{"],
+  ["]", "}"],
+  ["\\", "|"],
+  ["`", "~"],
+]);
+
+const NAMED_KEY_CHARS: Record<string, string> = {
+  "?": "?",
+  "/": "/",
+  space: " ",
+  period: ".",
+  comma: ",",
+  semicolon: ";",
+  quote: "'",
+  slash: "/",
+  backslash: "\\",
+  hyphen: "-",
+  minus: "-",
+  equals: "=",
+  plus: "+",
+  leftbrace: "[",
+  rightbrace: "]",
+  leftbracket: "[",
+  rightbracket: "]",
+};
+
+/** Resolve a single printable character from a key event (incl. punctuation). */
+export function resolveInsertChar(key: LineEditorKey): string | null {
+  const { name, shift, meta, ctrl } = parseKeyModifiers(key);
+  if (meta || ctrl) return null;
+
+  const ch = key.ch ?? "";
+  if (ch.length === 1 && !/^[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]$/.test(ch)) {
+    return ch;
+  }
+
+  if (name === "slash") {
+    return shift ? "?" : "/";
+  }
+
+  if (shift && SHIFTED_SLASH.has(name)) {
+    return SHIFTED_SLASH.get(name) ?? null;
+  }
+
+  const named = NAMED_KEY_CHARS[name];
+  if (named) return named;
+
+  if (name.length === 1 && !/^[\x00-\x1f\x7f]$/.test(name)) {
+    return name;
+  }
+
+  return null;
+}
+
 /** Map terminal key events to editor actions (macOS + cross-platform). */
 export function resolveLineEditorKey(key: LineEditorKey): LineEditorKeyAction {
   const { name, shift, meta, ctrl } = parseKeyModifiers(key);
@@ -281,8 +353,9 @@ export function resolveLineEditorKey(key: LineEditorKey): LineEditorKeyAction {
     return { type: "move-line-end", extend: shift };
   }
 
-  if (key.ch && !ctrl && !meta && key.ch.length === 1 && !/^[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]$/.test(key.ch)) {
-    return { type: "insert", char: key.ch };
+  const insertChar = resolveInsertChar(key);
+  if (insertChar) {
+    return { type: "insert", char: insertChar };
   }
 
   return { type: "noop" };

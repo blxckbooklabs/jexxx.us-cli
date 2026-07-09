@@ -12,6 +12,7 @@ import {
   killToStart,
   moveWordLeft,
   moveWordRight,
+  resolveInsertChar,
   resolveLineEditorKey,
   selectAll,
   wordLeft,
@@ -79,6 +80,14 @@ test("insert replaces active selection", () => {
   let state = selectAll(createLineEditorState("old"));
   state = insertText(state, "new");
   assert.equal(state.text, "new");
+});
+
+test("resolveInsertChar handles question mark and shifted punctuation", () => {
+  assert.equal(resolveInsertChar({ ch: "?" }), "?");
+  assert.equal(resolveInsertChar({ name: "?" }), "?");
+  assert.equal(resolveInsertChar({ name: "slash", shift: true }), "?");
+  assert.equal(resolveInsertChar({ name: "slash", shift: false }), "/");
+  assert.equal(resolveInsertChar({ name: "1", shift: true }), "!");
 });
 
 test("deleteWordBackward removes prior token", () => {
