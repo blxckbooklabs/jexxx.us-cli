@@ -11,12 +11,20 @@ export interface SlashPopupHandle {
   moveSelection: (delta: number, total: number) => number;
   getSelectedIndex: () => number;
   setSelectedIndex: (index: number) => void;
+  setOnPick: (handler: ((index: number) => void) | undefined) => void;
+}
+
+/** Clamp list index when browsing suggestions (no wrap-around). */
+export function stepListIndex(current: number, delta: number, total: number): number {
+  if (total <= 0) return 0;
+  return Math.max(0, Math.min(total - 1, current + delta));
 }
 
 export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHandle {
   let selectedIndex = 0;
   let visible = false;
   let currentSuggestions: SlashSuggestion[] = [];
+  let onPickHandler: ((index: number) => void) | undefined;
 
   const list = blessed.list({
     parent: screen,
@@ -45,6 +53,12 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     return `{bold}${s.label}{/bold} {gray-fg}${desc}{/gray-fg}`;
   };
 
+  list.on("select", (_item, index) => {
+    if (!visible || typeof index !== "number") return;
+    selectedIndex = index;
+    onPickHandler?.(index);
+  });
+
   return {
     show(suggestions: SlashSuggestion[], index: number) {
       currentSuggestions = suggestions;
@@ -72,8 +86,7 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
       return visible;
     },
     moveSelection(delta: number, total: number) {
-      if (total === 0) return 0;
-      selectedIndex = (selectedIndex + delta + total) % total;
+      selectedIndex = stepListIndex(selectedIndex, delta, total);
       list.select(selectedIndex);
       screen.render();
       return selectedIndex;
@@ -87,6 +100,9 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
         list.select(selectedIndex);
         screen.render();
       }
+    },
+    setOnPick(handler) {
+      onPickHandler = handler;
     },
   };
 }

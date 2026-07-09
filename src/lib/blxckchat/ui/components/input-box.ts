@@ -54,6 +54,10 @@ export function createInputBox(
   let draft = "";
   let slashSuggestions: SlashSuggestion[] = [];
   let slashDebounce: ReturnType<typeof setTimeout> | null = null;
+  let lastSlashValue = "";
+
+  const isSlashNavigationKey = (key?: { name?: string }): boolean =>
+    key?.name === "up" || key?.name === "down";
 
   const input = blessed.textbox({
     parent: screen,
@@ -86,6 +90,7 @@ export function createInputBox(
   const hideSlashPopup = (): void => {
     options.slashPopup?.hide();
     slashSuggestions = [];
+    lastSlashValue = "";
   };
 
   const refreshSlashSuggestions = (value: string): void => {
@@ -99,10 +104,18 @@ export function createInputBox(
 
     if (slashDebounce) clearTimeout(slashDebounce);
     slashDebounce = setTimeout(() => {
+      const preserveIndex =
+        value === lastSlashValue && options.slashPopup!.isVisible();
+      const startIndex = preserveIndex ? options.slashPopup!.getSelectedIndex() : 0;
+      lastSlashValue = value;
+
       void options.getSlashSuggestions!(value).then((suggestions) => {
         slashSuggestions = suggestions;
         if (suggestions.length > 0) {
-          options.slashPopup!.show(suggestions, 0);
+          const index = preserveIndex
+            ? Math.min(startIndex, suggestions.length - 1)
+            : 0;
+          options.slashPopup!.show(suggestions, index);
         } else {
           hideSlashPopup();
         }
@@ -110,11 +123,10 @@ export function createInputBox(
     }, 50);
   };
 
-  const applySelectedSuggestion = (): boolean => {
+  const applySlashSuggestionAt = (idx: number): boolean => {
     if (!options.slashPopup?.isVisible() || slashSuggestions.length === 0) {
       return false;
     }
-    const idx = options.slashPopup.getSelectedIndex();
     const suggestion = slashSuggestions[idx];
     if (!suggestion) return false;
 
@@ -124,11 +136,19 @@ export function createInputBox(
 
     const next = applySuggestion(value, suggestion, mode);
     input.setValue(next);
+    lastSlashValue = next;
     hideSlashPopup();
     screen.render();
     notify();
     return true;
   };
+
+  const applySelectedSuggestion = (): boolean =>
+    applySlashSuggestionAt(options.slashPopup?.getSelectedIndex() ?? 0);
+
+  options.slashPopup?.setOnPick((index) => {
+    applySlashSuggestionAt(index);
+  });
 
   input.on("submit", (value: string) => {
     hideSlashPopup();
@@ -144,7 +164,10 @@ export function createInputBox(
     notify();
   });
 
-  input.on("keypress", () => {
+  input.on("keypress", (_ch, key) => {
+    if (options.slashPopup?.isVisible() && isSlashNavigationKey(key)) {
+      return;
+    }
     // Blessed updates textbox value after our listener; defer one tick.
     setImmediate(() => {
       refreshSlashSuggestions(input.getValue());
@@ -190,6 +213,7 @@ export function createInputBox(
   input.key("up", () => {
     if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
       options.slashPopup.moveSelection(-1, slashSuggestions.length);
+      notify();
       return;
     }
     if (history.length === 0) return;
@@ -208,6 +232,7 @@ export function createInputBox(
   input.key("down", () => {
     if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
       options.slashPopup.moveSelection(1, slashSuggestions.length);
+      notify();
       return;
     }
     if (history.length === 0) return;
