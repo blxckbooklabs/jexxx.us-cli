@@ -15,7 +15,7 @@ export function createStatusBar(
   options: StatusBarOptions = {},
 ): StatusBarHandle {
   let message =
-    "Type / for commands · Tab autocomplete · Ctrl+Y copy · Ctrl+S save";
+    "Ctrl+C/D exit · / commands · Tab complete · Ctrl+Y copy · Ctrl+S save";
 
   const bar = blessed.box({
     parent: screen,

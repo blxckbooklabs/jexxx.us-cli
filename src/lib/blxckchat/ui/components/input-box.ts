@@ -20,6 +20,7 @@ export interface InputBoxHandle {
 
 export interface InputBoxOptions {
   onUpdate?: () => void;
+  onExit?: () => void;
   slashPopup?: SlashPopupHandle;
   getSlashSuggestions?: (value: string) => Promise<SlashSuggestion[]>;
 }
@@ -124,6 +125,10 @@ export function createInputBox(
   input.on("keypress", () => {
     refreshSlashSuggestions(input.getValue());
     notify();
+  });
+
+  input.key(["C-c", "C-d"], () => {
+    options.onExit?.();
   });
 
   input.key("tab", () => {

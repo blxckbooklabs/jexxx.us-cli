@@ -34,6 +34,7 @@ import {
 import { getSlashSuggestions } from "./slash/autocomplete.js";
 import { dispatchSlashCommand, isSlashCommand } from "./slash/handler.js";
 import { formatSlashHelp } from "./slash/registry.js";
+import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 
 export interface TerminalChatOptions {
   providerLabel?: string;
@@ -81,6 +82,11 @@ function createBlessedConfirm(
       modal.destroy();
       screen.render();
       resolve(false);
+    });
+
+    modal.key(["C-c", "C-d"], () => {
+      modal.destroy();
+      gracefulTuiExit(screen);
     });
 
     modal.focus();
@@ -179,8 +185,7 @@ export async function startTerminalChat(
         messageBox.appendSystem(msg);
       }
       if (result.exit) {
-        screen.destroy();
-        process.exit(0);
+        gracefulTuiExit(screen);
       }
       statusBar.setMessage("Ready — type / for commands");
       return;
@@ -256,6 +261,8 @@ export async function startTerminalChat(
     }
   };
 
+  const requestExit = (): void => gracefulTuiExit(screen);
+
   inputBox = createInputBox(
     screen,
     (line) => {
@@ -263,12 +270,25 @@ export async function startTerminalChat(
     },
     {
       onUpdate: onSnapshotUpdate,
+      onExit: requestExit,
       slashPopup,
       getSlashSuggestions: (value) =>
         getSlashSuggestions(value, {
           activeConfig,
           modelOptions: cachedModelOptions,
         }),
+    },
+  );
+
+  bindExitKeys(
+    screen,
+    [screen, inputBox.element, messageBox.element],
+    () => {
+      if (slashPopup.isVisible()) {
+        inputBox.hideSlashPopup();
+        return true;
+      }
+      return false;
     },
   );
 
@@ -289,9 +309,10 @@ export async function startTerminalChat(
   messageBox.appendSystem(formatSlashHelp());
   syncSnapshot();
 
-  screen.key(["escape", "q", "C-c"], () => {
-    screen.destroy();
-    process.exit(0);
+  screen.key(["q"], () => {
+    if (!inputHasFocus) {
+      gracefulTuiExit(screen);
+    }
   });
 
   screen.key(["C-s"], () => {
