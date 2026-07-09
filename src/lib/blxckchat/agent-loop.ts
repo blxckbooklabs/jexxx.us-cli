@@ -17,6 +17,12 @@ import {
   sanitizeEmpireUrls,
   type EmpireUrlEntry,
 } from "./empire-url-sanitize.js";
+import {
+  collectEmpireToolResultsSinceUser,
+  EMPIRE_SYNTHESIS_NUDGE,
+  needsEmpireSynthesis,
+  stripMetaContinuationPrompts,
+} from "./empire-synthesis.js";
 import { formatToolResultForFallback } from "./tool-result-format.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
@@ -52,6 +58,8 @@ export interface RunAgentOptions {
     result: string,
     status: ToolCompleteStatus,
   ) => void;
+  /** Clear streamed assistant text before a synthesis retry pass. */
+  onSynthesisRetry?: () => void;
   confirmToolCall?: (
     toolName: string,
     args: Record<string, unknown>,
@@ -194,13 +202,16 @@ export async function runAgent(
   let lastSuccessfulResult: string | null = null;
   let lastSuccessfulTool: string | null = null;
   let bibleQueryMissCount = 0;
+  let synthesisNudgeCount = 0;
+  const MAX_SYNTHESIS_NUDGES = 1;
 
   // Wraps a final answer with the transcript to hand back as next-turn
   // history — every early-return path below must go through this so the
   // REPL's conversation memory stays consistent regardless of how the turn
   // ended (clean stop, repeat-loop short-circuit, or MAX_TURNS exhaustion).
   const finish = (response: string): AgentTurnResult => {
-    const sanitized = sanitizeEmpireUrls(response, canonicalUrlCatalog);
+    const cleaned = stripMetaContinuationPrompts(response);
+    const sanitized = sanitizeEmpireUrls(cleaned, canonicalUrlCatalog);
     messages.push({ role: "assistant", content: sanitized });
     return { response: sanitized, history: messages.slice(conversationStartIndex) };
   };
@@ -228,10 +239,25 @@ export async function runAgent(
     assertNotAborted(options.signal);
 
     if (result.stopReason === "stop" || result.toolCalls.length === 0) {
+      const empireTools = collectEmpireToolResultsSinceUser(messages);
+      const draft = result.message.content;
+      if (
+        synthesisNudgeCount < MAX_SYNTHESIS_NUDGES &&
+        needsEmpireSynthesis(draft, empireTools)
+      ) {
+        if (draft.trim()) {
+          messages.push({ role: "assistant", content: draft });
+        }
+        options.onSynthesisRetry?.();
+        messages.push({ role: "user", content: EMPIRE_SYNTHESIS_NUDGE });
+        synthesisNudgeCount++;
+        continue;
+      }
+
       if (!useCustomStream) {
         console.log(); // Newline after streamed stdout output
       }
-      return finish(result.message.content);
+      return finish(draft);
     }
 
     messages.push({

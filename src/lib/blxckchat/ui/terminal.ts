@@ -403,6 +403,10 @@ export async function startTerminalChat(
           },
           onToolStart: showToolPending,
           onToolComplete: showToolComplete,
+          onSynthesisRetry: () => {
+            streamBuffer.reset();
+            messageBox.updateAssistantStream(assistantBlockIndex, "", "");
+          },
           confirmToolCall: (toolName, args) =>
             createBlessedConfirm(screen, toolName, args),
         },
