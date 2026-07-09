@@ -23,6 +23,22 @@ export interface ProviderCatalogEntry {
 /** Pi / OpenCode–parity provider set (hosted gateways + local). */
 export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
   {
+    id: "opencode-zen",
+    label: "OpenCode Zen",
+    adapter: "openai",
+    baseUrl: "https://opencode.ai/zen/v1",
+    requiresApiKey: true,
+    envKeys: ["OPENCODE_API_KEY", "OPENCODE_ZEN_API_KEY"],
+    suggestedModels: [
+      "claude-sonnet-4-5",
+      "gpt-5.2",
+      "deepseek-v4-pro",
+      "kimi-k2.5",
+      "glm-5.2",
+    ],
+    hint: "API key from opencode.ai/auth — curated models gateway",
+  },
+  {
     id: "anthropic",
     label: "Anthropic",
     adapter: "anthropic",
@@ -163,6 +179,25 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     requiresApiKey: false,
     suggestedModels: ["llama3.1", "llama3.2", "qwen2.5", "mistral"],
     hint: "Local models — no API key required",
+  },
+  {
+    id: "ollama-cloud",
+    label: "Ollama Cloud",
+    adapter: "openai",
+    baseUrl: "https://ollama.com/v1",
+    requiresApiKey: true,
+    envKeys: ["OLLAMA_API_KEY"],
+    suggestedModels: ["gpt-oss:120b-cloud", "gemma4:31b-cloud", "deepseek-v4-flash"],
+    hint: "API key from ollama.com/settings/keys",
+  },
+  {
+    id: "llamacpp",
+    label: "llama.cpp (local)",
+    adapter: "openai",
+    baseUrl: "http://127.0.0.1:8080/v1",
+    requiresApiKey: false,
+    suggestedModels: ["local-model"],
+    hint: "llama-server OpenAI-compatible endpoint (default :8080)",
   },
   {
     id: "lmstudio",

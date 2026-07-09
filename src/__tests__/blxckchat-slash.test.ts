@@ -11,7 +11,11 @@ import {
   isSlashCommand,
   parseSlashInput,
 } from "../lib/blxckchat/ui/slash/handler.js";
-import { resolveSlashCommandName } from "../lib/blxckchat/ui/slash/registry.js";
+import { coerceSlashLine } from "../lib/blxckchat/ui/slash/coerce.js";
+import {
+  resolveExactCommandToken,
+  resolveSlashCommandName,
+} from "../lib/blxckchat/ui/slash/registry.js";
 import { findModelMatch, type ModelOption } from "../lib/blxckchat/providers/models.js";
 import { createSession } from "../lib/blxckchat/ui/session/session-store.js";
 import type { StoredProviderConfig } from "../lib/blxckchat/config.js";
@@ -19,8 +23,29 @@ import { resolveProvider } from "../lib/blxckchat/providers/registry.js";
 
 test("resolveSlashCommandName resolves aliases", () => {
   assert.equal(resolveSlashCommandName("mo"), "model");
+  assert.equal(resolveSlashCommandName("providers"), "connect");
   assert.equal(resolveSlashCommandName("quit"), "exit");
   assert.equal(resolveSlashCommandName("clear"), "reset");
+});
+
+test("resolveExactCommandToken matches full command tokens", () => {
+  assert.equal(resolveExactCommandToken("providers"), "connect");
+  assert.equal(resolveExactCommandToken("connect"), "connect");
+  assert.equal(resolveExactCommandToken("mod"), null);
+});
+
+test("coerceSlashLine expands unambiguous partial commands", () => {
+  assert.equal(coerceSlashLine("/mod"), "/model");
+  assert.equal(coerceSlashLine("/prov"), "/prov");
+});
+
+test("detectSlashInputMode treats /providers as connect arguments", () => {
+  assert.deepEqual(detectSlashInputMode("/providers"), {
+    mode: "argument",
+    commandName: "connect",
+    commandFilter: "",
+    argFilter: "",
+  });
 });
 
 test("detectSlashInputMode distinguishes command vs argument", () => {

@@ -158,7 +158,7 @@ export function createInputBox(
     applySlashSuggestionAt(index);
   });
 
-  input.on("submit", (value: string) => {
+  const submitLine = (value: string): void => {
     hideSlashPopup();
     const trimmed = value.trim();
     if (trimmed) {
@@ -170,6 +170,13 @@ export function createInputBox(
     onSubmit(trimmed);
     input.focus();
     notify();
+  };
+
+  input.on("submit", (value: string) => {
+    if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {
+      if (applySelectedSuggestion()) return;
+    }
+    submitLine(value);
   });
 
   input.key(["C-c", "C-d"], () => {

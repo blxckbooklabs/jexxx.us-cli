@@ -42,6 +42,7 @@ import {
   writeSnapshot,
 } from "./session/tui-snapshot.js";
 import { getSlashSuggestions } from "./slash/autocomplete.js";
+import { coerceSlashLine } from "./slash/coerce.js";
 import { dispatchSlashCommand, isSlashCommand, parseSlashInput } from "./slash/handler.js";
 
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
@@ -418,8 +419,9 @@ export async function startTerminalChat(
 
     inputBox.hideSlashPopup();
 
-    if (isSlashCommand(trimmed)) {
-      await runSlash(trimmed);
+    const slashLine = coerceSlashLine(trimmed);
+    if (isSlashCommand(slashLine)) {
+      await runSlash(slashLine);
       statusBar.setMessage("Ready — ? for hotkeys · / for commands");
       return;
     }

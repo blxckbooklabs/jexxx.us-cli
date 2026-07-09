@@ -127,7 +127,7 @@ function handleProvider(args: string, state: SlashHandlerState): SlashResult {
       state.openProviderPicker();
       return { handled: true, messages: [] };
     }
-    lines.push("Configured providers (use /provider <name>):");
+    lines.push("Saved profiles (use /provider <name>). Add new: /connect or /providers");
     for (const p of providers) {
       const active = p.name === state.activeConfig.name ? "▸ " : "  ";
       const def = p.isDefault ? " (default)" : "";
@@ -162,13 +162,14 @@ async function handleConnect(
       return { handled: true, messages: [] };
     }
     const lines = [
-      "Connect an inference provider (BYOK):",
-      "  /connect          — open provider picker",
-      "  /connect <id>     — quick-connect catalog id",
+      "Add an inference provider (BYOK) — same as OpenCode /connect:",
+      "  /connect or /providers  — open catalog picker + API key flow",
+      "  /connect <id>           — quick-connect one provider",
       "",
-      "Catalog ids: anthropic, openai, google, openrouter, groq, deepseek,",
-      "  mistral, xai, together, fireworks, cerebras, nvidia, azure-openai,",
-      "  openai-compatible, ollama, lmstudio",
+      "Not the same as /provider (switch saved profiles only).",
+      "",
+      "Catalog: opencode-zen, anthropic, openai, google, openrouter, ollama,",
+      "  ollama-cloud, llamacpp, groq, deepseek, mistral, xai, …",
     ];
     return { handled: true, messages: lines };
   }

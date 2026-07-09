@@ -2,13 +2,19 @@ import { listProvidersRedacted } from "../../config.js";
 import type { StoredProviderConfig } from "../../config.js";
 import { listCatalogEntries } from "../../providers/catalog.js";
 import { listModelOptions, type ModelOption } from "../../providers/models.js";
-import { BUILTIN_SLASH_COMMANDS, type SlashCommandDef } from "./registry.js";
+import {
+  BUILTIN_SLASH_COMMANDS,
+  resolveExactCommandToken,
+  type SlashCommandDef,
+} from "./registry.js";
 import { fuzzyFilter } from "./fuzzy.js";
 
 export interface SlashSuggestion {
   value: string;
   label: string;
   description: string;
+  /** Apply as /connect <id> instead of the current command prefix. */
+  connectProvider?: string;
 }
 
 export interface SlashAutocompleteContext {
@@ -91,14 +97,35 @@ export async function getArgumentSuggestions(
     }));
   }
 
-  if (commandName === "provider" || commandName === "providers") {
+  if (commandName === "provider") {
     const providers = listProvidersRedacted();
-    const filtered = fuzzyFilter(providers, argFilter, (p) => `${p.name} ${p.provider} ${p.model}`, 12);
-    return filtered.map((p) => ({
+    const saved = fuzzyFilter(
+      providers,
+      argFilter,
+      (p) => `${p.name} ${p.provider} ${p.model}`,
+      8,
+    );
+    const savedSuggestions: SlashSuggestion[] = saved.map((p) => ({
       value: p.name,
       label: p.name,
-      description: `${p.provider}/${p.model}`,
+      description: `${p.provider}/${p.model}${p.isDefault ? " · default" : ""}`,
     }));
+
+    const entries = listCatalogEntries();
+    const catalog = fuzzyFilter(
+      [...entries],
+      argFilter,
+      (e) => `${e.id} ${e.label}`,
+      8,
+    );
+    const connectSuggestions: SlashSuggestion[] = catalog.map((e) => ({
+      value: e.id,
+      label: `+ Connect ${e.label}`,
+      description: e.hint ?? `Add API key · ${e.id}`,
+      connectProvider: e.id,
+    }));
+
+    return [...savedSuggestions, ...connectSuggestions];
   }
 
   return [];
@@ -119,6 +146,15 @@ export function detectSlashInputMode(value: string): {
   const rest = value.slice(1);
   const spaceIdx = rest.indexOf(" ");
   if (spaceIdx === -1) {
+    const exact = resolveExactCommandToken(rest);
+    if (exact) {
+      return {
+        mode: "argument",
+        commandName: exact,
+        commandFilter: "",
+        argFilter: "",
+      };
+    }
     return {
       mode: "command",
       commandName: "",

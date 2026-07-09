@@ -42,7 +42,12 @@ function catalogToPickerItems(): PickerItem[] {
 }
 
 function configuredToPickerItems(activeName: string): PickerItem[] {
-  return listProvidersRedacted().map((p) => {
+  const connectNew: PickerItem = {
+    id: "__connect_new__",
+    label: "➕ Connect new provider…",
+    description: "Browse catalog · add API key (/connect)",
+  };
+  const saved = listProvidersRedacted().map((p) => {
     const markers = [
       p.name === activeName ? "▸" : " ",
       p.isDefault ? "default" : "",
@@ -56,6 +61,7 @@ function configuredToPickerItems(activeName: string): PickerItem[] {
       description: `${p.label} · ${p.provider}/${p.model}${markers ? ` · ${markers}` : ""}`,
     };
   });
+  return [connectNew, ...saved];
 }
 
 export function createConnectOverlay(
@@ -227,6 +233,10 @@ export function createConnectOverlay(
   });
 
   providerSwitchPicker.setOnPick((item) => {
+    if (item.id === "__connect_new__") {
+      providerPicker.open(catalogToPickerItems(), { title: "░ connect provider ░" });
+      return;
+    }
     const resolved = getProviderByName(item.id);
     if (!resolved) {
       opts.onError(`Unknown config "${item.id}"`);
@@ -257,10 +267,6 @@ export function createConnectOverlay(
     },
     openProviderSwitch() {
       const items = configuredToPickerItems(opts.getActiveConfig().name);
-      if (items.length === 0) {
-        opts.onMessage("No providers configured — use /connect to add one");
-        return;
-      }
       providerSwitchPicker.open(items, { title: "░ providers ░" });
     },
     close() {

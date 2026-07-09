@@ -177,6 +177,10 @@ export function applySuggestion(
     return `/${cmdName} `;
   }
 
+  if (suggestion.connectProvider) {
+    return `/connect ${suggestion.connectProvider} `;
+  }
+
   const spaceIdx = currentValue.indexOf(" ");
   if (spaceIdx === -1) return currentValue;
   const prefix = currentValue.slice(0, spaceIdx + 1);

@@ -14,6 +14,7 @@ describe("provider catalog", () => {
   test("lists Pi/OpenCode parity providers", () => {
     const ids = listCatalogEntries().map((e) => e.id);
     for (const expected of [
+      "opencode-zen",
       "anthropic",
       "openai",
       "google",
@@ -29,6 +30,8 @@ describe("provider catalog", () => {
       "azure-openai",
       "openai-compatible",
       "ollama",
+      "ollama-cloud",
+      "llamacpp",
       "lmstudio",
     ]) {
       assert.ok(ids.includes(expected), `missing ${expected}`);
