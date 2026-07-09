@@ -68,6 +68,7 @@ import {
   registerSlashMenuDismiss,
 } from "./menu-mutex.js";
 import { openExternalEditor } from "./external-editor.js";
+import { createAuthTuiActions } from "./auth-tui.js";
 import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
 
 /** Blessed program hide/show exist at runtime but are missing from @types. */
@@ -188,7 +189,7 @@ export async function startTerminalChat(
 
   let cachedModelOptions = await listModelOptions(activeConfig);
 
-  const heroMeta: JexxxusHeroMeta = {
+  let heroMeta: JexxxusHeroMeta = {
     authEmail,
     toolCount,
     providerLabel: options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
@@ -201,6 +202,21 @@ export async function startTerminalChat(
       renderJexxxusHeroBlessed(heroWidth, heroMeta),
     );
   };
+
+  const refreshAuthChrome = (): void => {
+    const liveAuth = loadCredentials({ quiet: true })?.email ?? "not authenticated";
+    heroMeta = { ...heroMeta, authEmail: liveAuth };
+    if (messageBox.hasHero()) {
+      messageBox.dismissHero();
+      showIdleHero();
+    }
+    syncSnapshot();
+  };
+
+  const authActions = createAuthTuiActions({
+    screen,
+    onAuthChanged: refreshAuthChrome,
+  });
 
   const onDivinityChatCleared = (): void => {
     messageBox.clearChat();
@@ -216,6 +232,7 @@ export async function startTerminalChat(
       setActiveConfig,
       copySnapshot,
       copyChromeDigest,
+      authActions,
       openModelPicker: () => modelPickerOverlay.open(),
       openProviderPicker: () => providerOverlay.open(),
       openDivinityPicker: () => divinityPickerOverlay.open(),

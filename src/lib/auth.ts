@@ -262,6 +262,66 @@ interface TokenResponse {
   email: string;
 }
 
+/** Human-readable auth status for TUI / slash /status output. */
+export function formatAuthStatusLines(creds: Credentials | null): string[] {
+  if (!creds) {
+    return [
+      "JEXXXUS account: not signed in",
+      "Run /auth login or: jexxxus auth login",
+      "Gateway: secure.jexxx.us (device authorization)",
+    ];
+  }
+
+  const expiryMinutes = getTokenExpiryMinutes(creds);
+  const expiryLabel =
+    expiryMinutes < 0
+      ? "EXPIRED"
+      : expiryMinutes < 5
+        ? `${Math.floor(expiryMinutes)}m remaining (refresh soon)`
+        : `${Math.floor(expiryMinutes)}m remaining`;
+
+  return [
+    "JEXXXUS account: signed in",
+    `Email: ${creds.email}`,
+    `User ID: ${creds.userId}`,
+    `Token: ${expiryLabel}`,
+    `Last refreshed: ${new Date(creds.refreshedAt).toLocaleString()}`,
+  ];
+}
+
+/**
+ * Shared device-login flow for `jexxxus auth login` and BLXCKCHAT `/auth login`.
+ * Prints instructions to stdout and polls secure.jexxx.us until allow/deny/timeout.
+ */
+export async function runInteractiveDeviceLogin(): Promise<Credentials> {
+  ensureCredsDir();
+
+  const { userCode, codeVerifier, expiresIn, verificationUrl } =
+    await startDeviceAuth();
+
+  console.log(chalk.cyan("\n[AUTH] To authorize this CLI:\n"));
+  console.log(`Visit:   ${chalk.bold.underline(verificationUrl)}`);
+  console.log(`Enter:   ${chalk.bold.bgMagenta.black(` ${userCode} `)}`);
+  console.log(chalk.dim(`Expires: ${Math.floor(expiresIn / 60)} minutes\n`));
+
+  try {
+    const { exec } = await import("child_process");
+    const openCommand =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+          ? "start"
+          : "xdg-open";
+    exec(`${openCommand} "${verificationUrl}"`);
+  } catch {
+    // Headless / SSH — user opens the URL manually
+  }
+
+  console.log(chalk.dim("Waiting for authorization..."));
+
+  return pollDeviceAuth(userCode, codeVerifier, expiresIn);
+}
+
 /**
  * Step 1 of `jexxxus auth login`: register a new device session with
  * secure.jexxx.us. Sends only the PKCE code_challenge — the code_verifier

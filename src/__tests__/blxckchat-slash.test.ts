@@ -27,6 +27,7 @@ test("resolveSlashCommandName resolves aliases", () => {
   assert.equal(resolveSlashCommandName("connect"), "provider");
   assert.equal(resolveSlashCommandName("quit"), "exit");
   assert.equal(resolveSlashCommandName("clear"), "reset");
+  assert.equal(resolveSlashCommandName("auth"), "auth");
 });
 
 test("resolveExactCommandToken matches full command tokens", () => {

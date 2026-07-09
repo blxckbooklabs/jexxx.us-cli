@@ -25,7 +25,16 @@ import {
   formatSlashHelp,
   resolveSlashCommandName,
 } from "./registry.js";
-import { loadCredentials as loadAuthCredentials } from "../../../auth.js";
+import {
+  deleteCredentials,
+  formatAuthStatusLines,
+  loadCredentials as loadAuthCredentials,
+  promptYesNo,
+  refreshAccessTokenViaServer,
+  runInteractiveDeviceLogin,
+  saveCredentials,
+} from "../../../auth.js";
+import type { AuthTuiActions } from "../auth-tui.js";
 import { formatHeroHint, formatHeroSubtitle } from "../components/jexxxus-hero.js";
 import { buildChromeDigestPlain } from "../renderer/plain-text.js";
 import { copyToClipboard, writeChromeDigest } from "../session/tui-snapshot.js";
@@ -37,6 +46,7 @@ export interface SlashHandlerState {
   setActiveConfig: (config: StoredProviderConfig, provider: Provider) => void;
   copySnapshot: () => Promise<{ path: string; copied: boolean }>;
   copyChromeDigest?: () => Promise<{ path: string; copied: boolean }>;
+  authActions?: AuthTuiActions;
   openModelPicker?: () => void | Promise<void>;
   openProviderPicker?: () => void | Promise<void>;
   openDivinityPicker?: () => void | Promise<void>;
@@ -204,6 +214,93 @@ function handleSession(state: SlashHandlerState): SlashResult {
   return { handled: true, messages: lines };
 }
 
+async function handleAuth(args: string, state: SlashHandlerState): Promise<SlashResult> {
+  const sub = args.trim().toLowerCase() || "status";
+
+  if (state.authActions) {
+    switch (sub) {
+      case "status":
+        return { handled: true, messages: await state.authActions.status() };
+      case "login":
+        return {
+          handled: true,
+          messages: await state.authActions.login(),
+          deferInputFocus: true,
+        };
+      case "logout":
+        return { handled: true, messages: await state.authActions.logout() };
+      case "refresh":
+        return { handled: true, messages: await state.authActions.refresh() };
+      default:
+        return {
+          handled: true,
+          messages: [
+            "Usage: /auth · /auth login · /auth logout · /auth refresh",
+            "Same device flow as: jexxxus auth login",
+          ],
+        };
+    }
+  }
+
+  switch (sub) {
+    case "status":
+      return {
+        handled: true,
+        messages: formatAuthStatusLines(loadAuthCredentials({ quiet: true })),
+      };
+    case "login": {
+      try {
+        const creds = await runInteractiveDeviceLogin();
+        saveCredentials(creds);
+        return {
+          handled: true,
+          messages: [`Signed in as ${creds.email}`, "Gateway: secure.jexxx.us"],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { handled: true, messages: [`Login failed: ${msg}`] };
+      }
+    }
+    case "logout": {
+      const creds = loadAuthCredentials({ quiet: true });
+      if (!creds) {
+        return { handled: true, messages: ["Not signed in to JEXXXUS."] };
+      }
+      const ok = await promptYesNo("Revoke CLI access and delete stored credentials?");
+      if (!ok) {
+        return { handled: true, messages: ["Logout cancelled."] };
+      }
+      deleteCredentials();
+      return {
+        handled: true,
+        messages: ["Signed out. Run /auth login or jexxxus auth login."],
+      };
+    }
+    case "refresh": {
+      const creds = loadAuthCredentials({ quiet: true });
+      if (!creds) {
+        return { handled: true, messages: ["Not signed in. Use /auth login first."] };
+      }
+      try {
+        const refreshed = await refreshAccessTokenViaServer(creds.refreshToken);
+        saveCredentials(refreshed);
+        return { handled: true, messages: [`Token refreshed for ${refreshed.email}.`] };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { handled: true, messages: [`Refresh failed: ${msg}`, "Try /auth login."] };
+      }
+    }
+    default:
+      return {
+        handled: true,
+        messages: [
+          "Usage: /auth · /auth login · /auth logout · /auth refresh",
+          "Same device flow as: jexxxus auth login",
+        ],
+      };
+  }
+}
+
 async function handleDivinities(
   args: string,
   state: SlashHandlerState,
@@ -353,6 +450,9 @@ export async function dispatchSlashCommand(
 
     case "session":
       return handleSession(state);
+
+    case "auth":
+      return handleAuth(args, state);
 
     case "divinities":
       return handleDivinities(args, state);

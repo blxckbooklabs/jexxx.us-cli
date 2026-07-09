@@ -43,6 +43,49 @@ export function wordRight(text: string, pos: number): number {
   return i;
 }
 
+/** Inclusive start, exclusive end for the word at a click/caret index. */
+export function wordBoundsAt(text: string, index: number): { start: number; end: number } {
+  const pos = Math.max(0, Math.min(index, text.length));
+  let anchor = pos;
+  if (pos < text.length && WORD_CHAR.test(text[pos] ?? "")) {
+    anchor = pos;
+  } else if (pos > 0 && WORD_CHAR.test(text[pos - 1] ?? "")) {
+    anchor = pos - 1;
+  } else {
+    return { start: pos, end: pos };
+  }
+  const start = wordLeft(text, anchor + 1);
+  const end = wordRight(text, start);
+  return { start, end };
+}
+
+/** Double-click word selection (Google Docs style). */
+export function selectWordAt(state: LineEditorState, index: number): LineEditorState {
+  const { start, end } = wordBoundsAt(state.text, index);
+  if (start >= end) {
+    return { ...state, cursor: index, selectionAnchor: null };
+  }
+  return { ...state, cursor: end, selectionAnchor: start };
+}
+
+/** Horizontal scroll offset for a single-line viewport (matches renderLineEditorView). */
+export function lineEditorViewScrollStart(state: LineEditorState, viewWidth: number): number {
+  const width = Math.max(8, viewWidth);
+  if (state.text.length <= width) return 0;
+  return Math.max(0, Math.min(state.cursor - Math.floor(width * 0.4), state.text.length - width));
+}
+
+/** Map blessed mouse column inside transmit box to a text index. */
+export function charIndexFromMouseX(
+  mouseX: number,
+  state: LineEditorState,
+  viewWidth: number,
+): number {
+  const contentCol = Math.max(0, mouseX - 2);
+  const scrollStart = lineEditorViewScrollStart(state, viewWidth);
+  return Math.max(0, Math.min(state.text.length, scrollStart + contentCol));
+}
+
 function clampCursor(state: LineEditorState, cursor: number): LineEditorState {
   const next = Math.max(0, Math.min(state.text.length, cursor));
   return { ...state, cursor: next };
@@ -431,10 +474,7 @@ export function renderLineEditorView(
   const cursorChar = options.cursorChar ?? "▌";
   const width = Math.max(8, viewWidth);
   const range = getSelectionRange(state);
-  let start = 0;
-  if (state.text.length > width) {
-    start = Math.max(0, Math.min(state.cursor - Math.floor(width * 0.4), state.text.length - width));
-  }
+  const start = lineEditorViewScrollStart(state, width);
   const end = Math.min(state.text.length, start + width);
   const slice = state.text.slice(start, end);
 

@@ -22,6 +22,11 @@ export const BUILTIN_SLASH_COMMANDS: readonly SlashCommandDef[] = [
   },
   { name: "session", aliases: ["status"], description: "Show session stats and active provider" },
   {
+    name: "auth",
+    description: "JEXXXUS account via secure.jexxx.us (same as jexxxus auth)",
+    argumentHint: "login | logout | refresh",
+  },
+  {
     name: "chrome",
     aliases: ["indicators", "hud"],
     description: "Copy TUI text indicators (model, auth, tools, hints) to clipboard",

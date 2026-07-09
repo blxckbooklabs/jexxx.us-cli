@@ -41,11 +41,9 @@ import {
   loadCredentials,
   saveCredentials,
   deleteCredentials,
-  ensureCredsDir,
   getTokenExpiryMinutes,
   promptYesNo,
-  startDeviceAuth,
-  pollDeviceAuth,
+  runInteractiveDeviceLogin,
   refreshAccessTokenViaServer,
 } from "./lib/auth.js";
 
@@ -128,34 +126,7 @@ authCmd
   .description("Authenticate CLI via Clerk (device authorization flow)")
   .action(async () => {
     try {
-      ensureCredsDir();
-
-      const { userCode, codeVerifier, expiresIn, verificationUrl } =
-        await startDeviceAuth();
-
-      console.log(chalk.cyan("\n[AUTH] To authorize this CLI:\n"));
-      console.log(`Visit:   ${chalk.bold.underline(verificationUrl)}`);
-      console.log(`Enter:   ${chalk.bold.bgMagenta.black(` ${userCode} `)}`);
-      console.log(chalk.dim(`Expires: ${Math.floor(expiresIn / 60)} minutes\n`));
-
-      // Best-effort: try to open the default browser. Silently continue if
-      // this fails (e.g. headless/SSH session) — the printed URL still works.
-      try {
-        const { exec } = await import("child_process");
-        const openCommand =
-          process.platform === "darwin"
-            ? "open"
-            : process.platform === "win32"
-              ? "start"
-              : "xdg-open";
-        exec(`${openCommand} "${verificationUrl}"`);
-      } catch {
-        // ignore — user can open the link manually
-      }
-
-      console.log(chalk.dim("Waiting for authorization..."));
-
-      const credentials = await pollDeviceAuth(userCode, codeVerifier, expiresIn);
+      const credentials = await runInteractiveDeviceLogin();
       saveCredentials(credentials);
 
       console.log(chalk.green(`\n[SUCCESS] Authenticated as ${credentials.email}.`));

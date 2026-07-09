@@ -4,13 +4,16 @@ import { readClipboard } from "../session/tui-snapshot.js";
 import { createModalKeypress, type BlessedKey } from "./modal-keypress.js";
 import {
   applyLineEditorAction,
+  charIndexFromMouseX,
   createLineEditorState,
   insertText,
   renderLineEditorView,
   resolveInsertChar,
   resolveLineEditorKey,
+  selectWordAt,
   type LineEditorState,
 } from "./line-editor.js";
+import { isBlessedMouseEnabled } from "../tty.js";
 
 type InputBoxElement = blessed.Widgets.BoxElement & {
   emit: (event: string, ...args: unknown[]) => boolean;
@@ -116,6 +119,34 @@ export function attachBlessedLineEditor(
     stopCapture();
     render();
   });
+
+  if (isBlessedMouseEnabled()) {
+    let lastClick = { at: 0, x: -1, y: -1 };
+    const DOUBLE_CLICK_MS = 450;
+
+    box.on("click", (data: { x?: number; y?: number }) => {
+      const x = data.x ?? 0;
+      const y = data.y ?? 0;
+      if (!focused) {
+        box.focus();
+      }
+
+      const now = Date.now();
+      const isDouble =
+        now - lastClick.at <= DOUBLE_CLICK_MS &&
+        lastClick.x === x &&
+        lastClick.y === y;
+      lastClick = { at: now, x, y };
+
+      const index = charIndexFromMouseX(x, state, innerWidth());
+      if (isDouble) {
+        state = selectWordAt(state, index);
+      } else {
+        state = { ...state, cursor: index, selectionAnchor: null };
+      }
+      render();
+    });
+  }
 
   return {
     getText: () => state.text,

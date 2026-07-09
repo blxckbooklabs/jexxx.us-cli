@@ -135,7 +135,9 @@ jexxxus blxckchat --provider my-ollama-config "check doctor status"
 jexxxus blxckchat --shell
 ```
 
-**Slash commands (interactive):** `/divinities` (persona picker), `/chrome` (copy TUI text indicators), `/copy` (full snapshot), `/reset`, `/exit`.
+**Slash commands (interactive):** `/auth` (secure.jexxx.us login—same as `jexxxus auth login`), `/divinities`, `/chrome`, `/copy`, `/reset`, `/exit`.
+
+**Transmit editor:** double-click a word to select it; Option+arrow moves by word; pink inverse highlights selection.
 
 **Copy for debugging:** `/chrome` or `Ctrl+Shift+Y` copies plain-text chrome (model, auth, tool count, hero hints, status bar) to clipboard and `~/.jexxxus/chrome-digest.txt`. `Ctrl+Y` copies chrome + full visual snapshot.
 

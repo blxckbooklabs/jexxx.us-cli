@@ -15,9 +15,19 @@ import {
   resolveInsertChar,
   resolveLineEditorKey,
   selectAll,
+  selectWordAt,
+  wordBoundsAt,
   wordLeft,
   wordRight,
 } from "../lib/blxckchat/ui/editor/line-editor.js";
+
+test("selectWordAt highlights word under double-click index", () => {
+  const text = "Type a message to begin";
+  assert.deepEqual(wordBoundsAt(text, 7), { start: 7, end: 14 });
+  const state = selectWordAt(createLineEditorState(text), 7);
+  assert.deepEqual(getSelectionRange(state), { start: 7, end: 14 });
+  assert.equal(text.slice(7, 14), "message");
+});
 
 test("wordLeft and wordRight skip by token", () => {
   const text = "hello /model world";
