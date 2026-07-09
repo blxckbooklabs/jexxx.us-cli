@@ -136,10 +136,19 @@ export async function startInteractiveChat(
     return;
   }
 
-  const { startTerminalChat } = await import("./ui/terminal.js");
-  await startTerminalChat(provider, tools, {
-    providerLabel,
-    toolCount: tools.length,
-    storedConfig: options.storedConfig,
-  });
+  try {
+    const { startTerminalChat } = await import("./ui/terminal.js");
+    await startTerminalChat(provider, tools, {
+      providerLabel,
+      toolCount: tools.length,
+      storedConfig: options.storedConfig,
+    });
+  } catch (err) {
+    console.error(
+      chalk.red(
+        `[BLXCKCHAT] TUI failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      ),
+    );
+    process.exit(1);
+  }
 }

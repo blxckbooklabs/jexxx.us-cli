@@ -14,8 +14,7 @@ export function createStatusBar(
   screen: blessed.Widgets.Screen,
   options: StatusBarOptions = {},
 ): StatusBarHandle {
-  let message =
-    "Ctrl+C/D exit · / commands · Tab complete · Ctrl+Y copy · Ctrl+S save";
+  let message = "? hotkeys · / commands · Ctrl+B scroll · Ctrl+I input";
 
   const bar = blessed.box({
     parent: screen,

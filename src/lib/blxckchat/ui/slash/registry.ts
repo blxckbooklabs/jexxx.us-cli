@@ -46,6 +46,6 @@ export function formatSlashHelp(): string {
   }
   lines.push("");
   lines.push("Type / to see suggestions · Tab to autocomplete · ↑↓ to browse");
-  lines.push("Ctrl+C or Ctrl+D to exit · Esc closes popup then exits");
+  lines.push("? for full hotkeys · Ctrl+C/D exit · Esc closes popups");
   return lines.join("\n");
 }

@@ -85,7 +85,12 @@ program
   .name("jexxxus")
   .description("JEXXXUS CLI — unified control plane for the JEXXXUS Ecosystem")
   .version("1.0.0")
-  .hook("preAction", () => {
+  .hook("preAction", (_thisCommand, actionCommand) => {
+    // Interactive BLXCKCHAT TUI owns the screen — figlet banner on stdout
+    // breaks blessed init and flashes back to the shell.
+    if (actionCommand.name() === "blxckchat" && actionCommand.args.length === 0) {
+      return;
+    }
     printBanner();
   });
 

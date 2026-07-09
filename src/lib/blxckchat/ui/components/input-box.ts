@@ -18,9 +18,23 @@ export interface InputBoxHandle {
   hideSlashPopup: () => void;
 }
 
+export interface InputShortcutHandlers {
+  onSave?: () => void;
+  onCopyTui?: () => void;
+  onCopyLastReply?: () => void;
+  onModelList?: () => void;
+  onModelNext?: () => void;
+  onModelPrev?: () => void;
+  onToggleAllThinking?: () => void;
+  onNewSession?: () => void;
+  onFocusMessages?: () => void;
+}
+
 export interface InputBoxOptions {
   onUpdate?: () => void;
   onExit?: () => void;
+  onShowHotkeys?: () => void;
+  shortcuts?: InputShortcutHandlers;
   slashPopup?: SlashPopupHandle;
   getSlashSuggestions?: (value: string) => Promise<SlashSuggestion[]>;
 }
@@ -130,6 +144,28 @@ export function createInputBox(
   input.key(["C-c", "C-d"], () => {
     options.onExit?.();
   });
+
+  input.key(["C-u"], () => {
+    input.clearValue();
+    hideSlashPopup();
+    screen.render();
+    notify();
+  });
+
+  input.key(["?"], () => {
+    options.onShowHotkeys?.();
+  });
+
+  const sc = options.shortcuts;
+  if (sc?.onSave) input.key(["C-s"], () => sc.onSave!());
+  if (sc?.onCopyTui) input.key(["C-y"], () => void sc.onCopyTui!());
+  if (sc?.onCopyLastReply) input.key(["C-o"], () => void sc.onCopyLastReply!());
+  if (sc?.onModelList) input.key(["C-l"], () => void sc.onModelList!());
+  if (sc?.onModelNext) input.key(["C-p"], () => void sc.onModelNext!());
+  if (sc?.onModelPrev) input.key(["S-C-p"], () => void sc.onModelPrev!());
+  if (sc?.onToggleAllThinking) input.key(["C-t"], () => sc.onToggleAllThinking!());
+  if (sc?.onNewSession) input.key(["C-n"], () => void sc.onNewSession!());
+  if (sc?.onFocusMessages) input.key(["C-b"], () => sc.onFocusMessages!());
 
   input.key("tab", () => {
     if (applySelectedSuggestion()) return;

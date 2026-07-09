@@ -33,9 +33,14 @@ export interface MessageBoxHandle {
   appendSystem: (message: string) => void;
   scrollUp: () => void;
   scrollDown: () => void;
+  scrollPageUp: () => void;
+  scrollPageDown: () => void;
+  scrollToTop: () => void;
   scrollToBottom: () => void;
   getThinkingBlocks: () => ThinkingBlock[];
   toggleFocusedThinking: () => void;
+  toggleAllThinking: () => void;
+  getLastAssistantPlainText: () => string | null;
   getPlainText: () => string;
   rebuild: () => void;
 }
@@ -227,6 +232,20 @@ export function createMessageBox(
       box.scroll(3);
       screen.render();
     },
+    scrollPageUp() {
+      const page = Math.max(5, ((box.height as number) || 12) - 2);
+      box.scroll(-page);
+      screen.render();
+    },
+    scrollPageDown() {
+      const page = Math.max(5, ((box.height as number) || 12) - 2);
+      box.scroll(page);
+      screen.render();
+    },
+    scrollToTop() {
+      box.setScroll(0);
+      screen.render();
+    },
     scrollToBottom() {
       box.setScrollPerc(100);
       screen.render();
@@ -246,6 +265,24 @@ export function createMessageBox(
         }
       }
       rebuild();
+    },
+    toggleAllThinking() {
+      const tbs = allThinkingBlocks();
+      if (tbs.length === 0) return;
+      const anyExpanded = tbs.some((tb) => !tb.collapsed);
+      for (const tb of tbs) {
+        tb.collapsed = anyExpanded;
+      }
+      rebuild();
+    },
+    getLastAssistantPlainText() {
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        const block = blocks[i];
+        if (block?.type === "assistant") {
+          return block.assistantRaw ?? block.content;
+        }
+      }
+      return null;
     },
     getPlainText() {
       return renderPlainContent();

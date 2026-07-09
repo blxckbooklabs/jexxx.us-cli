@@ -110,3 +110,23 @@ export function findModelMatch(
   );
   return partial.length === 1 ? (partial[0] ?? null) : null;
 }
+
+/** Cycle to next/previous model within the active provider's option list. */
+export function cycleModelOption(
+  options: ModelOption[],
+  current: StoredProviderConfig,
+  direction: 1 | -1,
+): ModelOption | null {
+  const forProvider = options.filter((o) => o.provider === current.provider);
+  if (forProvider.length === 0) return null;
+
+  const idx = forProvider.findIndex((o) => o.id === current.model);
+  const nextIdx =
+    idx === -1
+      ? direction === 1
+        ? 0
+        : forProvider.length - 1
+      : (idx + direction + forProvider.length) % forProvider.length;
+
+  return forProvider[nextIdx] ?? null;
+}

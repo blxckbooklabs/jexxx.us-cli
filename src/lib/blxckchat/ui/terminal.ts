@@ -4,9 +4,10 @@ import { runAgent } from "../agent-loop.js";
 import type { Provider } from "../providers/types.js";
 import type { BlxckchatTool } from "../tools/types.js";
 import type { StoredProviderConfig } from "../config.js";
+import { upsertProvider } from "../config.js";
 import { loadCredentials } from "../../auth.js";
 import { resolveProvider } from "../providers/registry.js";
-import { listModelOptions } from "../providers/models.js";
+import { cycleModelOption, listModelOptions } from "../providers/models.js";
 
 import { createTopBar } from "./components/top-bar.js";
 import { createMessageBox } from "./components/message-box.js";
@@ -19,7 +20,6 @@ import {
   addAssistantMessage,
   addToolResult,
   updateToolResult,
-  exportSessionToFile,
   type TerminalSession,
   type ToolStatus,
 } from "./session/session-store.js";
@@ -35,6 +35,7 @@ import { getSlashSuggestions } from "./slash/autocomplete.js";
 import { dispatchSlashCommand, isSlashCommand } from "./slash/handler.js";
 import { formatSlashHelp } from "./slash/registry.js";
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
+import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
 
 export interface TerminalChatOptions {
   providerLabel?: string;
@@ -118,8 +119,52 @@ export async function startTerminalChat(
   let statusBar!: ReturnType<typeof createStatusBar>;
   let inputBox!: ReturnType<typeof createInputBox>;
   const slashPopup = createSlashPopup(screen);
+  const hotkeysOverlay = createHotkeysOverlay(screen);
 
   let cachedModelOptions = await listModelOptions(activeConfig);
+
+  const runSlash = async (command: string): Promise<void> => {
+    const result = await dispatchSlashCommand(command, {
+      session,
+      activeConfig,
+      toolCount,
+      setActiveConfig,
+      copySnapshot,
+    });
+    for (const msg of result.messages) {
+      messageBox.appendSystem(msg);
+    }
+    if (result.exit) {
+      gracefulTuiExit(screen);
+    }
+  };
+
+  const cycleModel = async (direction: 1 | -1): Promise<void> => {
+    const next = cycleModelOption(cachedModelOptions, activeConfig, direction);
+    if (!next) {
+      statusBar.setMessage("No models available to cycle");
+      return;
+    }
+    const updated: StoredProviderConfig = {
+      ...activeConfig,
+      model: next.id,
+      provider: next.provider,
+    };
+    upsertProvider(updated);
+    setActiveConfig(updated, resolveProvider(updated));
+    messageBox.appendSystem(`Model → ${updated.provider}/${updated.model}`);
+    statusBar.setMessage(`${updated.provider}/${updated.model}`);
+  };
+
+  const copyLastReply = async (): Promise<void> => {
+    const text = messageBox.getLastAssistantPlainText();
+    if (!text?.trim()) {
+      statusBar.setMessage("No assistant reply to copy");
+      return;
+    }
+    const copied = await copyToClipboard(text);
+    statusBar.setMessage(copied ? "Last reply copied" : "Copy failed — see TUI snapshot");
+  };
 
   const syncSnapshot = (): void => {
     const snapshot = buildTuISnapshot({
@@ -174,20 +219,8 @@ export async function startTerminalChat(
     inputBox.hideSlashPopup();
 
     if (isSlashCommand(trimmed)) {
-      const result = await dispatchSlashCommand(trimmed, {
-        session,
-        activeConfig,
-        toolCount,
-        setActiveConfig,
-        copySnapshot,
-      });
-      for (const msg of result.messages) {
-        messageBox.appendSystem(msg);
-      }
-      if (result.exit) {
-        gracefulTuiExit(screen);
-      }
-      statusBar.setMessage("Ready — type / for commands");
+      await runSlash(trimmed);
+      statusBar.setMessage("Ready — ? for hotkeys · / for commands");
       return;
     }
 
@@ -263,6 +296,13 @@ export async function startTerminalChat(
 
   const requestExit = (): void => gracefulTuiExit(screen);
 
+  const focusMessages = (): void => {
+    hotkeysOverlay.hide();
+    messageBox.element.focus();
+    inputHasFocus = false;
+    statusBar.setMessage("Message focus — PgUp/Dn scroll · Ctrl+I input · ? hotkeys");
+  };
+
   inputBox = createInputBox(
     screen,
     (line) => {
@@ -271,6 +311,21 @@ export async function startTerminalChat(
     {
       onUpdate: onSnapshotUpdate,
       onExit: requestExit,
+      onShowHotkeys: () => hotkeysOverlay.toggle(),
+      shortcuts: {
+        onSave: () => void runSlash("/save"),
+        onCopyTui: async () => {
+          const { path, copied } = await copySnapshot();
+          statusBar.setMessage(copied ? "TUI copied" : `Snapshot: ${path}`);
+        },
+        onCopyLastReply: () => void copyLastReply(),
+        onModelList: () => void runSlash("/model"),
+        onModelNext: () => void cycleModel(1),
+        onModelPrev: () => void cycleModel(-1),
+        onToggleAllThinking: () => messageBox.toggleAllThinking(),
+        onNewSession: () => void runSlash("/reset"),
+        onFocusMessages: focusMessages,
+      },
       slashPopup,
       getSlashSuggestions: (value) =>
         getSlashSuggestions(value, {
@@ -284,6 +339,11 @@ export async function startTerminalChat(
     screen,
     [screen, inputBox.element, messageBox.element],
     () => {
+      if (hotkeysOverlay.isVisible()) {
+        hotkeysOverlay.hide();
+        inputBox.focus();
+        return true;
+      }
       if (slashPopup.isVisible()) {
         inputBox.hideSlashPopup();
         return true;
@@ -291,6 +351,27 @@ export async function startTerminalChat(
       return false;
     },
   );
+
+  inputBox.element.key(["C-i"], () => {
+    inputBox.focus();
+    inputHasFocus = true;
+    statusBar.setMessage("Input focus — Enter send · / commands · ? hotkeys");
+  });
+
+  messageBox.element.key(["pageup"], () => messageBox.scrollPageUp());
+  messageBox.element.key(["pagedown"], () => messageBox.scrollPageDown());
+  messageBox.element.key(["home"], () => messageBox.scrollToTop());
+  messageBox.element.key(["end", "C-g"], () => messageBox.scrollToBottom());
+  messageBox.element.key(["up"], () => messageBox.scrollUp());
+  messageBox.element.key(["down"], () => messageBox.scrollDown());
+  messageBox.element.key(["space"], () => messageBox.toggleFocusedThinking());
+  messageBox.element.key(["C-t"], () => messageBox.toggleAllThinking());
+  messageBox.element.key(["C-o"], () => void copyLastReply());
+  messageBox.element.key(["?"], () => hotkeysOverlay.toggle());
+  messageBox.element.key(["C-i"], () => {
+    inputBox.focus();
+    inputHasFocus = true;
+  });
 
   inputBox.element.on("focus", () => {
     inputHasFocus = true;
@@ -303,50 +384,10 @@ export async function startTerminalChat(
   topBar.setSubtitle(options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`);
 
   const snapshotPath = getSnapshotPath();
-  statusBar.setMessage(
-    `Type / for commands · snapshot: ${snapshotPath}`,
-  );
+  statusBar.setMessage(`? hotkeys · / commands · Ctrl+B scroll · ${snapshotPath}`);
   messageBox.appendSystem(formatSlashHelp());
+  messageBox.appendSystem("Press ? for keyboard shortcuts (pi / opencode / codex style).");
   syncSnapshot();
-
-  screen.key(["q"], () => {
-    if (!inputHasFocus) {
-      gracefulTuiExit(screen);
-    }
-  });
-
-  screen.key(["C-s"], () => {
-    const path = exportSessionToFile(session);
-    statusBar.setMessage(`Session saved to ${path}`);
-    messageBox.appendSystem(`Session exported to ${path}`);
-  });
-
-  screen.key(["C-y"], async () => {
-    const { path, copied } = await copySnapshot();
-    const hint = copied ? "TUI copied to clipboard" : `Snapshot: ${path}`;
-    statusBar.setMessage(hint);
-    messageBox.appendSystem(
-      copied ? `TUI copied to clipboard (${path})` : `TUI snapshot: ${path}`,
-    );
-  });
-
-  screen.key(["space"], () => {
-    if (!inputHasFocus) {
-      messageBox.toggleFocusedThinking();
-    }
-  });
-
-  screen.key(["up"], () => {
-    if (!inputHasFocus) {
-      messageBox.scrollUp();
-    }
-  });
-
-  screen.key(["down"], () => {
-    if (!inputHasFocus) {
-      messageBox.scrollDown();
-    }
-  });
 
   inputBox.focus();
   screen.render();
