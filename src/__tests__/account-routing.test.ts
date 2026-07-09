@@ -47,6 +47,17 @@ test("vault summary routes to summary action", () => {
   assert.equal(plan.action, "summary");
 });
 
+test("my TV playlists routes to playlists action", () => {
+  const plan = planAccountTools("show my TV playlists");
+  assert.equal(plan.action, "playlists");
+});
+
+test("videos in playlist captures playlistName", () => {
+  const plan = planAccountTools("what is in my playlist Late Night");
+  assert.equal(plan.action, "playlist");
+  assert.equal(plan.playlistName, "Late Night");
+});
+
 test("formatAccountRoutingHint includes account_query and no-fabrication rule", () => {
   const hint = formatAccountRoutingHint("list my contacts");
   assert.ok(hint);

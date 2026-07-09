@@ -7,7 +7,7 @@ import {
 } from "../lib/blxckchat/ui/components/jexxxus-hero.js";
 
 const META = {
-  authEmail: "alice@example.com",
+  authLabel: "alice@example.com",
   toolCount: 5,
   providerLabel: "ollama/gemma",
 };

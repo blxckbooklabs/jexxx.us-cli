@@ -77,13 +77,13 @@ test("buildTuISnapshot assembles full TUI plain text", () => {
 
 test("buildChromeDigestPlain renders copy-paste debug lines", () => {
   const meta = {
-    authEmail: "not authenticated",
+    authLabel: "not authenticated",
     toolCount: 6,
     providerLabel: "ollama/gemma4:31b-cloud",
   };
   const out = buildChromeDigestPlain({
     topBarModel: meta.providerLabel,
-    authEmail: meta.authEmail,
+    authEmail: meta.authLabel,
     toolCount: meta.toolCount,
     heroSubtitle: formatHeroSubtitle(meta),
     heroHint: formatHeroHint(),

@@ -17,19 +17,20 @@ const LETTER_GAP = 1;
 const PINK_LETTER_INDEX = new Set([2, 3, 4]);
 
 export interface JexxxusHeroMeta {
-  authEmail: string;
+  /** Signed-in operator label (name + email, or auth status). */
+  authLabel: string;
   toolCount: number;
   providerLabel: string;
 }
 
-function truncateAuthEmail(authEmail: string): string {
-  return authEmail.length > 24 ? `${authEmail.slice(0, 21)}…` : authEmail;
+function truncateAuthLabel(authLabel: string): string {
+  return authLabel.length > 28 ? `${authLabel.slice(0, 25)}…` : authLabel;
 }
 
 /** Hero subtitle line (model · auth · tool count)—copy-paste friendly, no block glyphs. */
 export function formatHeroSubtitle(meta: JexxxusHeroMeta): string {
-  const email = truncateAuthEmail(meta.authEmail);
-  return `${meta.providerLabel}  ·  ${email}  ·  ${meta.toolCount} tools`;
+  const label = truncateAuthLabel(meta.authLabel);
+  return `${meta.providerLabel}  ·  ${label}  ·  ${meta.toolCount} tools`;
 }
 
 /** Hero hint line under the JEXXXUS wordmark. */

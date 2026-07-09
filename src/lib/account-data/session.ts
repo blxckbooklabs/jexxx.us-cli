@@ -4,15 +4,28 @@ import {
   refreshAccessTokenViaServer,
   type Credentials,
 } from "../auth.js";
-import { describeMissingUserEnv, loadUserEnv } from "../env.js";
+import { describeMissingUserEnv, loadOperatorEnv, loadUserEnv } from "../env.js";
+import { isSuperAdminClerkUser } from "../super-admin.js";
 import { createUserSupabaseClient } from "../user-supabase.js";
-import type { DashboardTarget } from "../supabase.js";
+import { createOperatorClient, type DashboardTarget } from "../supabase.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+export interface OperatorClients {
+  blxckbook: SupabaseClient;
+  nxt: SupabaseClient;
+  /** api schema — JEXXXUS | TV playlists */
+  tv: SupabaseClient;
+}
 
 export interface AuthenticatedAccountSession {
   creds: Credentials;
   blxckbook: SupabaseClient;
   nxt: SupabaseClient;
+  /** api schema — private TV custom playlists (RLS-scoped) */
+  tv: SupabaseClient;
+  isSuperAdmin: boolean;
+  /** Service-role clients — only when super-admin + SUPABASE_KEY in .env */
+  operator?: OperatorClients;
 }
 
 export type AccountSessionFailure =
@@ -55,14 +68,26 @@ export async function resolveAuthenticatedAccountSession(): Promise<AccountSessi
       return fresh.accessToken;
     };
 
-    return {
-      ok: true,
-      session: {
-        creds,
-        blxckbook: createUserSupabaseClient(env, getAccessToken, "blxckbook"),
-        nxt: createUserSupabaseClient(env, getAccessToken, "nxt"),
-      },
+    const isSuperAdmin = isSuperAdminClerkUser(creds.userId);
+    const operatorEnv = isSuperAdmin ? loadOperatorEnv() : null;
+
+    const session: AuthenticatedAccountSession = {
+      creds,
+      blxckbook: createUserSupabaseClient(env, getAccessToken, "blxckbook"),
+      nxt: createUserSupabaseClient(env, getAccessToken, "nxt"),
+      tv: createUserSupabaseClient(env, getAccessToken, "blxckbook"),
+      isSuperAdmin,
     };
+
+    if (isSuperAdmin && operatorEnv) {
+      session.operator = {
+        blxckbook: createOperatorClient(operatorEnv, "blxckbook"),
+        nxt: createOperatorClient(operatorEnv, "nxt"),
+        tv: createOperatorClient(operatorEnv, "blxckbook"),
+      };
+    }
+
+    return { ok: true, session };
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     return {
@@ -84,4 +109,60 @@ export function clientForTarget(
   target: DashboardTarget,
 ): SupabaseClient {
   return target === "nxt" ? session.nxt : session.blxckbook;
+}
+
+/**
+ * Resolve the Supabase client for vault reads. Defaults to RLS-scoped user
+ * clients; super-admins may pass asUserId to read another user's rows via
+ * service-role operator clients (still filtered by user_id).
+ */
+export function resolveVaultClient(
+  session: AuthenticatedAccountSession,
+  target: DashboardTarget,
+  asUserId?: string,
+): { client: SupabaseClient; effectiveUserId: string; elevated: boolean } {
+  const effectiveUserId = asUserId?.trim() || session.creds.userId;
+  const wantsElevation =
+    Boolean(asUserId?.trim()) && asUserId!.trim() !== session.creds.userId;
+
+  if (wantsElevation) {
+    if (!session.isSuperAdmin || !session.operator) {
+      throw new Error(
+        "Cross-user vault access requires JEXXXUS super-admin credentials and SUPABASE_KEY in .env.",
+      );
+    }
+    const client =
+      target === "nxt" ? session.operator.nxt : session.operator.blxckbook;
+    return { client, effectiveUserId, elevated: true };
+  }
+
+  return {
+    client: clientForTarget(session, target),
+    effectiveUserId,
+    elevated: false,
+  };
+}
+
+export function resolveTvClient(
+  session: AuthenticatedAccountSession,
+  asUserId?: string,
+): { client: SupabaseClient; effectiveUserId: string; elevated: boolean } {
+  const effectiveUserId = asUserId?.trim() || session.creds.userId;
+  const wantsElevation =
+    Boolean(asUserId?.trim()) && asUserId!.trim() !== session.creds.userId;
+
+  if (wantsElevation) {
+    if (!session.isSuperAdmin || !session.operator) {
+      throw new Error(
+        "Cross-user TV playlist access requires JEXXXUS super-admin credentials and SUPABASE_KEY in .env.",
+      );
+    }
+    return {
+      client: session.operator.tv,
+      effectiveUserId,
+      elevated: true,
+    };
+  }
+
+  return { client: session.tv, effectiveUserId, elevated: false };
 }

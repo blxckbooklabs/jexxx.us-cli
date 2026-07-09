@@ -3,8 +3,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { BlxckbookContact, BlxckbookJournalEntry, BlxckbookTimelineEvent } from "./blxckbook-export.js";
 import { fetchBlxckbookExport } from "./blxckbook-export.js";
 import { fetchNxtExport } from "./nxt-export.js";
+import {
+  fetchPlaylistDetail,
+  fetchTvPlaylistSummary,
+  fetchUserPlaylists,
+} from "./tv-playlists.js";
 import type { AuthenticatedAccountSession } from "./session.js";
-import { clientForTarget } from "./session.js";
+import { resolveTvClient, resolveVaultClient } from "./session.js";
+import { formatCredentialsDisplayName } from "../operator-identity.js";
 import type { DashboardTarget } from "../supabase.js";
 
 export type AccountQueryAction =
@@ -15,6 +21,8 @@ export type AccountQueryAction =
   | "timeline"
   | "events"
   | "profiles"
+  | "playlists"
+  | "playlist"
   | "export_preview";
 
 export type AccountQueryTarget = DashboardTarget | "auto";
@@ -24,12 +32,21 @@ export interface AccountQueryArgs {
   target?: AccountQueryTarget;
   contactName?: string;
   relationshipStatus?: string;
+  playlistName?: string;
+  /** Super-admin only: read another Clerk user's vault/TV data */
+  asUserId?: string;
   limit?: number;
 }
 
 export interface AccountSummary {
   signedInAs: string;
   userId: string;
+  isSuperAdmin: boolean;
+  elevated: boolean;
+  tv: {
+    playlists: number;
+    savedVideos: number;
+  };
   blxckbook: {
     contacts: number;
     journalEntries: number;
@@ -76,15 +93,31 @@ function vesselStatus(row: Record<string, unknown>): string | null {
 
 export async function fetchAccountSummary(
   session: AuthenticatedAccountSession,
+  asUserId?: string,
 ): Promise<AccountSummary> {
-  const [bb, nxt] = await Promise.all([
-    fetchBlxckbookExport(session.blxckbook, session.creds.userId, session.creds.email),
-    fetchNxtExport(session.nxt, session.creds.userId),
+  const bbVault = resolveVaultClient(session, "blxckbook", asUserId);
+  const nxtVault = resolveVaultClient(session, "nxt", asUserId);
+  const tvVault = resolveTvClient(session, asUserId);
+
+  const [bb, nxt, tv] = await Promise.all([
+    fetchBlxckbookExport(
+      bbVault.client,
+      bbVault.effectiveUserId,
+      session.creds.email,
+    ),
+    fetchNxtExport(nxtVault.client, nxtVault.effectiveUserId),
+    fetchTvPlaylistSummary(tvVault.client, tvVault.effectiveUserId),
   ]);
 
   return {
-    signedInAs: session.creds.email,
-    userId: session.creds.userId,
+    signedInAs: formatCredentialsDisplayName(session.creds),
+    userId: bbVault.effectiveUserId,
+    isSuperAdmin: session.isSuperAdmin,
+    elevated: bbVault.elevated || nxtVault.elevated || tvVault.elevated,
+    tv: {
+      playlists: tv.playlistCount,
+      savedVideos: tv.savedVideoCount,
+    },
     blxckbook: {
       contacts: bb._statistics.total_contacts,
       journalEntries: bb._statistics.total_journal_entries,
@@ -190,11 +223,26 @@ export async function executeAccountQuery(
   const target = args.target ?? "auto";
   const limit = Math.min(Math.max(args.limit ?? 10, 1), 50);
   const contactName = args.contactName?.trim();
-  const userId = session.creds.userId;
+  const playlistName = args.playlistName?.trim();
+  const asUserId = args.asUserId?.trim();
+
+  let bbVault;
+  let nxtVault;
+  let tvVault;
+  try {
+    bbVault = resolveVaultClient(session, "blxckbook", asUserId);
+    nxtVault = resolveVaultClient(session, "nxt", asUserId);
+    tvVault = resolveTvClient(session, asUserId);
+  } catch (err) {
+    return `Error: ${err instanceof Error ? err.message : String(err)}`;
+  }
+
+  const userId = bbVault.effectiveUserId;
+  const scopeLabel = bbVault.elevated ? ` (elevated read for ${userId})` : "";
 
   switch (action) {
     case "summary": {
-      const summary = await fetchAccountSummary(session);
+      const summary = await fetchAccountSummary(session, asUserId);
       return JSON.stringify(summary, null, 2);
     }
 
@@ -202,18 +250,19 @@ export async function executeAccountQuery(
       const payload: Record<string, unknown> = {
         exported_at: new Date().toISOString(),
         user: { id: userId, email: session.creds.email },
+        elevated: bbVault.elevated,
       };
       const includeBlxckbook = target !== "nxt";
       const includeNxt = target !== "blxckbook";
       if (includeBlxckbook) {
         payload.blxckbook = await fetchBlxckbookExport(
-          session.blxckbook,
+          bbVault.client,
           userId,
           session.creds.email,
         );
       }
       if (includeNxt) {
-        payload.nxt = await fetchNxtExport(session.nxt, userId);
+        payload.nxt = await fetchNxtExport(nxtVault.client, userId);
       }
       return JSON.stringify(payload, null, 2);
     }
@@ -224,7 +273,7 @@ export async function executeAccountQuery(
         contactOpts.relationshipStatus = args.relationshipStatus;
       }
       const contacts = await fetchBlxckbookContacts(
-        session.blxckbook,
+        bbVault.client,
         userId,
         contactOpts,
       );
@@ -234,8 +283,8 @@ export async function executeAccountQuery(
           `${c.tags.length ? ` · tags: ${c.tags.join(", ")}` : ""}`,
       );
       return lines.length
-        ? `BLXCKBOOK contacts (${contacts.length}):\n${lines.join("\n")}`
-        : "No contacts in your BLXCKBOOK vault.";
+        ? `BLXCKBOOK contacts (${contacts.length})${scopeLabel}:\n${lines.join("\n")}`
+        : `No contacts in BLXCKBOOK vault${scopeLabel}.`;
     }
 
     case "contact": {
@@ -243,7 +292,7 @@ export async function executeAccountQuery(
         return "Error: contactName is required for action=contact.";
       }
       if (target === "nxt") {
-        const nxt = await fetchNxtExport(session.nxt, userId);
+        const nxt = await fetchNxtExport(nxtVault.client, userId);
         const hit = fuzzyMatchContact(
           nxt.contacts.map((row) => ({ name: vesselName(row) })),
           contactName,
@@ -257,7 +306,7 @@ export async function executeAccountQuery(
         return JSON.stringify(row, null, 2);
       }
 
-      const contacts = await fetchBlxckbookContacts(session.blxckbook, userId, {
+      const contacts = await fetchBlxckbookContacts(bbVault.client, userId, {
         limit: 100,
       });
       const contact = fuzzyMatchContact(contacts, contactName);
@@ -275,7 +324,7 @@ export async function executeAccountQuery(
 
     case "journal": {
       const entries = await fetchBlxckbookJournal(
-        session.blxckbook,
+        bbVault.client,
         userId,
         contactName,
         limit,
@@ -296,7 +345,7 @@ export async function executeAccountQuery(
 
     case "timeline": {
       const events = await fetchBlxckbookTimeline(
-        session.blxckbook,
+        bbVault.client,
         userId,
         contactName,
         limit,
@@ -311,7 +360,7 @@ export async function executeAccountQuery(
     }
 
     case "profiles": {
-      const nxt = await fetchNxtExport(session.nxt, userId);
+      const nxt = await fetchNxtExport(nxtVault.client, userId);
       const rows = nxt.contacts.slice(0, limit);
       if (rows.length === 0) {
         return "No relationship profiles in NXT.";
@@ -325,7 +374,7 @@ export async function executeAccountQuery(
     }
 
     case "events": {
-      const nxt = await fetchNxtExport(session.nxt, userId);
+      const nxt = await fetchNxtExport(nxtVault.client, userId);
       let events = nxt.events;
       if (contactName) {
         const profile = fuzzyMatchContact(
@@ -351,6 +400,43 @@ export async function executeAccountQuery(
         return `• ${date} — ${title || type}`;
       });
       return `NXT events (${events.length}):\n${lines.join("\n")}`;
+    }
+
+    case "playlists": {
+      const playlists = await fetchUserPlaylists(tvVault.client, userId, { limit });
+      if (playlists.length === 0) {
+        return `No JEXXXUS | TV custom playlists${scopeLabel}.`;
+      }
+      const lines = playlists.map(
+        (p) =>
+          `• ${p.name} — ${p.videoCount} video${p.videoCount === 1 ? "" : "s"}` +
+          `${p.isPrivate ? " (private)" : " (public)"}`,
+      );
+      return `TV playlists (${playlists.length})${scopeLabel}:\n${lines.join("\n")}`;
+    }
+
+    case "playlist": {
+      if (!playlistName) {
+        return "Error: playlistName is required for action=playlist.";
+      }
+      const detail = await fetchPlaylistDetail(
+        tvVault.client,
+        userId,
+        playlistName,
+        limit,
+      );
+      if (!detail) {
+        return `No TV playlist matching "${playlistName}"${scopeLabel}.`;
+      }
+      const { playlist, videos } = detail;
+      const lines = videos.map(
+        (v) => `• ${v.order}. ${v.title} (${v.videoId})`,
+      );
+      return [
+        `Playlist: ${playlist.name}${playlist.isPrivate ? " (private)" : " (public)"}${scopeLabel}`,
+        `Videos (${videos.length}):`,
+        lines.length ? lines.join("\n") : "(empty playlist)",
+      ].join("\n");
     }
 
     default:

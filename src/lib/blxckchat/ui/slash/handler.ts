@@ -408,14 +408,15 @@ export async function dispatchSlashCommand(
           ],
         };
       }
-      const liveAuth = loadAuthCredentials({ quiet: true })?.email ?? "not authenticated";
+      const liveCreds = loadAuthCredentials({ quiet: true });
+      const liveAuth = liveCreds?.email ?? "not authenticated";
       const providerLabel = `${state.activeConfig.provider}/${state.activeConfig.model}`;
       const chrome = buildChromeDigestPlain({
         topBarModel: providerLabel,
         authEmail: liveAuth,
         toolCount: state.toolCount,
         heroSubtitle: formatHeroSubtitle({
-          authEmail: liveAuth,
+          authLabel: liveCreds?.fullName?.trim() || liveAuth,
           toolCount: state.toolCount,
           providerLabel,
         }),

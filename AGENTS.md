@@ -67,12 +67,18 @@ Owned by the JEXXXUS platform / tooling team.
   `embed_url`/stream URLs, Supabase, or internal Obsidian TV docs. Env: `TV_CONTENT_PATH`,
   `TV_PUBLIC_BASE_URL`.
 - BLXCKCHAT `lib/bible.ts` `findBook()` normalizes numbered book names (`1 Samuel` ↔ vault folder `09-1Samuel`).
-- BLXCKCHAT `account_query` reads **signed-in user's** BLXCKBOOK + NXT vault data only
-  (`createUserSupabaseClient` + `SUPABASE_ANON_KEY`, RLS-scoped Clerk JWT from `/auth login`).
+- BLXCKCHAT `account_query` reads **signed-in user's** BLXCKBOOK + NXT vault data and private
+  JEXXXUS | TV playlists (`api.playlists`, RLS-scoped Clerk JWT from `/auth login` via
+  `createUserSupabaseClient` + `SUPABASE_ANON_KEY`). Operator identity (Clerk name, email,
+  profile image URL, vault/TV snapshot) injects into every signed-in system prompt via
+  `operator-identity.ts`. JEXXXUS super-admin Clerk IDs (`super-admin.ts`, default includes
+  `user_3AH8ufbCQvjfxL0RkA75RDDGYsy`) may pass `asUserId` for elevated cross-user reads when
+  `SUPABASE_KEY` (service role) is in `.env` — personal vault questions still default to RLS.
   Routing: `account-routing.ts` (collision table, same pattern as TV/VEIL). Export parity:
-  `account-data/blxckbook-export.ts` (SettingsView schema), `nxt-export.ts` (workspace JSON).
-  Slash: `/account status`, `/account export`. Query catalog: Obsidian `Account-Data-Query-Catalog.md`.
-  Tests: `account-routing.test.ts`, `account-data.test.ts`.
+  `account-data/blxckbook-export.ts` (SettingsView schema), `nxt-export.ts` (workspace JSON),
+  `account-data/tv-playlists.ts` (TV custom playlists). Slash: `/account status`, `/account export`.
+  Query catalog: Obsidian `Account-Data-Query-Catalog.md`. Tests: `account-routing.test.ts`,
+  `account-data.test.ts`, `super-admin.test.ts`.
 - BLXCKCHAT empire routing (`src/lib/blxckchat/empire-routing.ts`) plans multi-tool replies:
   thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) and `tvSearchQuery`
   (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `empire-prefetch.ts`

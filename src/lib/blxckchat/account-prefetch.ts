@@ -35,6 +35,7 @@ export async function prefetchAccountContext(userPrompt: string): Promise<string
         ? `Recent contacts: ${bb.recentContacts.map((c) => `${c.name}${c.status ? ` (${c.status})` : ""}`).join("; ")}`
         : "",
       `NXT: ${nxt.profiles} profiles, ${nxt.events} logged events`,
+      `JEXXXUS | TV: ${summary.tv.playlists} playlist(s), ${summary.tv.savedVideos} saved video(s)`,
       plan.action
         ? `Routing suggests account_query action=${plan.action}${plan.contactName ? ` contactName="${plan.contactName}"` : ""}.`
         : "",

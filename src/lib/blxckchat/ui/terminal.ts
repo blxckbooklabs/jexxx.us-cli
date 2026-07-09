@@ -6,6 +6,10 @@ import type { BlxckchatTool } from "../tools/types.js";
 import type { StoredProviderConfig } from "../config.js";
 import { upsertProvider } from "../config.js";
 import { loadCredentials } from "../../auth.js";
+import {
+  formatCredentialsDisplayName,
+  formatCredentialsShortLabel,
+} from "../../operator-identity.js";
 import { resolveProvider } from "../providers/registry.js";
 import { cycleModelOption, listModelOptions } from "../providers/models.js";
 
@@ -146,7 +150,9 @@ export async function startTerminalChat(
 ): Promise<void> {
   // Load auth before blessed takes over stdout (console.warn corrupts the TUI).
   const creds = loadCredentials({ quiet: true });
-  const authEmail = creds?.email ?? "not authenticated";
+  const authLabel = creds
+    ? formatCredentialsShortLabel(creds)
+    : "not authenticated";
   const toolCount = options.toolCount ?? tools.length;
 
   const session: TerminalSession = options.resume
@@ -199,7 +205,7 @@ export async function startTerminalChat(
   let cachedModelOptions = await listModelOptions(activeConfig);
 
   let heroMeta: JexxxusHeroMeta = {
-    authEmail,
+    authLabel,
     toolCount,
     providerLabel: options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
   };
@@ -213,8 +219,11 @@ export async function startTerminalChat(
   };
 
   const refreshAuthChrome = (): void => {
-    const liveAuth = loadCredentials({ quiet: true })?.email ?? "not authenticated";
-    heroMeta = { ...heroMeta, authEmail: liveAuth };
+    const liveCreds = loadCredentials({ quiet: true });
+    const liveAuth = liveCreds
+      ? formatCredentialsShortLabel(liveCreds)
+      : "not authenticated";
+    heroMeta = { ...heroMeta, authLabel: liveAuth };
     if (messageBox.hasHero()) {
       messageBox.dismissHero();
       showIdleHero();
@@ -313,10 +322,13 @@ export async function startTerminalChat(
     Boolean(topBar && messageBox && statusBar && inputBox);
 
   const collectChromeDigestInput = (): ChromeDigestInput => {
-    const liveAuth = loadCredentials({ quiet: true })?.email ?? "not authenticated";
+    const liveCreds = loadCredentials({ quiet: true });
+    const liveAuth = liveCreds
+      ? formatCredentialsDisplayName(liveCreds)
+      : "not authenticated";
     const providerLabel = topBar.getSubtitle();
     const meta: JexxxusHeroMeta = {
-      authEmail: liveAuth,
+      authLabel: liveCreds ? formatCredentialsShortLabel(liveCreds) : "not authenticated",
       toolCount,
       providerLabel,
     };

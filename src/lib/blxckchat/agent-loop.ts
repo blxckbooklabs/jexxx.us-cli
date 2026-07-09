@@ -19,6 +19,12 @@ import {
   isVaultPrimaryPrompt,
 } from "./account-routing.js";
 import { prefetchAccountContext } from "./account-prefetch.js";
+import { loadCredentials } from "../auth.js";
+import { resolveAuthenticatedAccountSession } from "../account-data/session.js";
+import {
+  buildOfflineOperatorIdentityContext,
+  buildOperatorIdentityContext,
+} from "../operator-identity.js";
 import {
   extractEmpireUrlsFromText,
   sanitizeEmpireUrls,
@@ -77,7 +83,7 @@ export interface RunAgentOptions {
 const SYSTEM_PROMPT_BASE = `You are BLXCKCHAT, the native AI agent for the JEXXXUS CLI. You service \
 specific functions related to the JEXXXUS kingdom/garden ecosystem — Bible lookups, public VEIL \
 articles (veil.jexxx.us), public JEXXXUS | TV videos (tv.jexxx.us), private vault data for \
-signed-in users (BLXCKBOOK + NXT), dashboard diagnostics, notifications, and contact imports. You \
+signed-in users (BLXCKBOOK + NXT + private JEXXXUS | TV playlists), dashboard diagnostics, notifications, and contact imports. You \
 are not a general coding agent; stay scoped to the tools available to you. When a tool call would \
 write data or run a shell command, expect the user to be prompted for confirmation before it \
 executes — explain what you're about to do so they can make an informed choice.
@@ -107,7 +113,7 @@ export interface AgentTurnResult {
 
 const PERSONA_CLI_BRIDGE = `You are operating inside the JEXXXUS CLI (BLXCKCHAT). Retain your persona voice \
 and identity above. You still have access to BLXCKCHAT tools (Bible lookups, public VEIL articles, \
-public JEXXXUS | TV videos, signed-in vault data via account_query, dashboard diagnostics, \
+public JEXXXUS | TV videos, signed-in vault/TV playlist data via account_query, dashboard diagnostics, \
 notifications, contact imports). Stay in character when explaining tool actions; the operator must \
 confirm any write/shell tool before it runs.
 
@@ -164,7 +170,24 @@ async function buildSystemPrompt(
     prompt = `${prompt}\n\n${accountPrefetch}`;
   }
 
+  const operatorContext = await buildSignedInOperatorContext();
+  if (operatorContext) {
+    prompt = `${prompt}\n\n${operatorContext}`;
+  }
+
   return appendDocContext(prompt, userPrompt);
+}
+
+async function buildSignedInOperatorContext(): Promise<string | null> {
+  const creds = loadCredentials({ quiet: true });
+  if (!creds) return null;
+
+  const resolved = await resolveAuthenticatedAccountSession();
+  if (resolved.ok) {
+    return buildOperatorIdentityContext(resolved.session);
+  }
+
+  return buildOfflineOperatorIdentityContext(creds);
 }
 
 /**

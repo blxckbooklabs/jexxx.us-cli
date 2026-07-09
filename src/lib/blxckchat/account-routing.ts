@@ -18,6 +18,7 @@ export interface AccountToolPlan {
   tools: AccountRoutableTool[];
   action: AccountQueryAction | null;
   contactName: string | null;
+  playlistName: string | null;
   relationshipStatus: string | null;
   target: "blxckbook" | "nxt" | "auto" | null;
   slashHints: string[];
@@ -104,6 +105,19 @@ export const ACCOUNT_PHRASE_COLLISIONS: readonly AccountPhraseCollision[] = [
     slashHints: ["/account export"],
     note: "Full export preview → account_query export_preview or /account export.",
   },
+  {
+    id: "tv-playlists",
+    pattern:
+      /\b(my (?:tv )?playlists?|my altars|custom playlists?|saved videos? in (?:my )?playlists?|jexxxus tv playlists?)\b/i,
+    action: "playlists",
+    note: "Private TV playlists → account_query playlists (not public tv_query).",
+  },
+  {
+    id: "tv-playlist-detail",
+    pattern: /\b(what(?:'s| is) in (?:my )?playlist|videos? in (?:my )?playlist|open playlist)\s+([A-Za-z][A-Za-z0-9' -]{1,40})/i,
+    action: "playlist",
+    note: "Named TV playlist → account_query playlist with playlistName.",
+  },
 ] as const;
 
 const CONTACT_CAPTURE = /\b(?:about|on|with)\s+([A-Za-z][A-Za-z0-9' -]{1,40})\b/i;
@@ -114,6 +128,7 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
   const matchedRules: string[] = [];
   let action: AccountQueryAction | null = null;
   let contactName: string | null = null;
+  let playlistName: string | null = null;
   let relationshipStatus: string | null = null;
   let target: "blxckbook" | "nxt" | "auto" | null = null;
 
@@ -133,6 +148,9 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
     if (row.action === "contact" && match[2]) {
       contactName = match[2].trim();
     }
+    if (row.action === "playlist" && match[2]) {
+      playlistName = match[2].trim();
+    }
   }
 
   if (!contactName) {
@@ -149,6 +167,7 @@ export function planAccountTools(userPrompt: string): AccountToolPlan {
     tools: [...tools],
     action,
     contactName,
+    playlistName,
     relationshipStatus,
     target,
     slashHints: [...slashHints],
@@ -185,6 +204,9 @@ export function formatAccountRoutingHint(userPrompt: string): string | null {
   if (plan.contactName) {
     lines.push(`contactName: "${plan.contactName}"`);
   }
+  if (plan.playlistName) {
+    lines.push(`playlistName: "${plan.playlistName}"`);
+  }
   if (plan.relationshipStatus) {
     lines.push(`relationshipStatus filter: ${plan.relationshipStatus}`);
   }
@@ -209,11 +231,13 @@ export const ACCOUNT_COLLISION_TABLE_EXCERPT = `### Account / vault collision qu
 | NXT dates / my dates | action=events target=nxt |
 | tell me about Alex | action=contact contactName=Alex |
 | vault summary / how many contacts | action=summary |
+| my TV playlists / my altars | action=playlists |
+| videos in playlist X | action=playlist playlistName=X |
 | export my vault | action=export_preview or /account export |`;
 
 export const ACCOUNT_CONTENT_ROUTING = `## Account data routing (private vault — signed-in users only)
 
-- **account_query** — Read-only access to the operator's own BLXCKBOOK vault (api.contacts, journal, timeline) and NXT profiles/events (public.vessels, contact_events). RLS-scoped via Clerk JWT from /auth login. Never guess vault contents.
+- **account_query** — Read-only access to the operator's own BLXCKBOOK vault (api.contacts, journal, timeline), NXT profiles/events (public.vessels, contact_events), and private JEXXXUS | TV custom playlists (api.playlists). RLS-scoped via Clerk JWT from /auth login. Never guess vault contents. JEXXXUS super-admins may pass asUserId for elevated cross-user reads when SUPABASE_KEY is configured.
 
 **Response rules:**
 - Call account_query before answering questions about contacts, dating status, journal entries, timeline, or NXT dates.

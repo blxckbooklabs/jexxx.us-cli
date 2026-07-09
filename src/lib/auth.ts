@@ -18,6 +18,10 @@ export function getSecureBaseUrl(): string {
 export interface Credentials {
   userId: string;
   email: string;
+  /** Clerk display name from secure.jexxx.us (optional until re-login/refresh). */
+  fullName?: string;
+  username?: string | null;
+  imageUrl?: string | null;
   accessToken: string;
   refreshToken: string;
   expiresAt: string;
@@ -273,6 +277,9 @@ interface PollResponse {
   expiresAt?: string;
   userId?: string;
   email?: string;
+  fullName?: string;
+  username?: string | null;
+  imageUrl?: string | null;
 }
 
 interface TokenResponse {
@@ -280,6 +287,51 @@ interface TokenResponse {
   expiresAt: string;
   userId: string;
   email: string;
+  fullName?: string;
+  username?: string | null;
+  imageUrl?: string | null;
+}
+
+interface AuthProfileFields {
+  fullName?: string | undefined;
+  username?: string | null | undefined;
+  imageUrl?: string | null | undefined;
+}
+
+function mergeAuthProfile(
+  existing: Partial<Credentials>,
+  profile: AuthProfileFields,
+): Partial<Pick<Credentials, "fullName" | "username" | "imageUrl">> {
+  const merged: Partial<Pick<Credentials, "fullName" | "username" | "imageUrl">> = {};
+  const fullName = profile.fullName ?? existing.fullName;
+  if (fullName) merged.fullName = fullName;
+  const username = profile.username !== undefined ? profile.username : existing.username;
+  if (username !== undefined) merged.username = username;
+  const imageUrl = profile.imageUrl !== undefined ? profile.imageUrl : existing.imageUrl;
+  if (imageUrl !== undefined) merged.imageUrl = imageUrl;
+  return merged;
+}
+
+function credentialsFromAuthResponse(
+  data: {
+    userId: string;
+    email: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: string;
+  } & AuthProfileFields,
+  existing: Partial<Credentials> = {},
+): Credentials {
+  const now = new Date().toISOString();
+  return {
+    userId: data.userId,
+    email: data.email,
+    ...mergeAuthProfile(existing, data),
+    accessToken: data.accessToken,
+    refreshToken: data.refreshToken,
+    expiresAt: data.expiresAt,
+    refreshedAt: now,
+  };
 }
 
 /** Human-readable auth status for TUI / slash /status output. */
@@ -300,13 +352,18 @@ export function formatAuthStatusLines(creds: Credentials | null): string[] {
         ? `${Math.floor(expiryMinutes)}m remaining (refresh soon)`
         : `${Math.floor(expiryMinutes)}m remaining`;
 
-  return [
+  const lines = [
     "JEXXXUS account: signed in",
+    creds.fullName ? `Name: ${creds.fullName}` : null,
     `Email: ${creds.email}`,
+    creds.username ? `Username: ${creds.username}` : null,
     `User ID: ${creds.userId}`,
+    creds.imageUrl ? `Profile image: ${creds.imageUrl}` : null,
     `Token: ${expiryLabel}`,
     `Last refreshed: ${new Date(creds.refreshedAt).toLocaleString()}`,
-  ];
+  ].filter((line): line is string => Boolean(line));
+
+  return lines;
 }
 
 /**
@@ -407,14 +464,16 @@ export async function pollDeviceAuth(
 
     if (data.status === "consumed" && data.accessToken && data.refreshToken) {
       const now = new Date().toISOString();
-      return {
+      return credentialsFromAuthResponse({
         userId: data.userId ?? "",
         email: data.email ?? "",
+        fullName: data.fullName,
+        username: data.username,
+        imageUrl: data.imageUrl,
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
         expiresAt: data.expiresAt ?? now,
-        refreshedAt: now,
-      };
+      });
     }
 
     if (data.status === "denied") {
@@ -454,15 +513,21 @@ export async function refreshAccessTokenViaServer(
   }
 
   const data = (await response.json()) as TokenResponse;
+  const existing = loadCredentials({ quiet: true }) ?? {};
 
-  return {
-    userId: data.userId,
-    email: data.email,
-    accessToken: data.accessToken,
-    refreshToken,
-    expiresAt: data.expiresAt,
-    refreshedAt: new Date().toISOString(),
-  };
+  return credentialsFromAuthResponse(
+    {
+      userId: data.userId,
+      email: data.email,
+      fullName: data.fullName,
+      username: data.username,
+      imageUrl: data.imageUrl,
+      accessToken: data.accessToken,
+      refreshToken,
+      expiresAt: data.expiresAt,
+    },
+    existing,
+  );
 }
 
 /**
