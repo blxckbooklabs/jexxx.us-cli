@@ -30,6 +30,12 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
     requiresApiKey: true,
     envKeys: ["OPENCODE_API_KEY", "OPENCODE_ZEN_API_KEY"],
     suggestedModels: [
+      "big-pickle",
+      "deepseek-v4-flash-free",
+      "mimo-v2.5-free",
+      "hy3-free",
+      "nemotron-3-ultra-free",
+      "north-mini-code-free",
       "claude-sonnet-4-5",
       "gpt-5.2",
       "deepseek-v4-pro",

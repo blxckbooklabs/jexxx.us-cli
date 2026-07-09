@@ -2,6 +2,8 @@ import {
   getCatalogEntry,
   listCatalogEntries,
   normalizeProviderId,
+  resolveBaseUrl,
+  type ProviderCatalogEntry,
 } from "./catalog.js";
 import type { ProviderName } from "./types.js";
 import {
@@ -10,12 +12,14 @@ import {
 } from "../config.js";
 
 const DEFAULT_OLLAMA_BASE = "http://localhost:11434";
+const DEFAULT_OPENAI_BASE = "https://api.openai.com/v1";
+const MODELS_FETCH_TIMEOUT_MS = 5000;
 
 export interface ModelOption {
   id: string;
   label: string;
   provider: ProviderName;
-  source: "configured" | "suggested" | "ollama" | "catalog";
+  source: "configured" | "suggested" | "ollama" | "catalog" | "live";
 }
 
 function ollamaRootUrl(baseUrl?: string): string {
@@ -23,12 +27,98 @@ function ollamaRootUrl(baseUrl?: string): string {
   return raw.replace(/\/v1\/?$/, "");
 }
 
+/** Normalize catalog base URL to an OpenAI-compatible `/models` endpoint. */
+export function resolveModelsEndpoint(baseUrl: string): string {
+  const trimmed = baseUrl.trim().replace(/\/$/, "");
+  if (trimmed.endsWith("/v1")) return `${trimmed}/models`;
+  return `${trimmed}/v1/models`;
+}
+
+/** Whether live model discovery is supported for this catalog entry. */
+export function supportsLiveModelDiscovery(entry: ProviderCatalogEntry): boolean {
+  if (entry.adapter === "ollama") return true;
+  if (entry.adapter !== "openai") return false;
+  if (entry.id === "azure-openai") return false;
+  if (entry.requiresBaseUrl) return true;
+  return Boolean(entry.baseUrl) || entry.id === "openai";
+}
+
+function resolveDiscoveryBaseUrl(
+  entry: ProviderCatalogEntry,
+  override?: string,
+): string | undefined {
+  const resolved = resolveBaseUrl(entry, override);
+  if (resolved) return resolved;
+  if (entry.id === "openai") return DEFAULT_OPENAI_BASE;
+  return undefined;
+}
+
+function isFreeTierModel(id: string): boolean {
+  const lower = id.toLowerCase();
+  return lower.includes("-free") || lower.endsWith("-free") || lower === "big-pickle";
+}
+
+function sortModelIds(ids: readonly string[], catalogId: string): string[] {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (catalogId === "opencode-zen") {
+    return unique.sort((a, b) => {
+      const aFree = isFreeTierModel(a);
+      const bFree = isFreeTierModel(b);
+      if (aFree !== bFree) return aFree ? -1 : 1;
+      return a.localeCompare(b);
+    });
+  }
+  return unique.sort((a, b) => a.localeCompare(b));
+}
+
+function mergeModelIds(
+  staticModels: readonly string[],
+  liveModels: readonly string[],
+  catalogId: string,
+): string[] {
+  return sortModelIds([...staticModels, ...liveModels], catalogId);
+}
+
+/** Fetch model ids from an OpenAI-compatible `GET /v1/models` endpoint. */
+export async function fetchOpenAiCompatibleModels(
+  baseUrl: string,
+  apiKey?: string,
+): Promise<string[]> {
+  try {
+    const headers: Record<string, string> = { Accept: "application/json" };
+    if (apiKey?.trim()) {
+      headers.Authorization = `Bearer ${apiKey.trim()}`;
+    }
+
+    const res = await fetch(resolveModelsEndpoint(baseUrl), {
+      headers,
+      signal: AbortSignal.timeout(MODELS_FETCH_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as {
+      data?: Array<{ id?: string }>;
+      models?: Array<{ id?: string; name?: string }>;
+    };
+
+    const fromData = (data.data ?? []).map((m) => m.id).filter(Boolean) as string[];
+    if (fromData.length > 0) return fromData;
+
+    const fromModels = (data.models ?? [])
+      .map((m) => m.id ?? m.name)
+      .filter(Boolean) as string[];
+    return fromModels;
+  } catch {
+    return [];
+  }
+}
+
 /** Fetch locally installed Ollama model tags (best-effort). */
 export async function listOllamaModels(baseUrl?: string): Promise<string[]> {
   try {
     const root = ollamaRootUrl(baseUrl);
     const res = await fetch(`${root}/api/tags`, {
-      signal: AbortSignal.timeout(2000),
+      signal: AbortSignal.timeout(MODELS_FETCH_TIMEOUT_MS),
     });
     if (!res.ok) return [];
     const data = (await res.json()) as { models?: Array<{ name: string }> };
@@ -36,6 +126,34 @@ export async function listOllamaModels(baseUrl?: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+/** Live + static model ids for a catalog provider (used in setup and /model). */
+export async function listModelsForProvider(
+  catalogId: string,
+  opts?: { apiKey?: string; baseUrl?: string },
+): Promise<string[]> {
+  const normalized = normalizeProviderId(catalogId);
+  const entry = getCatalogEntry(normalized);
+  if (!entry) return [];
+
+  if (entry.adapter === "ollama") {
+    const live = await listOllamaModels(opts?.baseUrl ?? entry.baseUrl);
+    return mergeModelIds(entry.suggestedModels, live, normalized);
+  }
+
+  if (!supportsLiveModelDiscovery(entry)) {
+    return [...entry.suggestedModels];
+  }
+
+  const discoveryBase = resolveDiscoveryBaseUrl(entry, opts?.baseUrl);
+  if (!discoveryBase) {
+    return [...entry.suggestedModels];
+  }
+
+  const apiKey = opts?.apiKey?.trim() || undefined;
+  const live = await fetchOpenAiCompatibleModels(discoveryBase, apiKey);
+  return mergeModelIds(entry.suggestedModels, live, normalized);
 }
 
 /** Build deduplicated model suggestions for autocomplete and /model. */
@@ -71,15 +189,20 @@ export async function listModelOptions(
     const entry = getCatalogEntry(catalogId);
 
     if (entry) {
-      for (const id of entry.suggestedModels) {
-        push(id, catalogId, "suggested", `${entry.label} · ${id}`);
+      const discoveryOpts: { apiKey?: string; baseUrl?: string } = {};
+      if (activeConfig.apiKey?.trim()) {
+        discoveryOpts.apiKey = activeConfig.apiKey.trim();
       }
-    }
-
-    if (catalogId === "ollama" || entry?.adapter === "ollama") {
-      const local = await listOllamaModels(activeConfig.baseUrl ?? entry?.baseUrl);
-      for (const id of local) {
-        push(id, catalogId, "ollama", `ollama · ${id}`);
+      if (activeConfig.baseUrl?.trim()) {
+        discoveryOpts.baseUrl = activeConfig.baseUrl.trim();
+      }
+      const modelIds = await listModelsForProvider(catalogId, discoveryOpts);
+      const hasLive = supportsLiveModelDiscovery(entry);
+      for (const id of modelIds) {
+        const inStatic = entry.suggestedModels.includes(id);
+        const source: ModelOption["source"] =
+          hasLive && !inStatic ? "live" : "suggested";
+        push(id, catalogId, source, `${entry.label} · ${id}`);
       }
     }
   }

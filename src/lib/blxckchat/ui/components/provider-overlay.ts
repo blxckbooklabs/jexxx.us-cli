@@ -11,9 +11,14 @@ import {
   defaultModelFor,
   getCatalogEntry,
   listCatalogEntries,
+  resolveBaseUrl,
   resolveEnvApiKey,
   type ProviderCatalogEntry,
 } from "../../providers/catalog.js";
+import {
+  listModelsForProvider,
+  supportsLiveModelDiscovery,
+} from "../../providers/models.js";
 import { resolveProvider } from "../../providers/registry.js";
 import type { Provider } from "../../providers/types.js";
 import { createPickerOverlay, type PickerItem } from "./picker-overlay.js";
@@ -34,6 +39,12 @@ export interface ProviderOverlayOptions {
 }
 
 const CATALOG_PREFIX = "catalog:";
+
+function isFreeTierZenModel(catalogId: string, modelId: string): boolean {
+  if (catalogId !== "opencode-zen") return false;
+  const lower = modelId.toLowerCase();
+  return lower.includes("-free") || lower === "big-pickle";
+}
 
 function unifiedPickerItems(activeName: string): PickerItem[] {
   const items: PickerItem[] = [];
@@ -138,12 +149,27 @@ export function createProviderOverlay(
       }
 
       let model = defaultModelFor(entry);
+      const resolvedBaseUrl = resolveBaseUrl(entry, baseUrl);
+
+      if (supportsLiveModelDiscovery(entry)) {
+        opts.onMessage(`Fetching models from ${entry.label}…`);
+      }
+
+      const modelIds = await listModelsForProvider(entry.id, {
+        ...(apiKey ? { apiKey } : {}),
+        ...(resolvedBaseUrl ? { baseUrl: resolvedBaseUrl } : {}),
+      });
+
       const modelChoice = await new Promise<string | null>((resolve) => {
         const items: PickerItem[] = [
-          ...entry.suggestedModels.map((id) => ({
+          ...modelIds.map((id) => ({
             id,
             label: id,
-            description: "suggested model",
+            description: isFreeTierZenModel(entry.id, id)
+              ? "free tier"
+              : entry.suggestedModels.includes(id)
+                ? "suggested"
+                : "gateway",
           })),
           { id: "__custom__", label: "Custom model id…", description: "type your own" },
         ];
