@@ -4,11 +4,11 @@
 
 The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not** an end-user feature on TV, VEIL, Law, or Docs surfaces. End-user encrypted chat lives at **BLXCKCHAT** (`blxckchat.jexxx.us`)—a separate product.
 
-**Status**: Private repository today; **open-source readiness** work in progress (July 2026: BLXCKCHAT beta with empire multi-surface synthesis). See [SECURITY.md](./SECURITY.md) before distributing binaries or making the repo public.
+**Status**: Private repository today; **open-source readiness** work in progress (July 2026: BLXCKCHAT beta with kingdom/garden multi-surface synthesis). See [SECURITY.md](./SECURITY.md) before distributing binaries or making the repo public.
 
 ---
 
-## Relevance Across the Empire
+## Relevance Across the Kingdom
 
 | Property            | CLI role                                                                       |
 | ------------------- | ------------------------------------------------------------------------------ |
@@ -137,7 +137,7 @@ jexxxus blxckchat --shell
 
 **Slash commands (interactive):** `/auth` (secure.jexxx.us login—same as `jexxxus auth login`), `/divinities`, `/chrome`, `/copy`, `/reset`, `/exit`.
 
-**Transmit editor:** double-click a word to select it; Option+arrow moves by word; pink inverse highlights selection.
+**Transmit editor:** Google Docs–style navigation in the transmit box — Option+←/→ by word; Cmd+←/→ to line start/end; Shift extends selection (character, word, or line edge); double-click selects a word; pink inverse highlights selection.
 
 **Copy for debugging:** `/chrome` or `Ctrl+Shift+Y` copies plain-text chrome (model, auth, tool count, hero hints, status bar) to clipboard and `~/.jexxxus/chrome-digest.txt`. `Ctrl+Y` copies chrome + full visual snapshot.
 
@@ -158,7 +158,7 @@ jexxxus blxckchat --shell
 | `account_query` | read-only (RLS) | Signed-in user's vault, NXT, and TV playlists; super-admin `asUserId` optional |
 | `run_shell` | write, confirm, **opt-in via `--shell`** | Off by default; regex blocklist (not a sandbox—see SECURITY.md) |
 
-**Empire synthesis:** For thematic asks (confession, named series, church-girl beats), BLXCKCHAT combines scripture, VEIL articles, and TV watch recommendations in one reply. Short follow-ups inherit recent conversation context.
+**Kingdom/Garden synthesis:** For thematic asks (confession, named series, church-girl beats), BLXCKCHAT combines scripture, VEIL articles, and TV watch recommendations in one reply. Short follow-ups inherit recent conversation context.
 
 **Safety model:**
 - Every write or shell tool call requires interactive `y/n` confirmation before it runs—the model
@@ -203,7 +203,7 @@ merged into the RAG index. See `jexxx.us-obsidian/JEXXXUS CLI/` for the full sec
 npm test
 ```
 
-42 automated test suites—CSV import, auth, BLXCKCHAT agent loop, empire routing, URL/prose sanitization, VEIL/TV public-read security boundaries, and terminal UI session behavior.
+42 automated test suites—CSV import, auth, BLXCKCHAT agent loop, kingdom/garden routing, URL/prose sanitization, VEIL/TV public-read security boundaries, and terminal UI session behavior.
 
 ---
 

@@ -375,37 +375,52 @@ export function resolveLineEditorKey(key: LineEditorKey): LineEditorKeyAction {
   }
 
   if (ctrl && name === "u") return { type: "kill-line" };
-  if (ctrl && name === "a") return { type: "select-all" };
+  // macOS Terminal maps ⌘← / ⌘→ to Ctrl+A / Ctrl+E (readline home/end) — not select-all.
+  if (ctrl && name === "a") return { type: "move-line-start", extend: shift };
   if ((ctrl || meta) && name === "v") return { type: "paste" };
   if ((ctrl || meta) && name === "c") return { type: "noop" };
   if ((ctrl || meta) && name === "x") return { type: "noop" };
-  if (ctrl && name === "e") return { type: "move-line-end", extend: false };
+  if (ctrl && name === "e") return { type: "move-line-end", extend: shift };
   if (ctrl && name === "k") return { type: "kill-to-end" };
   if (ctrl && name === "w") return { type: "delete-word-backward" };
-  if (meta && name === "a") return { type: "select-all" };
+  // Option+a (explicit meta+a key) — select all; distinct from ⌘← byte stream on macOS.
+  if (meta && !ctrl && name === "a") return { type: "select-all" };
 
   if (name === "left") {
+    // ⇧⌘← — select to line start (some terminals send Ctrl+Shift+arrow).
+    if (ctrl && shift) return { type: "move-line-start", extend: true };
+    // ⇧⌥← — select word left.
     if (meta && shift) return { type: "move-word-left", extend: true };
+    // ⌥← — word left (M-left).
     if (meta) return { type: "move-word-left", extend: false };
-    if (ctrl && shift) return { type: "move-word-left", extend: true };
+    // Ctrl+← — word left on Linux/Windows terminals.
     if (ctrl) return { type: "move-word-left", extend: false };
     return { type: "move-char-left", extend: shift };
   }
 
   if (name === "right") {
+    if (ctrl && shift) return { type: "move-line-end", extend: true };
     if (meta && shift) return { type: "move-word-right", extend: true };
     if (meta) return { type: "move-word-right", extend: false };
-    if (ctrl && shift) return { type: "move-word-right", extend: true };
     if (ctrl) return { type: "move-word-right", extend: false };
     return { type: "move-char-right", extend: shift };
   }
 
-  if (name === "home" || (meta && name === "b")) {
+  if (name === "home") {
     return { type: "move-line-start", extend: shift };
   }
 
-  if (name === "end" || (meta && name === "f")) {
+  if (name === "end") {
     return { type: "move-line-end", extend: shift };
+  }
+
+  // macOS Option+arrow often emits readline M-b / M-f (word motion), not arrow keys.
+  if (meta && name === "b") {
+    return { type: "move-word-left", extend: shift };
+  }
+
+  if (meta && name === "f") {
+    return { type: "move-word-right", extend: shift };
   }
 
   const insertChar = resolveInsertChar(key);

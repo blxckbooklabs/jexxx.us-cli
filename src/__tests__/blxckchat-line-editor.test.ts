@@ -82,7 +82,67 @@ test("option+shift+arrow extends word selection", () => {
   assert.equal(state.text.slice(range!.start, range!.end), "gpt-4o");
 });
 
-test("ctrl+a selects all text", () => {
+test("ctrl+a moves to line start (macOS Cmd+Left sends Ctrl+A)", () => {
+  let state = createLineEditorState("hello world");
+  state = { ...state, cursor: 8 };
+  state = applyLineEditorAction(state, resolveLineEditorKey({ name: "a", ctrl: true }));
+  assert.equal(state.cursor, 0);
+  assert.equal(state.selectionAnchor, null);
+});
+
+test("ctrl+shift+a selects from cursor to line start", () => {
+  let state = createLineEditorState("hello world");
+  state = { ...state, cursor: 8 };
+  state = applyLineEditorAction(
+    state,
+    resolveLineEditorKey({ name: "a", ctrl: true, shift: true }),
+  );
+  assert.deepEqual(getSelectionRange(state), { start: 0, end: 8 });
+});
+
+test("ctrl+e moves to line end with optional shift extend", () => {
+  let state = createLineEditorState("hello world");
+  state = applyLineEditorAction(state, resolveLineEditorKey({ name: "e", ctrl: true }));
+  assert.equal(state.cursor, 11);
+  state = createLineEditorState("hello world");
+  state = { ...state, cursor: 0 };
+  state = applyLineEditorAction(
+    state,
+    resolveLineEditorKey({ name: "e", ctrl: true, shift: true }),
+  );
+  assert.deepEqual(getSelectionRange(state), { start: 0, end: 11 });
+});
+
+test("meta+b and meta+f move by word (macOS Option+arrow)", () => {
+  let state = createLineEditorState("hello world");
+  state = { ...state, cursor: 11 };
+  state = applyLineEditorAction(state, resolveLineEditorKey({ name: "b", meta: true }));
+  assert.equal(state.cursor, 6);
+  state = applyLineEditorAction(state, resolveLineEditorKey({ name: "f", meta: true }));
+  assert.equal(state.cursor, 11);
+});
+
+test("ctrl+shift+left selects from cursor to line start", () => {
+  let state = createLineEditorState("one two three");
+  state = { ...state, cursor: 7 };
+  state = applyLineEditorAction(
+    state,
+    resolveLineEditorKey({ name: "left", ctrl: true, shift: true }),
+  );
+  assert.deepEqual(getSelectionRange(state), { start: 0, end: 7 });
+});
+
+test("ctrl+shift+right selects from cursor to line end", () => {
+  let state = createLineEditorState("one two three");
+  state = { ...state, cursor: 7 };
+  state = applyLineEditorAction(
+    state,
+    resolveLineEditorKey({ name: "right", ctrl: true, shift: true }),
+  );
+  assert.deepEqual(getSelectionRange(state), { start: 7, end: 13 });
+});
+
+test("selectAll still available via editor API", () => {
   const state = selectAll(createLineEditorState("copy me"));
   assert.deepEqual(getSelectionRange(state), { start: 0, end: 7 });
 });
