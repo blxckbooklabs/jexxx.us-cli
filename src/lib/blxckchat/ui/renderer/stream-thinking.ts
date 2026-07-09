@@ -1,4 +1,5 @@
 import { BLESSED_STREAM_CURSOR, escapeBlessed } from "./markdown.js";
+import { formatStreamingChunk } from "./streaming.js";
 import { TAG } from "../theme.js";
 
 export interface StreamThinkingState {
@@ -64,6 +65,20 @@ export class StreamThinkingParser {
     };
   }
 
+  /** Flush held partial bytes when the provider stream ends. */
+  flush(): void {
+    if (!this.pending) return;
+    if (this.closeTag) {
+      this.state.thinking += this.pending;
+      this.state.hasThinking = true;
+    } else {
+      this.state.visible += this.pending;
+    }
+    this.pending = "";
+    this.closeTag = "";
+    this.state.inThinking = false;
+  }
+
   /** Native API reasoning channel (OpenAI reasoning_content, OpenRouter reasoning, etc.). */
   appendThinking(chunk: string): void {
     if (!chunk) return;
@@ -84,13 +99,14 @@ export class StreamThinkingParser {
       if (this.closeTag) {
         const closeIdx = this.pending.indexOf(this.closeTag);
         if (closeIdx === -1) {
-          const hold = this.closeTag.length - 1;
-          const emitLen = Math.max(0, this.pending.length - hold);
-          if (emitLen === 0) break;
+          const hold = partialOpenerHoldback(this.pending);
+          const emitLen = this.pending.length - hold;
+          if (emitLen <= 0) break;
           this.state.thinking += this.pending.slice(0, emitLen);
           this.state.hasThinking = true;
           this.pending = this.pending.slice(emitLen);
-          break;
+          if (hold > 0) break;
+          continue;
         }
         this.state.thinking += this.pending.slice(0, closeIdx);
         this.state.hasThinking = true;
@@ -128,60 +144,51 @@ export class StreamThinkingParser {
   }
 }
 
-/** Dim pulsing placeholder before the first streamed token (Pi-style). */
+/** Dim placeholder before the first streamed token (Pi-style). */
 export function formatThinkingWaitState(): string {
-  return `  ${TAG.dim}◇ thinking…${TAG.dimEnd}${BLESSED_STREAM_CURSOR}`;
+  return `${TAG.dim}  ◇ thinking…${TAG.dimEnd}${BLESSED_STREAM_CURSOR}`;
 }
 
-function formatThinkingBody(text: string, withCursor: boolean): string {
-  if (!text.trim() && !withCursor) {
-    return `  ${TAG.muted}(reasoning…)${TAG.mutedEnd}`;
-  }
-  const lines = text.split("\n").map((line) => {
-    const body = line.length > 0 ? escapeBlessed(line) : "";
-    return `  ${TAG.muted}${body}${TAG.mutedEnd}`;
-  });
-  if (withCursor) {
-    lines.push(`  ${TAG.muted}${BLESSED_STREAM_CURSOR}${TAG.mutedEnd}`);
-  }
-  return lines.join("\n");
+function formatThinkingStreamBody(text: string, withCursor: boolean): string {
+  const body = text.trim()
+    ? escapeBlessed(text)
+        .split("\n")
+        .map((line) => (line.length > 0 ? `  ${line}` : line))
+        .join("\n")
+    : "  …";
+  const cursor = withCursor ? BLESSED_STREAM_CURSOR : "";
+  return `${TAG.muted}${body}${cursor}${TAG.mutedEnd}`;
 }
 
-function formatVisibleBody(text: string, withCursor: boolean): string {
-  if (!text.trim()) {
-    return withCursor ? BLESSED_STREAM_CURSOR : "";
-  }
-  const body = escapeBlessed(text)
-    .split("\n")
-    .map((line) => (line.length > 0 ? `  ${line}` : line))
-    .join("\n");
-  return withCursor ? `${body}${BLESSED_STREAM_CURSOR}` : body;
-}
-
-/** Live blessed render: expanded thinking block (gray) + visible answer + cursor. */
+/**
+ * Live blessed render — minimal tag nesting to avoid blessed wrap corruption.
+ * Thinking: one muted wrapper. Answer: plain escaped stream (formatStreamingChunk).
+ */
 export function formatLiveStreamDisplay(state: StreamThinkingState): string {
   const parts: string[] = [];
   const showThinking = state.hasThinking || state.inThinking;
-  const thinkingDone = showThinking && !state.inThinking && !state.thinking.trim();
 
   if (showThinking) {
-    const label = `${TAG.dim}[▼{/}${TAG.pink} think${TAG.pinkEnd}${TAG.dim}]${TAG.dimEnd}`;
-    parts.push(label);
     parts.push(
-      formatThinkingBody(
-        state.thinking,
-        state.inThinking || (!state.visible.trim() && !thinkingDone),
-      ),
+      `${TAG.dim}  ${TAG.pink}[▼ think]${TAG.pinkEnd}${TAG.dimEnd}`,
     );
+    const thinkingCursor =
+      state.inThinking && (!state.visible.trim() || state.thinking.length === 0);
+    parts.push(formatThinkingStreamBody(state.thinking, thinkingCursor));
   }
 
-  const visibleCursor =
-    !state.inThinking && (state.visible.length > 0 || !showThinking);
-  const visible = formatVisibleBody(state.visible, visibleCursor);
-  if (visible) {
-    parts.push(visible);
-  } else if (!showThinking) {
-    parts.push(BLESSED_STREAM_CURSOR);
+  if (state.visible.length > 0) {
+    if (state.inThinking) {
+      const body = escapeBlessed(state.visible)
+        .split("\n")
+        .map((line) => (line.length > 0 ? `  ${line}` : line))
+        .join("\n");
+      parts.push(body);
+    } else {
+      parts.push(formatStreamingChunk(state.visible));
+    }
+  } else if (!state.inThinking) {
+    parts.push(formatStreamingChunk(""));
   }
 
   return parts.filter(Boolean).join("\n");

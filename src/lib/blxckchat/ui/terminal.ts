@@ -547,7 +547,10 @@ export async function startTerminalChat(
 
       session.conversationHistory = history;
 
-      const parsed = extractThinkingBlocks(response);
+      thinkingParser.flush();
+      const parsed = extractThinkingBlocks(
+        response || streamBuffer.getContent(),
+      );
       const apiThinking = thinkingParser.getState().thinking.trim();
       const mergedBlocks = [...parsed.blocks];
       if (apiThinking && !mergedBlocks.some((b) => b.content === apiThinking)) {

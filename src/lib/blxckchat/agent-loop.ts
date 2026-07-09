@@ -273,7 +273,9 @@ export async function runAgent(
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     assertNotAborted(options.signal);
 
-    options.onStreamReset?.();
+    if (turn > 0) {
+      options.onStreamReset?.();
+    }
 
     // Use streaming for text responses if available
     let result;

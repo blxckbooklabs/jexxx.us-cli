@@ -47,6 +47,8 @@ export interface MessageBlock {
   thinkingBlocks?: ThinkingBlock[];
   assistantRaw?: string;
   streamThinkingRaw?: string;
+  /** True while tokens are streaming — use plain stream renderer, not markdown. */
+  isStreaming?: boolean;
   toolEntries?: ToolResult[];
 }
 
@@ -447,6 +449,7 @@ export function createMessageBox(
         content: "",
         assistantRaw: "",
         streamThinkingRaw: "",
+        isStreaming: true,
         thinkingBlocks: [],
       });
       return blocks.length - 1;
@@ -464,6 +467,7 @@ export function createMessageBox(
         if (rawThinking !== undefined) {
           block.streamThinkingRaw = rawThinking;
         }
+        block.isStreaming = true;
         if (streamRenderTimer) clearTimeout(streamRenderTimer);
         streamRenderTimer = setTimeout(() => {
           streamRenderTimer = null;
@@ -482,6 +486,7 @@ export function createMessageBox(
         block.content = markdownToBlessed(content);
         block.thinkingBlocks = thinkingBlocks;
         block.streamThinkingRaw = "";
+        block.isStreaming = false;
         const snapshot = captureScrollSnapshot();
         invalidateBlessedCache();
         setBoxContentWithScroll(getBlessedContent(), { snapshot });

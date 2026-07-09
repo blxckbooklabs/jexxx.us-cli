@@ -11,7 +11,7 @@ export type OperatorEnv = {
 };
 
 export function loadOperatorEnv(envPath = resolve(__dirname, '../../.env')): OperatorEnv | null {
-  dotenv.config({ path: envPath });
+  dotenv.config({ path: envPath, quiet: true });
 
   const supabaseUrl = process.env.SUPABASE_URL?.trim() ?? '';
   const supabaseKey = process.env.SUPABASE_KEY?.trim() ?? '';
@@ -45,7 +45,7 @@ function firstNonEmpty(...values: Array<string | undefined>): string {
 }
 
 export function loadUserEnv(envPath = resolve(__dirname, '../../.env')): UserEnv | null {
-  dotenv.config({ path: envPath });
+  dotenv.config({ path: envPath, quiet: true });
 
   const supabaseUrl = firstNonEmpty(
     process.env.SUPABASE_URL,
@@ -67,7 +67,7 @@ export function loadUserEnv(envPath = resolve(__dirname, '../../.env')): UserEnv
 
 /** Human-readable reason when loadUserEnv() returns null (for TUI / account_query). */
 export function describeMissingUserEnv(): string {
-  dotenv.config({ path: resolve(__dirname, '../../.env') });
+  dotenv.config({ path: resolve(__dirname, '../../.env'), quiet: true });
   const hasUrl = Boolean(
     firstNonEmpty(
       process.env.SUPABASE_URL,

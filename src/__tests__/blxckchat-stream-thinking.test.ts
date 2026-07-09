@@ -47,6 +47,13 @@ test("formatThinkingWaitState shows placeholder cursor", () => {
   assert.match(out, /▌/);
 });
 
+test("StreamThinkingParser flush emits held partial bytes", () => {
+  const parser = new StreamThinkingParser();
+  parser.append("Hello <");
+  parser.flush();
+  assert.equal(parser.getState().visible, "Hello <");
+});
+
 test("StreamThinkingParser reset clears state", () => {
   const parser = new StreamThinkingParser();
   parser.append("<think>x</think>y");
