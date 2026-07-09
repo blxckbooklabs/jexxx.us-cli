@@ -584,8 +584,9 @@ blxckchatCmd
 blxckchatCmd
   .argument("[prompt]", "One-shot prompt for BLXCKCHAT. Omit to enter interactive REPL mode.")
   .option("-p, --provider <name>", "Named provider config to use for this invocation")
+  .option("--resume", "Resume the last autosaved BLXCKCHAT session")
   .option("--shell", "Opt in to shell access for this session (off by default; every call still requires confirmation and is checked against a hard blocklist)")
-  .action(async (prompt: string | undefined, options: { provider?: string; shell?: boolean }) => {
+  .action(async (prompt: string | undefined, options: { provider?: string; shell?: boolean; resume?: boolean }) => {
     const storedConfig = options.provider
       ? getProviderByName(options.provider)
       : getDefaultProvider();
@@ -622,6 +623,7 @@ blxckchatCmd
     await startInteractiveChat(provider, tools, {
       providerLabel: `${storedConfig.provider}/${storedConfig.model}`,
       storedConfig,
+      resume: Boolean(options.resume),
     });
   });
 

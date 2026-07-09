@@ -49,10 +49,15 @@ export function ensureCredsDir(): void {
   }
 }
 
+export interface LoadCredentialsOptions {
+  /** Suppress chmod warnings — use when blessed TUI owns stdout. */
+  quiet?: boolean;
+}
+
 /**
  * Load credentials from ~/.jexxxus/credentials.json
  */
-export function loadCredentials(): Credentials | null {
+export function loadCredentials(options: LoadCredentialsOptions = {}): Credentials | null {
   try {
     if (!fs.existsSync(CREDS_PATH)) {
       return null;
@@ -61,11 +66,13 @@ export function loadCredentials(): Credentials | null {
     const stat = fs.statSync(CREDS_PATH);
     const mode = stat.mode & parseInt("0o777", 8);
     if (mode !== 0o600) {
-      console.warn(
-        chalk.yellow(
-          `⚠️  Warning: ~/.jexxxus/credentials.json has mode ${mode.toString(8)}, expected 0600. Fixing...`,
-        ),
-      );
+      if (!options.quiet) {
+        console.warn(
+          chalk.yellow(
+            `⚠️  Warning: ~/.jexxxus/credentials.json has mode ${mode.toString(8)}, expected 0600. Fixing...`,
+          ),
+        );
+      }
       fs.chmodSync(CREDS_PATH, 0o600);
     }
 

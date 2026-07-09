@@ -34,6 +34,9 @@ export interface InputBoxOptions {
   onUpdate?: () => void;
   onExit?: () => void;
   onShowHotkeys?: () => void;
+  /** Return true when input was queued instead of tab-completing (agent busy). */
+  onQueueIfProcessing?: () => boolean;
+  onOpenExternalEditor?: () => void;
   shortcuts?: InputShortcutHandlers;
   slashPopup?: SlashPopupHandle;
   getSlashSuggestions?: (value: string) => Promise<SlashSuggestion[]>;
@@ -168,8 +171,13 @@ export function createInputBox(
   if (sc?.onFocusMessages) input.key(["C-b"], () => sc.onFocusMessages!());
 
   input.key("tab", () => {
+    if (options.onQueueIfProcessing?.()) return;
     if (applySelectedSuggestion()) return;
   });
+
+  if (options.onOpenExternalEditor) {
+    input.key(["C-g"], () => options.onOpenExternalEditor!());
+  }
 
   input.key("up", () => {
     if (options.slashPopup?.isVisible() && slashSuggestions.length > 0) {

@@ -28,12 +28,21 @@ type KeyableElement = {
   key: (keys: string | string[], listener: () => void) => void;
 };
 
+export interface BindExitKeysOptions {
+  /** Delay SIGINT/SIGTERM exit until the TUI has finished its first render. */
+  deferSignalMs?: number;
+}
+
 /** Bind Ctrl+C / Ctrl+D / Esc exit to every focusable widget. */
 export function bindExitKeys(
   screen: blessed.Widgets.Screen,
   elements: KeyableElement[],
   onEscape?: () => boolean,
+  options: BindExitKeysOptions = {},
 ): () => void {
+  const deferMs = options.deferSignalMs ?? 400;
+  let signalsArmed = false;
+
   const exit = (): void => gracefulTuiExit(screen, 0);
 
   const handleEscape = (): void => {
@@ -46,12 +55,33 @@ export function bindExitKeys(
     el.key(["escape"], handleEscape);
   }
 
-  // Raw-mode TUI often swallows Ctrl+C before blessed routes it — catch SIGINT too.
-  const onSigint = (): void => exit();
-  const onSigterm = (): void => gracefulTuiExit(screen, 0);
+  const armTimer = setTimeout(() => {
+    signalsArmed = true;
+  }, deferMs);
 
-  process.once("SIGINT", onSigint);
-  process.once("SIGTERM", onSigterm);
+  const onSigint = (): void => {
+    if (!signalsArmed) return;
+    exit();
+  };
+  const onSigterm = (): void => {
+    if (!signalsArmed) return;
+    gracefulTuiExit(screen, 0);
+  };
+
+  process.on("SIGINT", onSigint);
+  process.on("SIGTERM", onSigterm);
+
+  const cleanup = (): void => {
+    clearTimeout(armTimer);
+    process.off("SIGINT", onSigint);
+    process.off("SIGTERM", onSigterm);
+  };
+  process.once("exit", cleanup);
 
   return exit;
+}
+
+/** Reset module exit guard (tests only). */
+export function resetExitGuardForTests(): void {
+  exiting = false;
 }

@@ -3,15 +3,17 @@ import chalk from "chalk";
 import type { Provider } from "./providers/types.js";
 import type { BlxckchatTool } from "./tools/types.js";
 import { runAgent } from "./agent-loop.js";
-import type { ChatMessage } from "./providers/types.js";
 import type { StoredProviderConfig } from "./config.js";
 import { dispatchSlashCommand, isSlashCommand } from "./ui/slash/handler.js";
 import { formatSlashHelp } from "./ui/slash/registry.js";
 import { createSession } from "./ui/session/session-store.js";
+import { canRunBlessedTui, prepareStdinForTui } from "./ui/tty.js";
+import { loadAutosaveSession } from "./ui/session/autosave.js";
 
 export interface InteractiveChatOptions {
   providerLabel?: string;
   storedConfig: StoredProviderConfig;
+  resume?: boolean;
 }
 
 const MIN_TERMINAL_COLS = 40;
@@ -21,6 +23,7 @@ async function startReadlineFallback(
   tools: BlxckchatTool[],
   providerLabel: string,
   storedConfig: StoredProviderConfig,
+  resume: boolean,
 ): Promise<void> {
   console.log(
     chalk.cyan(
@@ -29,7 +32,15 @@ async function startReadlineFallback(
   );
   console.log(chalk.dim(formatSlashHelp()));
 
-  const session = createSession();
+  const session = resume ? (loadAutosaveSession() ?? createSession()) : createSession();
+  if (resume && session.conversationHistory.length > 0) {
+    console.log(
+      chalk.dim(
+        `[BLXCKCHAT] Resumed autosave (${session.conversationHistory.length} history messages).\n`,
+      ),
+    );
+  }
+
   let activeConfig = { ...storedConfig };
   let activeProvider = provider;
 
@@ -108,33 +119,29 @@ async function startReadlineFallback(
 
 /**
  * Start the blessed-based interactive BLXCKCHAT terminal UI.
- * Falls back to readline when the terminal is too narrow (< 40 cols).
+ * Falls back to readline when the terminal cannot host blessed.
  */
 export async function startInteractiveChat(
   provider: Provider,
   tools: BlxckchatTool[],
   options: InteractiveChatOptions,
 ): Promise<void> {
-  const cols = process.stdout.columns ?? 80;
   const providerLabel = options.providerLabel ?? "BLXCKCHAT";
+  const tty = canRunBlessedTui();
 
-  if (!process.stdout.isTTY) {
-    console.error(
-      chalk.yellow("[BLXCKCHAT] Non-TTY stdout — using readline fallback."),
+  if (!tty.ok) {
+    console.error(chalk.yellow(`[BLXCKCHAT] ${tty.reason} — using readline fallback.`));
+    await startReadlineFallback(
+      provider,
+      tools,
+      providerLabel,
+      options.storedConfig,
+      Boolean(options.resume),
     );
-    await startReadlineFallback(provider, tools, providerLabel, options.storedConfig);
     return;
   }
 
-  if (cols < MIN_TERMINAL_COLS) {
-    console.error(
-      chalk.yellow(
-        `[BLXCKCHAT] Terminal too narrow (${cols} cols, need ${MIN_TERMINAL_COLS}+). Using readline fallback.`,
-      ),
-    );
-    await startReadlineFallback(provider, tools, providerLabel, options.storedConfig);
-    return;
-  }
+  prepareStdinForTui();
 
   try {
     const { startTerminalChat } = await import("./ui/terminal.js");
@@ -142,13 +149,24 @@ export async function startInteractiveChat(
       providerLabel,
       toolCount: tools.length,
       storedConfig: options.storedConfig,
+      resume: Boolean(options.resume),
     });
   } catch (err) {
     console.error(
       chalk.red(
-        `[BLXCKCHAT] TUI failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+        `[BLXCKCHAT] TUI failed to start: ${err instanceof Error ? err.message : "Unknown error"}`,
       ),
     );
-    process.exit(1);
+    if (err instanceof Error && err.stack && process.env.BLXCKCHAT_DEBUG) {
+      console.error(chalk.dim(err.stack));
+    }
+    console.error(chalk.yellow("[BLXCKCHAT] Falling back to readline."));
+    await startReadlineFallback(
+      provider,
+      tools,
+      providerLabel,
+      options.storedConfig,
+      Boolean(options.resume),
+    );
   }
 }

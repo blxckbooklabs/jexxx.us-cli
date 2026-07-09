@@ -8,7 +8,22 @@ import { searchDocs } from "./rag/index.js";
 
 export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
 
+export class AgentAbortedError extends Error {
+  constructor(message = "Agent turn aborted") {
+    super(message);
+    this.name = "AgentAbortedError";
+  }
+}
+
+function assertNotAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new AgentAbortedError();
+  }
+}
+
 export interface RunAgentOptions {
+  /** Abort an in-flight turn (Esc during streaming/tools). */
+  signal?: AbortSignal;
   /** Route streamed tokens to the terminal UI instead of stdout. */
   onStream?: (chunk: string) => void;
   onToolStart?: (toolName: string) => void;
@@ -121,18 +136,26 @@ export async function runAgent(
   };
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    assertNotAborted(options.signal);
+
     // Use streaming for text responses if available
     let result;
     if (provider.chatStream) {
-      const onChunk =
+      const baseOnChunk =
         options.onStream ??
         ((chunk: string) => {
           process.stdout.write(chunk);
         });
+      const onChunk = (chunk: string): void => {
+        assertNotAborted(options.signal);
+        baseOnChunk(chunk);
+      };
       result = await provider.chatStream(messages, toolDefs, onChunk);
     } else {
       result = await provider.chat(messages, toolDefs);
     }
+
+    assertNotAborted(options.signal);
 
     if (result.stopReason === "stop" || result.toolCalls.length === 0) {
       if (!useCustomStream) {
@@ -148,6 +171,7 @@ export async function runAgent(
     });
 
     for (const toolCall of result.toolCalls) {
+      assertNotAborted(options.signal);
       const tool = findTool(tools, toolCall.name);
 
       if (!tool) {

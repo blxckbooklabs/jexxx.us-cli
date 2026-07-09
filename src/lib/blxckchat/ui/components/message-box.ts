@@ -1,12 +1,28 @@
 import blessed from "blessed";
 
 import type { ThinkingBlock } from "../session/session-store.js";
-import { formatThinkingBlock, formatThinkingBlockPlain } from "./thinking-block.js";
+import {
+  extractThinkingBlocks,
+  formatThinkingBlock,
+  formatThinkingBlockPlain,
+} from "./thinking-block.js";
 import { markdownToBlessed } from "../renderer/markdown.js";
 import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/markdown.js";
 import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
-import type { ToolResult } from "../session/session-store.js";
+import type { ToolResult, TerminalSession } from "../session/session-store.js";
 import { wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
+
+function highlightSearch(text: string, query: string): string {
+  if (!query) return text;
+  const lower = text.toLowerCase();
+  const q = query.toLowerCase();
+  const idx = lower.indexOf(q);
+  if (idx === -1) return text;
+  const before = text.slice(0, idx);
+  const match = text.slice(idx, idx + query.length);
+  const after = text.slice(idx + query.length);
+  return `${before}{yellow-fg}{bold}${match}{/bold}{/yellow-fg}${after}`;
+}
 
 export interface MessageBlock {
   type: "welcome" | "user" | "assistant" | "tool" | "error" | "system";
@@ -42,6 +58,10 @@ export interface MessageBoxHandle {
   toggleAllThinking: () => void;
   getLastAssistantPlainText: () => string | null;
   getPlainText: () => string;
+  popLastExchange: () => void;
+  cancelInFlightAssistant: () => void;
+  setSearchQuery: (query: string) => void;
+  replaySession: (session: TerminalSession) => void;
   rebuild: () => void;
 }
 
@@ -55,6 +75,7 @@ export function createMessageBox(
 ): MessageBoxHandle {
   const blocks: MessageBlock[] = [];
   let focusedThinkingIndex: number | null = null;
+  let searchQuery = "";
 
   const box = blessed.box({
     parent: screen,
@@ -112,10 +133,10 @@ export function createMessageBox(
           parts.push(block.content);
           break;
         case "error":
-          parts.push(`{red-fg}${block.content}{/red-fg}\n`);
+          parts.push(`${highlightSearch(`{red-fg}${block.content}{/red-fg}`, searchQuery)}\n`);
           break;
         case "system":
-          parts.push(`{gray-fg}${block.content}{/gray-fg}\n`);
+          parts.push(`${highlightSearch(`{gray-fg}${block.content}{/gray-fg}`, searchQuery)}\n`);
           break;
       }
     }
@@ -286,6 +307,50 @@ export function createMessageBox(
     },
     getPlainText() {
       return renderPlainContent();
+    },
+    popLastExchange() {
+      while (blocks.length > 0) {
+        const last = blocks[blocks.length - 1];
+        if (!last) break;
+        blocks.pop();
+        if (last.type === "user") break;
+      }
+      rebuild();
+    },
+    cancelInFlightAssistant() {
+      if (blocks[blocks.length - 1]?.type === "assistant") {
+        blocks.pop();
+        rebuild();
+      }
+    },
+    setSearchQuery(query: string) {
+      searchQuery = query;
+      rebuild();
+    },
+    replaySession(session: TerminalSession) {
+      blocks.length = 0;
+      focusedThinkingIndex = null;
+      for (const m of session.messages) {
+        if (m.role === "user") {
+          blocks.push({ type: "user", content: m.content });
+        } else if (m.role === "assistant") {
+          const parsed = extractThinkingBlocks(m.content);
+          blocks.push({
+            type: "assistant",
+            content: markdownToBlessed(parsed.visibleContent || m.content),
+            assistantRaw: parsed.visibleContent || m.content,
+            thinkingBlocks: parsed.blocks,
+          });
+        }
+      }
+      for (const t of session.toolResults) {
+        blocks.push({
+          type: "tool",
+          content: formatToolResults([t]),
+          toolEntries: [t],
+        });
+      }
+      rebuild();
     },
     rebuild,
   };

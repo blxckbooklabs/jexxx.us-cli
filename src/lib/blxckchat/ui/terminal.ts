@@ -1,6 +1,6 @@
 import blessed from "blessed";
 
-import { runAgent } from "../agent-loop.js";
+import { AgentAbortedError, runAgent } from "../agent-loop.js";
 import type { Provider } from "../providers/types.js";
 import type { BlxckchatTool } from "../tools/types.js";
 import type { StoredProviderConfig } from "../config.js";
@@ -14,6 +14,7 @@ import { createMessageBox } from "./components/message-box.js";
 import { createInputBox } from "./components/input-box.js";
 import { createStatusBar } from "./components/status-bar.js";
 import { createSlashPopup } from "./components/slash-popup.js";
+import { createSearchOverlay } from "./components/search-overlay.js";
 import {
   createSession,
   addUserMessage,
@@ -23,6 +24,8 @@ import {
   type TerminalSession,
   type ToolStatus,
 } from "./session/session-store.js";
+import { autosaveSession, loadAutosaveSession, shouldAutosave } from "./session/autosave.js";
+import { branchUndo } from "./session/branch.js";
 import { StreamBuffer, formatStreamingChunk } from "./renderer/streaming.js";
 import { extractThinkingBlocks } from "./components/thinking-block.js";
 import { buildTuISnapshot, buildWelcomeBannerPlain } from "./renderer/plain-text.js";
@@ -36,11 +39,24 @@ import { dispatchSlashCommand, isSlashCommand } from "./slash/handler.js";
 import { formatSlashHelp } from "./slash/registry.js";
 import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
+import { MessageQueue } from "./message-queue.js";
+import { openExternalEditor } from "./external-editor.js";
+
+/** Blessed program hide/show exist at runtime but are missing from @types. */
+type BlessedProgramVisibility = {
+  hide: () => void;
+  show: () => void;
+};
+
+function blessedProgram(screen: blessed.Widgets.Screen): BlessedProgramVisibility {
+  return screen.program as unknown as BlessedProgramVisibility;
+}
 
 export interface TerminalChatOptions {
   providerLabel?: string;
   toolCount?: number;
   storedConfig: StoredProviderConfig;
+  resume?: boolean;
 }
 
 function createBlessedConfirm(
@@ -100,16 +116,27 @@ export async function startTerminalChat(
   tools: BlxckchatTool[],
   options: TerminalChatOptions,
 ): Promise<void> {
-  const screen = blessed.screen({
-    smartCSR: true,
-    title: "BLXCKCHAT",
-    fullUnicode: true,
-  });
-
-  const session: TerminalSession = createSession();
-  const creds = loadCredentials();
-  const toolCount = options.toolCount ?? tools.length;
+  // Load auth before blessed takes over stdout (console.warn corrupts the TUI).
+  const creds = loadCredentials({ quiet: true });
   const authEmail = creds?.email ?? "not authenticated";
+  const toolCount = options.toolCount ?? tools.length;
+
+  const session: TerminalSession = options.resume
+    ? (loadAutosaveSession() ?? createSession())
+    : createSession();
+
+  let screen: blessed.Widgets.Screen;
+  try {
+    screen = blessed.screen({
+      smartCSR: true,
+      title: "BLXCKCHAT",
+      fullUnicode: true,
+    });
+  } catch (err) {
+    throw new Error(
+      `blessed screen init failed: ${err instanceof Error ? err.message : "unknown"}`,
+    );
+  }
 
   let activeConfig: StoredProviderConfig = { ...options.storedConfig };
   let activeProvider: Provider = provider;
@@ -120,6 +147,10 @@ export async function startTerminalChat(
   let inputBox!: ReturnType<typeof createInputBox>;
   const slashPopup = createSlashPopup(screen);
   const hotkeysOverlay = createHotkeysOverlay(screen);
+  const messageQueue = new MessageQueue();
+
+  let isProcessing = false;
+  let abortController: AbortController | null = null;
 
   let cachedModelOptions = await listModelOptions(activeConfig);
 
@@ -135,7 +166,7 @@ export async function startTerminalChat(
       messageBox.appendSystem(msg);
     }
     if (result.exit) {
-      gracefulTuiExit(screen);
+      requestExit();
     }
   };
 
@@ -203,28 +234,20 @@ export async function startTerminalChat(
     });
   };
 
-  topBar = createTopBar(screen, { onUpdate: onSnapshotUpdate });
-  messageBox = createMessageBox(screen, { onUpdate: onSnapshotUpdate });
-  statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
-
-  let isProcessing = false;
-  let inputHasFocus = true;
-
-  const handleSubmit = async (line: string): Promise<void> => {
-    if (isProcessing) return;
-
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    inputBox.hideSlashPopup();
-
-    if (isSlashCommand(trimmed)) {
-      await runSlash(trimmed);
-      statusBar.setMessage("Ready — ? for hotkeys · / for commands");
-      return;
+  const maybeAutosave = (): void => {
+    if (shouldAutosave(session.messages.length)) {
+      const path = autosaveSession(session);
+      statusBar.setMessage(`Autosaved → ${path}`);
     }
+  };
 
+  const abortInFlight = (): void => {
+    abortController?.abort();
+  };
+
+  const runTurn = async (trimmed: string): Promise<void> => {
     isProcessing = true;
+    abortController = new AbortController();
     statusBar.setMessage("Thinking...");
     addUserMessage(session, trimmed);
     messageBox.appendUser(trimmed);
@@ -246,7 +269,7 @@ export async function startTerminalChat(
       if (entry) {
         messageBox.appendTools([entry]);
       }
-      statusBar.setMessage("Ready — type / for commands");
+      statusBar.setMessage("Ready — ? for hotkeys · / for commands");
     };
 
     try {
@@ -256,6 +279,7 @@ export async function startTerminalChat(
         trimmed,
         session.conversationHistory,
         {
+          signal: abortController.signal,
           onStream: (chunk) => {
             streamBuffer.append(chunk);
             messageBox.updateAssistantStream(
@@ -284,24 +308,121 @@ export async function startTerminalChat(
         visible,
         parsed.blocks,
       );
+      maybeAutosave();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      messageBox.appendError(`[ERROR] ${msg}`);
-      statusBar.setMessage(`Error: ${msg}`);
+      if (err instanceof AgentAbortedError) {
+        messageBox.cancelInFlightAssistant();
+        messageBox.appendSystem("Turn aborted.");
+        statusBar.setMessage("Aborted — ready");
+      } else {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        messageBox.cancelInFlightAssistant();
+        messageBox.appendError(`[ERROR] ${msg}`);
+        statusBar.setMessage(`Error: ${msg}`);
+      }
     } finally {
+      abortController = null;
       isProcessing = false;
+
+      const queued = messageQueue.dequeue();
+      if (queued) {
+        statusBar.setMessage(
+          messageQueue.length > 0
+            ? `Processing queued (${messageQueue.length} remaining)...`
+            : "Processing queued message...",
+        );
+        void runTurn(queued);
+        return;
+      }
+
       inputBox.focus();
     }
   };
 
-  const requestExit = (): void => gracefulTuiExit(screen);
+  const handleSubmit = async (line: string): Promise<void> => {
+    if (isProcessing) return;
+
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    inputBox.hideSlashPopup();
+
+    if (isSlashCommand(trimmed)) {
+      await runSlash(trimmed);
+      statusBar.setMessage("Ready — ? for hotkeys · / for commands");
+      return;
+    }
+
+    await runTurn(trimmed);
+  };
+
+  const requestExit = (): void => {
+    if (session.messages.length > 0) {
+      autosaveSession(session);
+    }
+    gracefulTuiExit(screen);
+  };
 
   const focusMessages = (): void => {
     hotkeysOverlay.hide();
+    searchOverlay.close();
     messageBox.element.focus();
-    inputHasFocus = false;
     statusBar.setMessage("Message focus — PgUp/Dn scroll · Ctrl+I input · ? hotkeys");
   };
+
+  const searchOverlay = createSearchOverlay(screen, (query) => {
+    messageBox.setSearchQuery(query);
+    statusBar.setMessage(query ? `Search: "${query}"` : "Search cleared");
+    inputBox.focus();
+  });
+
+  const openEditorDraft = async (): Promise<void> => {
+    if (isProcessing) return;
+    const draft = inputBox.getValue();
+    try {
+      blessedProgram(screen).hide();
+      const edited = await openExternalEditor(draft);
+      blessedProgram(screen).show();
+      screen.render();
+      if (edited !== null) {
+        inputBox.setValue(edited);
+        statusBar.setMessage("Draft updated from editor");
+      } else if (!process.env.EDITOR?.trim() && !process.env.VISUAL?.trim()) {
+        statusBar.setMessage("Set $EDITOR or $VISUAL for external editor");
+      }
+    } catch {
+      blessedProgram(screen).show();
+      screen.render();
+      statusBar.setMessage("External editor failed");
+    }
+  };
+
+  const suspendTui = (): void => {
+    blessedProgram(screen).hide();
+    const onCont = (): void => {
+      process.off("SIGCONT", onCont);
+      blessedProgram(screen).show();
+      screen.render();
+      inputBox.focus();
+    };
+    process.on("SIGCONT", onCont);
+    process.kill(process.pid, "SIGTSTP");
+  };
+
+  const runBranchUndo = (): void => {
+    if (isProcessing) return;
+    if (branchUndo(session)) {
+      messageBox.popLastExchange();
+      statusBar.setMessage("Branch undo — last exchange removed");
+      syncSnapshot();
+    } else {
+      statusBar.setMessage("Nothing to undo");
+    }
+  };
+
+  topBar = createTopBar(screen, { onUpdate: onSnapshotUpdate });
+  messageBox = createMessageBox(screen, { onUpdate: onSnapshotUpdate });
+  statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
 
   inputBox = createInputBox(
     screen,
@@ -312,6 +433,18 @@ export async function startTerminalChat(
       onUpdate: onSnapshotUpdate,
       onExit: requestExit,
       onShowHotkeys: () => hotkeysOverlay.toggle(),
+      onQueueIfProcessing: () => {
+        if (!isProcessing) return false;
+        const value = inputBox.getValue().trim();
+        if (!value) return false;
+        if (messageQueue.enqueue(value)) {
+          inputBox.clear();
+          statusBar.setMessage(`Queued (${messageQueue.length}) — Tab to queue more`);
+          return true;
+        }
+        return false;
+      },
+      onOpenExternalEditor: () => void openEditorDraft(),
       shortcuts: {
         onSave: () => void runSlash("/save"),
         onCopyTui: async () => {
@@ -335,58 +468,76 @@ export async function startTerminalChat(
     },
   );
 
+  const handleEscapeLayer = (): boolean => {
+    if (isProcessing) {
+      abortInFlight();
+      return true;
+    }
+    if (searchOverlay.isVisible()) {
+      searchOverlay.close();
+      messageBox.setSearchQuery("");
+      inputBox.focus();
+      return true;
+    }
+    if (hotkeysOverlay.isVisible()) {
+      hotkeysOverlay.hide();
+      inputBox.focus();
+      return true;
+    }
+    if (slashPopup.isVisible()) {
+      inputBox.hideSlashPopup();
+      return true;
+    }
+    return false;
+  };
+
   bindExitKeys(
     screen,
     [screen, inputBox.element, messageBox.element],
-    () => {
-      if (hotkeysOverlay.isVisible()) {
-        hotkeysOverlay.hide();
-        inputBox.focus();
-        return true;
-      }
-      if (slashPopup.isVisible()) {
-        inputBox.hideSlashPopup();
-        return true;
-      }
-      return false;
-    },
+    handleEscapeLayer,
   );
 
   inputBox.element.key(["C-i"], () => {
     inputBox.focus();
-    inputHasFocus = true;
     statusBar.setMessage("Input focus — Enter send · / commands · ? hotkeys");
   });
+
+  inputBox.element.key(["C-f"], () => searchOverlay.open());
+  inputBox.element.key(["C-z"], () => suspendTui());
+  inputBox.element.key(["C-M-z", "M-z"], () => runBranchUndo());
 
   messageBox.element.key(["pageup"], () => messageBox.scrollPageUp());
   messageBox.element.key(["pagedown"], () => messageBox.scrollPageDown());
   messageBox.element.key(["home"], () => messageBox.scrollToTop());
-  messageBox.element.key(["end", "C-g"], () => messageBox.scrollToBottom());
+  messageBox.element.key(["end"], () => messageBox.scrollToBottom());
   messageBox.element.key(["up"], () => messageBox.scrollUp());
   messageBox.element.key(["down"], () => messageBox.scrollDown());
   messageBox.element.key(["space"], () => messageBox.toggleFocusedThinking());
   messageBox.element.key(["C-t"], () => messageBox.toggleAllThinking());
   messageBox.element.key(["C-o"], () => void copyLastReply());
   messageBox.element.key(["?"], () => hotkeysOverlay.toggle());
-  messageBox.element.key(["C-i"], () => {
-    inputBox.focus();
-    inputHasFocus = true;
-  });
+  messageBox.element.key(["C-i"], () => inputBox.focus());
+  messageBox.element.key(["C-f"], () => searchOverlay.open());
+  messageBox.element.key(["C-z"], () => suspendTui());
+  messageBox.element.key(["C-M-z", "M-z"], () => runBranchUndo());
 
-  inputBox.element.on("focus", () => {
-    inputHasFocus = true;
-  });
-  inputBox.element.on("blur", () => {
-    inputHasFocus = false;
-  });
+  if (options.resume && session.messages.length > 0) {
+    messageBox.replaySession(session);
+    messageBox.appendSystem(
+      `Resumed autosave (${session.messages.length} messages, ${session.conversationHistory.length} history turns).`,
+    );
+  } else {
+    messageBox.appendWelcome(buildWelcomeBannerPlain(authEmail, toolCount));
+  }
 
-  messageBox.appendWelcome(buildWelcomeBannerPlain(authEmail, toolCount));
   topBar.setSubtitle(options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`);
 
   const snapshotPath = getSnapshotPath();
   statusBar.setMessage(`? hotkeys · / commands · Ctrl+B scroll · ${snapshotPath}`);
-  messageBox.appendSystem(formatSlashHelp());
-  messageBox.appendSystem("Press ? for keyboard shortcuts (pi / opencode / codex style).");
+  if (!options.resume || session.messages.length === 0) {
+    messageBox.appendSystem(formatSlashHelp());
+    messageBox.appendSystem("Press ? for keyboard shortcuts (pi / opencode / codex style).");
+  }
   syncSnapshot();
 
   inputBox.focus();
