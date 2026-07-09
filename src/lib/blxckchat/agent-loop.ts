@@ -2,9 +2,26 @@ import chalk from "chalk";
 import type { ChatMessage, Provider } from "./providers/types.js";
 import type { BlxckchatTool } from "./tools/types.js";
 import { findTool } from "./tools/registry.js";
-import { confirmToolCall } from "./confirm.js";
+import { confirmToolCall as defaultConfirmToolCall } from "./confirm.js";
 import { recordAudit } from "./audit.js";
 import { searchDocs } from "./rag/index.js";
+
+export type ToolCompleteStatus = "success" | "error" | "declined" | "blocked";
+
+export interface RunAgentOptions {
+  /** Route streamed tokens to the terminal UI instead of stdout. */
+  onStream?: (chunk: string) => void;
+  onToolStart?: (toolName: string) => void;
+  onToolComplete?: (
+    toolName: string,
+    result: string,
+    status: ToolCompleteStatus,
+  ) => void;
+  confirmToolCall?: (
+    toolName: string,
+    args: Record<string, unknown>,
+  ) => Promise<boolean>;
+}
 
 const SYSTEM_PROMPT_BASE = `You are BLXCKCHAT, the native AI agent for the JEXXXUS CLI. You service \
 specific functions related to the JEXXXUS kingdom/garden ecosystem — Bible lookups, dashboard \
@@ -57,8 +74,11 @@ export async function runAgent(
   provider: Provider,
   tools: BlxckchatTool[],
   userPrompt: string,
-  history: ChatMessage[] = []
+  history: ChatMessage[] = [],
+  options: RunAgentOptions = {},
 ): Promise<AgentTurnResult> {
+  const confirm = options.confirmToolCall ?? defaultConfirmToolCall;
+  const useCustomStream = Boolean(options.onStream);
   const trimmedHistory =
     history.length > MAX_HISTORY_MESSAGES
       ? history.slice(history.length - MAX_HISTORY_MESSAGES)
@@ -104,15 +124,20 @@ export async function runAgent(
     // Use streaming for text responses if available
     let result;
     if (provider.chatStream) {
-      result = await provider.chatStream(messages, toolDefs, (chunk) => {
-        process.stdout.write(chunk);
-      });
+      const onChunk =
+        options.onStream ??
+        ((chunk: string) => {
+          process.stdout.write(chunk);
+        });
+      result = await provider.chatStream(messages, toolDefs, onChunk);
     } else {
       result = await provider.chat(messages, toolDefs);
     }
 
     if (result.stopReason === "stop" || result.toolCalls.length === 0) {
-      console.log(); // Newline after streamed output
+      if (!useCustomStream) {
+        console.log(); // Newline after streamed stdout output
+      }
       return finish(result.message.content);
     }
 
@@ -150,7 +175,7 @@ export async function runAgent(
 
       let confirmed = true;
       if (tool.requiresConfirmation) {
-        confirmed = await confirmToolCall(tool.name, toolCall.arguments);
+        confirmed = await confirm(tool.name, toolCall.arguments);
       }
 
       if (!confirmed) {
@@ -160,6 +185,7 @@ export async function runAgent(
           confirmed: false,
           outcome: "declined",
         });
+        options.onToolComplete?.(tool.name, "User declined", "declined");
         messages.push({
           role: "tool",
           toolCallId: toolCall.id,
@@ -167,6 +193,8 @@ export async function runAgent(
         });
         continue;
       }
+
+      options.onToolStart?.(tool.name);
 
       try {
         const toolResult = await tool.execute(toolCall.arguments);
@@ -180,7 +208,14 @@ export async function runAgent(
           resultPreview: toolResult.slice(0, 200),
         });
         if (isBlocked) {
-          console.log(chalk.red(`[BLXCKCHAT] ${toolResult}`));
+          if (!useCustomStream) {
+            console.log(chalk.red(`[BLXCKCHAT] ${toolResult}`));
+          }
+          options.onToolComplete?.(tool.name, toolResult, "blocked");
+        } else if (isError) {
+          options.onToolComplete?.(tool.name, toolResult, "error");
+        } else {
+          options.onToolComplete?.(tool.name, toolResult, "success");
         }
         if (!isError) {
           lastSuccessfulResult = toolResult;
@@ -202,6 +237,7 @@ export async function runAgent(
           outcome: "error",
           resultPreview: errorMessage.slice(0, 200),
         });
+        options.onToolComplete?.(tool.name, `Error: ${errorMessage}`, "error");
         messages.push({
           role: "tool",
           toolCallId: toolCall.id,

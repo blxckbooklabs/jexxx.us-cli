@@ -36,6 +36,7 @@ import {
 import { resolveProvider } from "./lib/blxckchat/providers/registry.js";
 import { buildToolRegistry } from "./lib/blxckchat/tools/registry.js";
 import { runAgent } from "./lib/blxckchat/agent-loop.js";
+import { startInteractiveChat } from "./lib/blxckchat/repl-ui.js";
 import {
   loadCredentials,
   saveCredentials,
@@ -610,70 +611,11 @@ blxckchatCmd
       process.exit(0);
     }
 
-    // Interactive REPL mode — conversationHistory persists across turns
-    // within this process so follow-ups ("yes", "the other one", etc.) and
-    // multi-step tool confirmations have the prior turns to refer back to.
-    // One-shot mode above stays intentionally stateless.
-    console.log(
-      chalk.cyan(
-        `[BLXCKCHAT] Interactive mode — provider: ${storedConfig.provider}/${storedConfig.model}. Type /exit to quit, /reset to clear conversation history.\n`
-      )
-    );
-
-    let conversationHistory: import("./lib/blxckchat/providers/types.js").ChatMessage[] = [];
-
-    const readline = await import("readline");
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout,
-      prompt: chalk.cyan("you> "),
-    });
-
-    rl.prompt();
-    rl.on("line", async (line: string) => {
-      const trimmed = line.trim();
-      if (trimmed === "/exit" || trimmed === "/quit") {
-        rl.close();
-        return;
-      }
-      if (trimmed === "/reset") {
-        conversationHistory = [];
-        console.log(chalk.dim("\n[BLXCKCHAT] Conversation history cleared.\n"));
-        rl.prompt();
-        return;
-      }
-      if (!trimmed) {
-        rl.prompt();
-        return;
-      }
-
-      try {
-        process.stdout.write(chalk.white("\nblxckchat> "));
-        const { response, history } = await runAgent(
-          provider,
-          tools,
-          trimmed,
-          conversationHistory
-        );
-        conversationHistory = history;
-        // Streaming providers already wrote the response as it arrived;
-        // non-streaming providers (or fallback paths) haven't printed
-        // anything yet, so print it here.
-        if (!provider.chatStream) {
-          console.log(response);
-        }
-        console.log();
-      } catch (err) {
-        console.error(
-          chalk.red(`\n[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
-        );
-      }
-      rl.prompt();
-    });
-
-    rl.on("close", () => {
-      console.log(chalk.dim("\nSession ended."));
-      process.exit(0);
+    // Interactive blessed terminal UI — conversationHistory persists across
+    // turns within this process. Falls back to readline on narrow/non-TTY
+    // terminals. One-shot mode above stays intentionally stateless.
+    await startInteractiveChat(provider, tools, {
+      providerLabel: `${storedConfig.provider}/${storedConfig.model}`,
     });
   });
 
