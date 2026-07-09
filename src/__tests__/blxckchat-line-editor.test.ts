@@ -28,6 +28,12 @@ test("option+arrow resolves to word movement", () => {
   assert.equal(resolveLineEditorKey({ name: "left", meta: true, shift: true }).extend, true);
 });
 
+test("full key sequence resolves option+shift+arrow", () => {
+  assert.equal(resolveLineEditorKey({ full: "M-S-left" }).type, "move-word-left");
+  assert.equal(resolveLineEditorKey({ full: "M-S-left" }).extend, true);
+  assert.equal(resolveLineEditorKey({ full: "M-backspace" }).type, "delete-word-backward");
+});
+
 test("shift+arrow extends character selection", () => {
   let state = createLineEditorState("abcdef");
   state = applyLineEditorAction(state, { type: "move-char-left", extend: true });

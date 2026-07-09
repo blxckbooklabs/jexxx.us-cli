@@ -1,10 +1,12 @@
 import blessed from "blessed";
 
 import {
-  createModalKeypress,
-  isPrintableKey,
-  type BlessedKey,
-} from "../editor/modal-keypress.js";
+  createModalLineInput,
+  insertModalLinePaste,
+  type ModalLineInputHandle,
+} from "../editor/modal-line-input.js";
+import { createModalKeypress, type BlessedKey } from "../editor/modal-keypress.js";
+import { readClipboard } from "../session/tui-snapshot.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
@@ -48,8 +50,8 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
   let selectedIndex = 0;
   let allItems: PickerItem[] = [];
   let filteredItems: PickerItem[] = [];
-  let filterBuffer = "";
   let filterFocused = false;
+  const filterInput: ModalLineInputHandle = createModalLineInput();
   let onPickHandler: ((item: PickerItem) => void) | undefined;
   let onCancelHandler: (() => void) | undefined;
   const mouseEnabled = isSlashPopupMouseEnabled();
@@ -138,17 +140,18 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       : `{bold}${item.label}{/bold}`;
   };
 
+  const filterViewWidth = (): number =>
+    Math.max(8, ((filterBox.width as number) || 60) - 4);
+
   const renderFilter = (): void => {
     const borderFg = filterFocused ? THEME.pinkGlow : THEME.cyan;
     filterBox.style.border = { fg: borderFg };
-    if (filterBuffer) {
-      const cursor = filterFocused ? "▌" : "";
-      filterBox.setContent(` ${filterBuffer}${cursor}`);
-    } else if (filterFocused) {
-      filterBox.setContent(" ▌");
+    const query = filterInput.getText();
+    if (query || filterFocused) {
+      filterBox.setContent(filterInput.formatDisplay(filterViewWidth()));
     } else {
       filterBox.setContent(
-        "{gray-fg} Tab or click here · type to filter · any letter starts filter{/gray-fg}",
+        "{gray-fg} Tab or click here · type to filter · ⌥←→ word · ⌥⇧←→ select{/gray-fg}",
       );
     }
   };
@@ -240,13 +243,19 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
     highlightIndex(stepListIndex(selectedIndex, delta, filteredItems.length));
   };
 
-  const appendFilterChar = (ch: string): void => {
-    if (!filterFocused) {
-      filterFocused = true;
-      filterBox.focus();
+  const applyFilterInputKey = async (ch: string, key: BlessedKey): Promise<void> => {
+    if (!filterFocused) focusFilter();
+
+    const result = filterInput.handleKey(ch, key);
+    if (result.action === "paste-request") {
+      const clip = await readClipboard();
+      insertModalLinePaste(filterInput, clip);
+      applyFilter(filterInput.getText());
+      return;
     }
-    filterBuffer += ch;
-    applyFilter(filterBuffer);
+    if (result.action === "updated") {
+      applyFilter(filterInput.getText());
+    }
   };
 
   const handleKeypress = (ch: string, key: BlessedKey): void => {
@@ -278,22 +287,15 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       return;
     }
 
-    if (key.name === "backspace") {
-      if (!filterBuffer) return;
-      filterBuffer = filterBuffer.slice(0, -1);
-      applyFilter(filterBuffer);
-      return;
-    }
-
-    if (isPrintableKey(ch, key)) {
-      appendFilterChar(ch);
+    if (filterInput.isEditingKey(ch, key)) {
+      void applyFilterInputKey(ch, key);
     }
   };
 
   const close = (): void => {
     container.hide();
     visible = false;
-    filterBuffer = "";
+    filterInput.setText("");
     filterFocused = false;
     modalKeys.stop();
     releaseOverlayFocus(screen);
@@ -317,7 +319,7 @@ export function createPickerOverlay(screen: blessed.Widgets.Screen): PickerOverl
       allItems = items;
       filteredItems = [...items];
       selectedIndex = options?.selectedIndex ?? 0;
-      filterBuffer = "";
+      filterInput.setText("");
       filterFocused = false;
       if (options?.title) {
         container.setLabel(` ${options.title} `);

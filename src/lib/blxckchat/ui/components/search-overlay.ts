@@ -1,11 +1,13 @@
 import blessed from "blessed";
 
 import {
-  createModalKeypress,
-  isPrintableKey,
-  type BlessedKey,
-} from "../editor/modal-keypress.js";
+  createModalLineInput,
+  insertModalLinePaste,
+  type ModalLineInputHandle,
+} from "../editor/modal-line-input.js";
+import { createModalKeypress, type BlessedKey } from "../editor/modal-keypress.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
+import { readClipboard } from "../session/tui-snapshot.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
 
@@ -21,7 +23,7 @@ export function createSearchOverlay(
   onSearch: (query: string) => void,
 ): SearchOverlayHandle {
   let visible = false;
-  let buffer = "";
+  const searchInput: ModalLineInputHandle = createModalLineInput();
   const mouseEnabled = isSlashPopupMouseEnabled();
   const modalKeys = createModalKeypress(screen);
 
@@ -45,14 +47,15 @@ export function createSearchOverlay(
     },
   });
 
+  const viewWidth = (): number => Math.max(8, ((box.width as number) || 60) - 4);
+
   const render = (): void => {
-    const cursor = visible ? "▌" : "";
-    box.setContent(buffer ? ` ${buffer}${cursor}` : ` ▌`);
+    box.setContent(searchInput.formatDisplay(viewWidth()));
     screen.render();
   };
 
   const submit = (): void => {
-    onSearch(buffer.trim());
+    onSearch(searchInput.getText().trim());
     close();
   };
 
@@ -65,19 +68,19 @@ export function createSearchOverlay(
       return;
     }
 
-    if (key.name === "enter" || key.name === "return") {
+    const result = searchInput.handleKey(ch, key);
+    if (result.action === "submit") {
       submit();
       return;
     }
-
-    if (key.name === "backspace") {
-      buffer = buffer.slice(0, -1);
-      render();
+    if (result.action === "paste-request") {
+      void readClipboard().then((clip) => {
+        insertModalLinePaste(searchInput, clip);
+        render();
+      });
       return;
     }
-
-    if (isPrintableKey(ch, key)) {
-      buffer += ch;
+    if (result.action === "updated") {
       render();
     }
   };
@@ -85,7 +88,7 @@ export function createSearchOverlay(
   const close = (): void => {
     box.hide();
     visible = false;
-    buffer = "";
+    searchInput.setText("");
     modalKeys.stop();
     releaseOverlayFocus(screen);
     screen.render();
@@ -102,7 +105,7 @@ export function createSearchOverlay(
 
   return {
     open() {
-      buffer = "";
+      searchInput.setText("");
       box.setFront();
       box.show();
       takeOverlayFocus(screen, box);
@@ -115,7 +118,7 @@ export function createSearchOverlay(
       return visible;
     },
     getQuery() {
-      return buffer;
+      return searchInput.getText();
     },
   };
 }

@@ -189,14 +189,30 @@ export interface LineEditorKey {
   meta?: boolean;
   ctrl?: boolean;
   ch?: string;
+  full?: string;
+}
+
+function parseKeyModifiers(key: LineEditorKey): {
+  name: string;
+  shift: boolean;
+  meta: boolean;
+  ctrl: boolean;
+} {
+  const full = key.full ?? "";
+  const parts = full ? full.split("-") : [];
+  const shift = Boolean(key.shift) || parts.includes("S");
+  const meta = Boolean(key.meta) || parts.includes("M");
+  const ctrl =
+    Boolean(key.ctrl) ||
+    (parts.includes("C") && !meta) ||
+    (full.startsWith("C-") && !full.startsWith("C-M-") && !full.startsWith("C-S-M-"));
+  const name = key.name ?? parts[parts.length - 1] ?? "";
+  return { name, shift, meta, ctrl };
 }
 
 /** Map terminal key events to editor actions (macOS + cross-platform). */
 export function resolveLineEditorKey(key: LineEditorKey): LineEditorKeyAction {
-  const name = key.name ?? "";
-  const shift = Boolean(key.shift);
-  const meta = Boolean(key.meta);
-  const ctrl = Boolean(key.ctrl);
+  const { name, shift, meta, ctrl } = parseKeyModifiers(key);
 
   if (name === "enter" || name === "return") return { type: "submit" };
 

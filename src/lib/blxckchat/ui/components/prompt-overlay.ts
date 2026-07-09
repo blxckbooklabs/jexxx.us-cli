@@ -2,10 +2,16 @@ import blessed from "blessed";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import {
+  createModalLineInput,
+  insertModalLinePaste,
+  type ModalLineInputHandle,
+} from "../editor/modal-line-input.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
 import { readClipboard } from "../session/tui-snapshot.js";
 import { isSlashPopupMouseEnabled } from "../tty.js";
 import { THEME } from "../theme.js";
+import type { BlessedKey } from "../editor/modal-keypress.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,47 +30,13 @@ export interface PromptOverlayHandle {
   cancel: () => void;
 }
 
-type BlessedKey = {
-  name?: string;
-  full?: string;
-  meta?: boolean;
-  ctrl?: boolean;
-  shift?: boolean;
-  ch?: string;
-};
-
 type BlessedProgram = {
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   removeListener: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
-const MASK_CHAR = "•";
-
 function programOf(screen: blessed.Widgets.Screen): BlessedProgram {
   return screen.program as unknown as BlessedProgram;
-}
-
-function isPasteKey(key: BlessedKey): boolean {
-  const full = key.full ?? "";
-  return (
-    full === "M-v" ||
-    full === "C-v" ||
-    full === "S-C-v" ||
-    ((key.meta || key.ctrl) && key.name === "v") ||
-    (key.ctrl && key.shift && key.name === "v") ||
-    (key.name === "p" && !key.ctrl && !key.meta) ||
-    (key.name === "insert" && Boolean(key.shift))
-  );
-}
-
-function isPrintable(ch: string, key: BlessedKey): boolean {
-  return (
-    Boolean(ch) &&
-    ch.length === 1 &&
-    !key.ctrl &&
-    !key.meta &&
-    !/^[\x00-\x08\x0b-\x0c\x0e-\x1f\x7f]$/.test(ch)
-  );
 }
 
 /** macOS pasteboard — explicit path; spawn('pbpaste') can fail in some PATH contexts. */
@@ -90,7 +62,7 @@ async function readClipboardRobust(): Promise<string> {
 export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverlayHandle {
   let visible = false;
   let secretMode = false;
-  let buffer = "";
+  let input: ModalLineInputHandle = createModalLineInput();
   let resolvePending: ((value: string | null) => void) | null = null;
   let onProgramKeypress: ((ch: string, key: BlessedKey) => void) | null = null;
   let onProgramPaste: (() => void) | null = null;
@@ -155,31 +127,24 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     style: { fg: THEME.textDim, bg: THEME.bgElevated },
   });
 
+  const inputViewWidth = (): number =>
+    Math.max(8, ((inputArea.width as number) || 60) - 4);
+
   const setFooter = (message: string): void => {
     footer.setContent(`{gray-fg}${message}{/gray-fg}`);
   };
 
   const render = (status?: string): void => {
-    const display = secretMode
-      ? buffer.length > 0
-        ? MASK_CHAR.repeat(buffer.length)
-        : ""
-      : buffer;
-    inputArea.setContent(display || " ");
-    const count = `${buffer.length} char${buffer.length === 1 ? "" : "s"}`;
+    inputArea.setContent(input.formatDisplay(inputViewWidth()));
+    const count = `${input.getText().length} char${input.getText().length === 1 ? "" : "s"}`;
+    const editHint = "⌥←→ word · ⌥⇧←→ select · ⌥⌫ delete word";
     const pasteHint = secretMode ? "Press P to paste (or ⌘V)" : "⌘V paste";
     setFooter(
       status
         ? `${status} · ${count} · Enter save · Esc cancel`
-        : `${pasteHint} · ${count} · Enter save · Esc cancel`,
+        : `${pasteHint} · ${editHint} · ${count} · Enter · Esc`,
     );
     screen.render();
-  };
-
-  const appendText = (text: string, status?: string): void => {
-    if (!text) return;
-    buffer += text;
-    render(status);
   };
 
   const pasteFromClipboard = async (): Promise<void> => {
@@ -187,10 +152,10 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     const clip = await readClipboardRobust();
     const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
     if (!normalized) {
-      render("Clipboard empty — copy API key first, then press P");
+      render("Clipboard empty — copy text first, then press P");
       return;
     }
-    buffer += normalized;
+    insertModalLinePaste(input, normalized);
     render(`Pasted ${normalized.length} chars`);
   };
 
@@ -203,29 +168,21 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
   const handleKeypress = (ch: string, key: BlessedKey): void => {
     if (!visible) return;
 
-    if (isPasteKey(key)) {
-      void pasteFromClipboard();
-      return;
-    }
-
-    if (key.name === "enter" || key.name === "return") {
-      finish(buffer.trim());
-      return;
-    }
-
     if (key.name === "escape") {
       finish(null);
       return;
     }
 
-    if (key.name === "backspace") {
-      buffer = buffer.slice(0, -1);
-      render();
+    const result = input.handleKey(ch, key);
+    if (result.action === "paste-request") {
+      void pasteFromClipboard();
       return;
     }
-
-    if (isPrintable(ch, key)) {
-      buffer += ch;
+    if (result.action === "submit") {
+      finish(input.getText().trim());
+      return;
+    }
+    if (result.action === "updated") {
       render();
     }
   };
@@ -298,7 +255,9 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
       return new Promise((resolve) => {
         resolvePending = resolve;
         secretMode = Boolean(options.secret);
-        buffer = options.defaultValue ?? "";
+        input = createModalLineInput(options.defaultValue ?? "", {
+          mask: secretMode,
+        });
 
         box.setLabel(` ${options.title} `);
         inputArea.setLabel(` ${options.label} `);
