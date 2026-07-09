@@ -387,7 +387,7 @@ export const EMPIRE_CONTENT_ROUTING = `## Empire content routing (pick every rel
 
 **Empire synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links.
 
-**URL rule (strict):** Copy https://tv.jexxx.us/video/... and https://veil.jexxx.us/articles/... links **exactly** from tool or pre-fetched output. Never use wv.jexxx.us, never insert spaces inside URLs or slugs, never invent paths.
+**URL rule (strict):** Copy https://tv.jexxx.us/video/... and https://veil.jexxx.us/articles/... links **exactly** from tool or pre-fetched output — **one URL per line**, never glue two URLs together. Never use wv.jexxx.us, never insert spaces inside URLs or slugs, never invent paths.
 
 If bible_query fails once, do not spam format variants — use the listed Book Ch:V refs only.
 

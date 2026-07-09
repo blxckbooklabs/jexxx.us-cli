@@ -33,7 +33,8 @@ export function formatVeilArticleList(
       .filter(Boolean)
       .join(" · ");
     lines.push(`${i + 1}. ${article.title}`);
-    lines.push(`   ${article.url}`);
+    lines.push(`   Read: [${article.title}](${article.url})`);
+    lines.push(`   URL (copy exactly): ${article.url}`);
     if (bits) lines.push(`   ${bits}`);
     lines.push("");
   }

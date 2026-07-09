@@ -6,11 +6,32 @@ export interface EmpireUrlEntry {
   surface: "tv" | "veil";
 }
 
-const TV_VIDEO_URL =
-  /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/([a-zA-Z0-9][a-zA-Z0-9\s-]*[a-zA-Z0-9]|[a-zA-Z0-9])/gi;
-const VEIL_ARTICLE_URL =
-  /https?:\/\/veil\.jexxx\.us\/articles\/([a-zA-Z0-9][a-zA-Z0-9\s-]*[a-zA-Z0-9]|[a-zA-Z0-9])/gi;
+const EMPIRE_TV_URL = /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/[a-z0-9-]+/gi;
+const EMPIRE_VEIL_URL = /https?:\/\/veil\.jexxx\.us\/articles\/[a-z0-9-]+/gi;
 const TV_LINE_URL = /^\s*https?:\/\/tv\.jexxx\.us\/video\/([a-z0-9-]+)\s*$/im;
+const VEIL_LINE_URL = /^\s*https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9-]+)\s*$/im;
+
+/** Split URLs glued without separators (common small-model failure). */
+export function splitGluedEmpireUrls(text: string): string {
+  let out = text;
+  out = out.replace(
+    /(https?:\/\/(?:veil\.jexxx\.us\/articles|tv\.jexxx\.us\/video)\/[a-z0-9-]+)(?=https?:\/\/)/gi,
+    "$1\n",
+  );
+  out = out.replace(
+    /([a-z0-9-])(https?:\/\/(?:veil\.jexxx\.us|tv\.jexxx\.us)\/)/gi,
+    "$1\n$2",
+  );
+  return out;
+}
+
+function extractSlug(url: string, surface: "tv" | "veil"): string {
+  const prefix =
+    surface === "tv"
+      ? /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\//i
+      : /https?:\/\/veil\.jexxx\.us\/articles\//i;
+  return url.replace(prefix, "").replace(/\s+/g, "").toLowerCase();
+}
 
 /** Pull canonical TV/VEIL URLs from tool results or prefetch blocks. */
 export function extractEmpireUrlsFromText(text: string): EmpireUrlEntry[] {
@@ -26,7 +47,7 @@ export function extractEmpireUrlsFromText(text: string): EmpireUrlEntry[] {
     entries.push(entry);
   };
 
-  const lines = text.split("\n");
+  const lines = splitGluedEmpireUrls(text).split("\n");
   let pendingTitle: string | undefined;
   for (const line of lines) {
     const numbered = line.match(/^\d+\.\s+(.+)$/);
@@ -34,28 +55,33 @@ export function extractEmpireUrlsFromText(text: string): EmpireUrlEntry[] {
 
     const tvLine = line.match(TV_LINE_URL);
     if (tvLine?.[1]) {
-      const slug = tvLine[1];
-      add("tv", `https://tv.jexxx.us/video/${slug}`, slug, pendingTitle);
+      add("tv", `https://tv.jexxx.us/video/${tvLine[1]}`, tvLine[1], pendingTitle);
+      pendingTitle = undefined;
+      continue;
+    }
+
+    const veilLine = line.match(VEIL_LINE_URL);
+    if (veilLine?.[1]) {
+      add("veil", `https://veil.jexxx.us/articles/${veilLine[1]}`, veilLine[1], pendingTitle);
       pendingTitle = undefined;
     }
   }
 
-  let match: RegExpExecArray | null;
-  const tvRe = /https?:\/\/tv\.jexxx\.us\/video\/([a-z0-9-]+)/gi;
-  while ((match = tvRe.exec(text)) !== null) {
-    if (match[1]) add("tv", `https://tv.jexxx.us/video/${match[1]}`, match[1]);
+  const split = splitGluedEmpireUrls(text);
+  for (const url of split.match(EMPIRE_TV_URL) ?? []) {
+    const slug = extractSlug(url, "tv");
+    add("tv", `https://tv.jexxx.us/video/${slug}`, slug);
   }
-
-  const veilRe = /https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9-]+)/gi;
-  while ((match = veilRe.exec(text)) !== null) {
-    if (match[1]) add("veil", `https://veil.jexxx.us/articles/${match[1]}`, match[1]);
+  for (const url of split.match(EMPIRE_VEIL_URL) ?? []) {
+    const slug = extractSlug(url, "veil");
+    add("veil", `https://veil.jexxx.us/articles/${slug}`, slug);
   }
 
   return entries;
 }
 
 function levenshtein(a: string, b: string): number {
-  const rows = a.length + 1;
+  const rows = a.length +  1;
   const cols = b.length + 1;
   const matrix: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0) as number[]);
   for (let i = 0; i < rows; i++) matrix[i]![0] = i;
@@ -73,15 +99,18 @@ function levenshtein(a: string, b: string): number {
   return matrix[a.length]![b.length]!;
 }
 
-function resolveTvSlug(brokenSlug: string, catalog: EmpireUrlEntry[]): string {
-  const compact = brokenSlug.replace(/\s+/g, "").toLowerCase();
-  const exact = catalog.find((e) => e.surface === "tv" && e.slug === compact);
+function closestCatalogSlug(
+  compact: string,
+  catalog: EmpireUrlEntry[],
+  surface: "tv" | "veil",
+): string {
+  const exact = catalog.find((e) => e.surface === surface && e.slug === compact);
   if (exact) return exact.slug;
 
   let best: string | null = null;
   let bestDist = Infinity;
   for (const entry of catalog) {
-    if (entry.surface !== "tv") continue;
+    if (entry.surface !== surface) continue;
     const dist = levenshtein(compact, entry.slug);
     const threshold = Math.max(4, Math.floor(entry.slug.length * 0.12));
     if (dist <= threshold && dist < bestDist) {
@@ -92,58 +121,60 @@ function resolveTvSlug(brokenSlug: string, catalog: EmpireUrlEntry[]): string {
   return best ?? compact;
 }
 
-function normalizeTitle(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
+function canonicalizeUrl(raw: string, catalog: EmpireUrlEntry[]): string {
+  const tv = raw.match(/^https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/([a-z0-9-]+)$/i);
+  if (tv?.[1]) {
+    const slug = closestCatalogSlug(tv[1].toLowerCase(), catalog, "tv");
+    return `https://tv.jexxx.us/video/${slug}`;
+  }
+  const veil = raw.match(/^https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9-]+)$/i);
+  if (veil?.[1]) {
+    const slug = closestCatalogSlug(veil[1].toLowerCase(), catalog, "veil");
+    return `https://veil.jexxx.us/articles/${slug}`;
+  }
+  return raw;
 }
 
-function findByTitleFragment(text: string, catalog: EmpireUrlEntry[]): EmpireUrlEntry | null {
-  const window = text.slice(0, 200);
-  for (const entry of catalog) {
-    if (!entry.title || entry.surface !== "tv") continue;
-    const norm = normalizeTitle(entry.title);
-    if (norm.length < 12) continue;
-    if (normalizeTitle(window).includes(norm) || normalizeTitle(text).includes(norm)) {
-      return entry;
-    }
-  }
-  return null;
+/** Turn `[url1\nurl2]` blobs into one bullet per URL. */
+export function repairMarkdownUrlBlobs(text: string): string {
+  return text.replace(/\[((?:https?:\/\/[^\]\n]+(?:\nhttps?:\/\/[^\]\n]+)*))\]/g, (_full, inner: string) => {
+    const urls = inner
+      .split(/\n+/)
+      .map((line: string) => line.trim())
+      .filter((line: string) => /^https?:\/\//i.test(line));
+    if (urls.length <= 1) return `[${inner}]`;
+    return urls.map((url: string) => `• ${url}`).join("\n");
+  });
 }
 
 /**
- * Repair model-hallucinated empire URLs (wv.jexxx.us, spaced slugs) using
+ * Repair model-hallucinated empire URLs (wv host, spaced/glued slugs) using
  * canonical URLs from the same turn's tool/prefetch output.
  */
 export function sanitizeEmpireUrls(response: string, catalog: EmpireUrlEntry[]): string {
   if (!response.trim()) return response;
 
-  let out = response.replace(/https?:\/\/wv\.jexxx\.us/gi, "https://tv.jexxx.us");
+  let out = splitGluedEmpireUrls(response);
+  out = out.replace(/https?:\/\/wv\.jexxx\.us/gi, "https://tv.jexxx.us");
   out = out.replace(/https?:\/\/tw\.jexxx\.us/gi, "https://tv.jexxx.us");
 
-  out = out.replace(TV_VIDEO_URL, (full, slugPart: string) => {
-    const fixed = resolveTvSlug(slugPart, catalog);
-    return `https://tv.jexxx.us/video/${fixed}`;
-  });
+  out = out.replace(
+    /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/([a-z0-9][a-z0-9\s-]*[a-z0-9]|[a-z0-9])(?=[\s\]\),.;!?]|$)/gi,
+    (_full, slugPart: string) => {
+      const slug = closestCatalogSlug(slugPart.replace(/\s+/g, "").toLowerCase(), catalog, "tv");
+      return `https://tv.jexxx.us/video/${slug}`;
+    },
+  );
+  out = out.replace(EMPIRE_TV_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
+  out = out.replace(
+    /https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9][a-z0-9\s-]*[a-z0-9]|[a-z0-9])(?=[\s\]\),.;!?]|$)/gi,
+    (_full, slugPart: string) => {
+      const slug = closestCatalogSlug(slugPart.replace(/\s+/g, "").toLowerCase(), catalog, "veil");
+      return `https://veil.jexxx.us/articles/${slug}`;
+    },
+  );
+  out = out.replace(EMPIRE_VEIL_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
 
-  out = out.replace(VEIL_ARTICLE_URL, (full, slugPart: string) => {
-    const compact = slugPart.replace(/\s+/g, "").toLowerCase();
-    const exact = catalog.find((e) => e.surface === "veil" && e.slug === compact);
-    return exact?.url ?? `https://veil.jexxx.us/articles/${compact}`;
-  });
-
-  const titleMatch = findByTitleFragment(out, catalog);
-  if (titleMatch) {
-    const brokenTv = new RegExp(
-      `https?:\\/\\/(?:tv|wv)\\.jexxx\\.us\\/video\\/[a-zA-Z0-9\\s-]+`,
-      "i",
-    );
-    if (brokenTv.test(out) && !out.includes(titleMatch.url)) {
-      out = out.replace(brokenTv, titleMatch.url);
-    }
-  }
-
+  out = repairMarkdownUrlBlobs(out);
   return out;
 }
