@@ -1,6 +1,7 @@
 import blessed from "blessed";
 
 import type { SlashSuggestion } from "../slash/autocomplete.js";
+import { isBlessedMouseEnabled } from "../tty.js";
 
 export interface SlashPopupHandle {
   show: (suggestions: SlashSuggestion[], selectedIndex: number) => void;
@@ -27,7 +28,7 @@ export function createSlashPopup(screen: blessed.Widgets.Screen): SlashPopupHand
     tags: true,
     hidden: true,
     keys: false,
-    mouse: true,
+    mouse: isBlessedMouseEnabled(),
     vi: false,
     style: {
       fg: "white",

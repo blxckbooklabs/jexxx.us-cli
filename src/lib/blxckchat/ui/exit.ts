@@ -1,5 +1,7 @@
 import type blessed from "blessed";
 
+import { teardownBlessedScreen } from "./tty.js";
+
 let exiting = false;
 
 /** Tear down blessed and leave the terminal — safe to call multiple times. */
@@ -7,20 +9,7 @@ export function gracefulTuiExit(screen: blessed.Widgets.Screen, code = 0): void 
   if (exiting) return;
   exiting = true;
 
-  try {
-    screen.program.clear();
-    screen.program.showCursor();
-    screen.program.normalBuffer();
-  } catch {
-    // Terminal may already be torn down
-  }
-
-  try {
-    screen.destroy();
-  } catch {
-    // ignore
-  }
-
+  teardownBlessedScreen(screen);
   process.exit(code);
 }
 

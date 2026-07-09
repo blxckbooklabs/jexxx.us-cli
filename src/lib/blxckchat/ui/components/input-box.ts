@@ -6,6 +6,7 @@ import {
   detectSlashInputMode,
   type SlashSuggestion,
 } from "../slash/autocomplete.js";
+import { isBlessedMouseEnabled } from "../tty.js";
 
 export interface InputBoxHandle {
   element: blessed.Widgets.TextboxElement;
@@ -70,7 +71,7 @@ export function createInputBox(
     },
     inputOnFocus: true,
     keys: true,
-    mouse: true,
+    mouse: isBlessedMouseEnabled(),
     vi: false,
   });
 

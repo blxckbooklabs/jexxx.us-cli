@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { MessageQueue } from "../lib/blxckchat/ui/message-queue.js";
+import {
+  isBlessedMouseEnabled,
+  writeTerminalResetSequences,
+} from "../lib/blxckchat/ui/tty.js";
 import { shouldAutosave } from "../lib/blxckchat/ui/session/autosave.js";
 import { branchUndo } from "../lib/blxckchat/ui/session/branch.js";
 import {
@@ -48,4 +52,18 @@ test("branchUndo removes last user/assistant exchange from session", () => {
 test("branchUndo returns false when session is empty", () => {
   const session = createSession();
   assert.equal(branchUndo(session), false);
+});
+
+test("isBlessedMouseEnabled is off unless BLXCKCHAT_MOUSE is set", () => {
+  const prev = process.env.BLXCKCHAT_MOUSE;
+  delete process.env.BLXCKCHAT_MOUSE;
+  assert.equal(isBlessedMouseEnabled(), false);
+  process.env.BLXCKCHAT_MOUSE = "1";
+  assert.equal(isBlessedMouseEnabled(), true);
+  if (prev === undefined) delete process.env.BLXCKCHAT_MOUSE;
+  else process.env.BLXCKCHAT_MOUSE = prev;
+});
+
+test("writeTerminalResetSequences does not throw without a TTY", () => {
+  assert.doesNotThrow(() => writeTerminalResetSequences());
 });

@@ -11,6 +11,7 @@ import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/mar
 import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult, TerminalSession } from "../session/session-store.js";
 import { wrapWelcomeBannerBlessed } from "../renderer/plain-text.js";
+import { isBlessedMouseEnabled } from "../tty.js";
 
 function highlightSearch(text: string, query: string): string {
   if (!query) return text;
@@ -91,8 +92,8 @@ export function createMessageBox(
       style: { bg: "#ec4899" },
     },
     keys: true,
-    mouse: true,
-    vi: true,
+    mouse: isBlessedMouseEnabled(),
+    vi: false,
     style: {
       fg: "white",
       bg: "#0d0d0d",

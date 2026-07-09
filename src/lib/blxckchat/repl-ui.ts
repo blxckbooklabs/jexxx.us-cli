@@ -7,7 +7,11 @@ import type { StoredProviderConfig } from "./config.js";
 import { dispatchSlashCommand, isSlashCommand } from "./ui/slash/handler.js";
 import { formatSlashHelp } from "./ui/slash/registry.js";
 import { createSession } from "./ui/session/session-store.js";
-import { canRunBlessedTui, prepareStdinForTui } from "./ui/tty.js";
+import {
+  canRunBlessedTui,
+  prepareStdinForTui,
+  restoreTerminalForReadline,
+} from "./ui/tty.js";
 import { loadAutosaveSession } from "./ui/session/autosave.js";
 
 export interface InteractiveChatOptions {
@@ -17,6 +21,12 @@ export interface InteractiveChatOptions {
 }
 
 const MIN_TERMINAL_COLS = 40;
+
+/** Blessed mouse/key spillover when the TTY was not reset — ignore, do not submit. */
+function isSpuriousMouseInput(line: string): boolean {
+  if (line.length < 6) return false;
+  return /^[CGMF@.,:/\-\d]+$/.test(line) && /C\d|G\d|@\d|M\d/.test(line);
+}
 
 async function startReadlineFallback(
   provider: Provider,
@@ -54,6 +64,10 @@ async function startReadlineFallback(
   rl.prompt();
   rl.on("line", async (line: string) => {
     const trimmed = line.trim();
+    if (isSpuriousMouseInput(trimmed)) {
+      rl.prompt();
+      return;
+    }
     if (trimmed === "/exit" || trimmed === "/quit") {
       rl.close();
       return;
@@ -152,6 +166,7 @@ export async function startInteractiveChat(
       resume: Boolean(options.resume),
     });
   } catch (err) {
+    restoreTerminalForReadline();
     console.error(
       chalk.red(
         `[BLXCKCHAT] TUI failed to start: ${err instanceof Error ? err.message : "Unknown error"}`,

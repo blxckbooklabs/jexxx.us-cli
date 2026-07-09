@@ -41,6 +41,7 @@ import { bindExitKeys, gracefulTuiExit } from "./exit.js";
 import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
 import { MessageQueue } from "./message-queue.js";
 import { openExternalEditor } from "./external-editor.js";
+import { isBlessedMouseEnabled, restoreTerminalForReadline } from "./tty.js";
 
 /** Blessed program hide/show exist at runtime but are missing from @types. */
 type BlessedProgramVisibility = {
@@ -125,18 +126,15 @@ export async function startTerminalChat(
     ? (loadAutosaveSession() ?? createSession())
     : createSession();
 
-  let screen: blessed.Widgets.Screen;
+  let screenRef: blessed.Widgets.Screen | undefined;
   try {
-    screen = blessed.screen({
+    const screen = blessed.screen({
       smartCSR: true,
       title: "BLXCKCHAT",
       fullUnicode: true,
+      mouse: isBlessedMouseEnabled(),
     });
-  } catch (err) {
-    throw new Error(
-      `blessed screen init failed: ${err instanceof Error ? err.message : "unknown"}`,
-    );
-  }
+    screenRef = screen;
 
   let activeConfig: StoredProviderConfig = { ...options.storedConfig };
   let activeProvider: Provider = provider;
@@ -546,4 +544,8 @@ export async function startTerminalChat(
   await new Promise<void>(() => {
     // Keep process alive until exit shortcut
   });
+  } catch (err) {
+    restoreTerminalForReadline(screenRef);
+    throw err;
+  }
 }
