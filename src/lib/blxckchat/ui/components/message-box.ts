@@ -6,7 +6,8 @@ import {
   formatThinkingBlock,
   formatThinkingBlockPlain,
 } from "./thinking-block.js";
-import { escapeBlessed, markdownToBlessed } from "../renderer/markdown.js";
+import { markdownToAnsi } from "../renderer/markdown-ansi.js";
+import { escapeBlessed } from "../renderer/markdown.js";
 import { renderUserMessageBox, renderUserMessageBoxPlain } from "../renderer/markdown.js";
 import { formatToolResults, formatToolResultsPlain } from "./tool-box.js";
 import type { ToolResult, TerminalSession } from "../session/session-store.js";
@@ -360,7 +361,7 @@ export function createMessageBox(
       const block = blocks[blockIndex];
       if (block?.type === "assistant") {
         block.assistantRaw = content;
-        block.content = markdownToBlessed(content);
+        block.content = markdownToAnsi(content);
         block.thinkingBlocks = thinkingBlocks;
         rebuild();
       }
@@ -494,7 +495,7 @@ export function createMessageBox(
           const parsed = extractThinkingBlocks(m.content);
           blocks.push({
             type: "assistant",
-            content: markdownToBlessed(parsed.visibleContent || m.content),
+            content: markdownToAnsi(parsed.visibleContent || m.content),
             assistantRaw: parsed.visibleContent || m.content,
             thinkingBlocks: parsed.blocks,
           });

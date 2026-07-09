@@ -17,7 +17,7 @@ function renderToken(token: Token): string {
     case "strong":
       return `{bold}${renderInline((token as Tokens.Strong).tokens)}{/bold}`;
     case "em":
-      return `{italic}${renderInline((token as Tokens.Em).tokens)}{/italic}`;
+      return `{underline}${renderInline((token as Tokens.Em).tokens)}{/underline}`;
     case "codespan":
       return `{gray-fg}${escapeBlessed((token as Tokens.Codespan).text)}{/gray-fg}`;
     case "link": {

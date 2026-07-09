@@ -27,15 +27,18 @@ test("formatStreamingChunk appends cursor to partial text", () => {
   assert.match(out, /▌/);
 });
 
-test("formatStreamingChunk escapes closing braces that would break blessed tags", () => {
-  const out = formatStreamingChunk("use {key: value}");
-  assert.match(out, /\{close\}/);
-  assert.doesNotMatch(out, /value\}/);
+test("formatStreamingChunk renders incremental markdown during stream", () => {
+  const out = formatStreamingChunk("**Hello**");
+  assert.match(out, /\x1b\[/);
+  assert.match(out, /Hello/);
+  assert.match(out, /▌/);
 });
 
 test("finalizeStreamedContent applies markdown rendering", () => {
   const out = finalizeStreamedContent("**done**");
-  assert.match(out, /\{bold\}done\{\/bold\}/);
+  assert.match(out, /\x1b\[/);
+  assert.match(out, /done/);
+  assert.doesNotMatch(out, /\*\*done\*\*/);
 });
 
 test("streamTokens invokes onUpdate for each chunk and finalizes", async () => {
