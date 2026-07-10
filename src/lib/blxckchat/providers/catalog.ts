@@ -239,7 +239,7 @@ export const PROVIDER_CATALOG: readonly ProviderCatalogEntry[] = [
   {
     id: "ollama-cloud",
     label: "Ollama Cloud",
-    adapter: "openai",
+    adapter: "ollama",
     baseUrl: "https://ollama.com/v1",
     requiresApiKey: true,
     envKeys: ["OLLAMA_API_KEY"],
