@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import {
   createModalLineInput,
   insertModalLinePaste,
+  isPasteKey,
   type ModalLineInputHandle,
 } from "../editor/modal-line-input.js";
 import { releaseOverlayFocus, takeOverlayFocus } from "../editor/overlay-focus.js";
@@ -15,6 +16,14 @@ import { THEME } from "../theme.js";
 import type { BlessedKey } from "../editor/modal-keypress.js";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Bracketed paste mode sequences.
+ * Modern terminals wrap pasted text in \x1b[200~...\x1b[201~ markers.
+ * blessed 0.1.81 does not parse these, which can cause character loss on paste.
+ */
+const BRACKETED_PASTE_START = "\x1b[200~";
+const BRACKETED_PASTE_END = "\x1b[201~";
 
 export interface PromptOverlayOptions {
   title: string;
@@ -67,8 +76,41 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
   let resolvePending: ((value: string | null) => void) | null = null;
   let onProgramKeypress: ((ch: string, key: BlessedKey) => void) | null = null;
   let onProgramPaste: (() => void) | null = null;
+  /** Dedup flag — prevents double paste when both "keypress" and "key C-v" fire. */
+  let pasteInFlight = false;
 
   const mouseEnabled = isSlashPopupMouseEnabled();
+
+  /** Disable bracketed paste mode so raw characters arrive cleanly. */
+  const disableBracketedPaste = (): void => {
+    if (!process.stdout.isTTY) return;
+    process.stdout.write("\x1b[?2004l");
+  };
+
+  /** Re-enable bracketed paste mode when overlay closes. */
+  const enableBracketedPaste = (): void => {
+    if (!process.stdout.isTTY) return;
+    process.stdout.write("\x1b[?2004h");
+  };
+
+  /** Read clipboard and insert into the input field (with dedup). */
+  const pasteFromClipboard = async (): Promise<void> => {
+    if (pasteInFlight) return;
+    pasteInFlight = true;
+    try {
+      render("Reading clipboard…");
+      const clip = await readClipboardRobust();
+      const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
+      if (!normalized) {
+        render("Clipboard empty — copy text first, then ⌘V");
+        return;
+      }
+      insertModalLinePaste(input, normalized);
+      render(`Pasted ${normalized.length} chars`);
+    } finally {
+      pasteInFlight = false;
+    }
+  };
 
   const box = blessed.box({
     parent: screen,
@@ -139,25 +181,13 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     inputArea.setContent(input.formatDisplay(inputViewWidth()));
     const count = `${input.getText().length} char${input.getText().length === 1 ? "" : "s"}`;
     const editHint = "⌥←→ word · ⌥⇧←→ select · ⌥⌫ delete word";
-    const pasteHint = "⌘V paste";
+    const pasteHint = secretMode ? "⌘V or P paste" : "⌘V paste";
     setFooter(
       status
         ? `${status} · ${count} · Enter save · Esc cancel`
         : `${pasteHint} · ${editHint} · ${count} · Enter · Esc`,
     );
     screen.render();
-  };
-
-  const pasteFromClipboard = async (): Promise<void> => {
-    render("Reading clipboard…");
-    const clip = await readClipboardRobust();
-    const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
-    if (!normalized) {
-      render("Clipboard empty — copy text first, then ⌘V");
-      return;
-    }
-    insertModalLinePaste(input, normalized);
-    render(`Pasted ${normalized.length} chars`);
   };
 
   const focusInput = (): void => {
@@ -171,6 +201,13 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
 
     if (key.name === "escape") {
       finish(null);
+      return;
+    }
+
+    // In secret mode, treat standalone "p" (no ctrl/meta) as a paste trigger
+    // since most terminals intercept Cmd+V on macOS and it never reaches blessed.
+    if (secretMode && !key.ctrl && !key.meta && key.shift && key.name === "p") {
+      void pasteFromClipboard();
       return;
     }
 
@@ -190,6 +227,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
 
   const startModalCapture = (): void => {
     stopModalCapture();
+    disableBracketedPaste();
     const program = programOf(screen);
 
     onProgramKeypress = (ch: unknown, key: unknown) => {
@@ -227,6 +265,7 @@ export function createPromptOverlay(screen: blessed.Widgets.Screen): PromptOverl
     visible = false;
     stopModalCapture();
     box.hide();
+    enableBracketedPaste();
     releaseOverlayFocus(screen);
     screen.render();
     const resolve = resolvePending;

@@ -32,6 +32,7 @@ import {
   pageScrollDelta,
   halfPageScrollDelta,
 } from "../components/scroll-state.js";
+import { readClipboard } from "../session/tui-snapshot.js";
 
 export interface DyeAppOverlayHandles {
   showPicker: (
@@ -279,6 +280,18 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       }
       if (key.backspace) {
         setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
+        return;
+      }
+      // Paste detection: Ctrl+V, Cmd/Meta+V, or Shift+P fallback for secret mode
+      if (
+        (key.ctrl || key.meta) && input === "v" ||
+        (promptState.options.secret && !key.ctrl && !key.meta && input === "P")
+      ) {
+        void readClipboard().then((clip) => {
+          const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
+          if (!normalized) return;
+          setPromptState((s) => (s ? { ...s, input: normalized } : s));
+        });
         return;
       }
       if (input && input.length === 1 && !key.ctrl && !key.meta) {

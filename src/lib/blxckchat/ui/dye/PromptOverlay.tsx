@@ -63,7 +63,7 @@ export const PromptOverlay: React.FC<PromptOverlayProps> = ({ state }) => {
         <Box paddingLeft={1} paddingRight={1}>
           <Text color={THEME.textDim}>
             {masked
-              ? "⌘V paste · Enter confirm · Esc cancel"
+              ? "⌘V or ⇧P paste · Enter confirm · Esc cancel"
               : "Enter confirm · Esc cancel"}
           </Text>
         </Box>
