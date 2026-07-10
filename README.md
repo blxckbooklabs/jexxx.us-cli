@@ -29,12 +29,14 @@ The `jexxxus` command is a headless Node.js CLI for vault operators. It is **not
 
 | Command                 | Description                                            |
 | ----------------------- | ------------------------------------------------------ |
+| `jexxxus`               | **Default.** Opens BLXCKCHAT—the native AI agent (BYOK)—directly. No subcommand needed. |
+| `jexxxus blxckchat`     | Same as bare `jexxxus`—explicit name for scripts/muscle memory |
+| `jexxxus shell`         | Print this command list without entering the agent (non-interactive/scripting) |
 | `jexxxus doctor`        | Verify `.env` credentials + probe target schema(s)     |
 | `jexxxus import <file>` | Bulk import CSV contacts/vessels into target dashboard |
 | `jexxxus notify`        | Push a system notification to a user's dashboard bell  |
 | `jexxxus auth`          | End-user device login via secure.jexxx.us              |
 | `jexxxus bible`         | Query the Obsidian Bible vault (verse/chapter/book)    |
-| `jexxxus blxckchat`     | BLXCKCHAT—native AI agent for JEXXXUS (BYOK)           |
 
 ---
 
@@ -105,12 +107,17 @@ jexxxus bible query "Genesis 1:1"
 jexxxus bible query "1 Samuel 2:1"
 ```
 
-### BLXCKCHAT—Native AI Agent
+### BLXCKCHAT—Native AI Agent (default entry point)
 
 BLXCKCHAT is a bring-your-own-key AI agent scoped specifically to the JEXXXUS ecosystem—Bible
 lookups, public VEIL and **JEXXXUS | TV** catalog reads, dashboard diagnostics, notifications, and
 contact imports. It is **not** a general coding agent; it does not read/write arbitrary files or
 browse the open web. Supports 20+ BYOK gateways (Anthropic, OpenAI, OpenRouter, Gemini, Groq, Ollama, OpenCode Zen, and more—see `src/lib/blxckchat/providers/catalog.ts`).
+
+Bare `jexxxus` (no subcommand) launches BLXCKCHAT directly—`jexxxus blxckchat` is kept as an
+explicit alias. All flags below work identically on either form. Other subcommands (`doctor`,
+`import`, `notify`, `auth`, `bible`) still route to their own non-agent behavior as before; only an
+unrecognized first token (or none) falls through to the agent.
 
 ```bash
 # One-time setup—pick a provider, model, and (for hosted providers) an API key
@@ -119,20 +126,25 @@ jexxxus blxckchat configure
 # See what's configured (API keys are always redacted)
 jexxxus blxckchat configure --list
 
-# One-shot prompt (stateless between invocations)
+# One-shot prompt (stateless between invocations)—works bare or via blxckchat
+jexxxus "What does Genesis 1:1 say?"
 jexxxus blxckchat "What does Genesis 1:1 say?"
 
-# Interactive terminal UI (conversation persists within session)
+# Interactive terminal UI (conversation persists within session)—same either way
+jexxxus
 jexxxus blxckchat
 
 # Resume last autosaved session
-jexxxus blxckchat --resume
+jexxxus --resume
 
 # Use a specific named provider config for this invocation
-jexxxus blxckchat --provider my-ollama-config "check doctor status"
+jexxxus --provider my-ollama-config "check doctor status"
 
 # Opt in to shell access for this session (OFF by default)
-jexxxus blxckchat --shell
+jexxxus --shell
+
+# Print the command list without opening the agent (scripting/non-interactive)
+jexxxus shell
 ```
 
 **Slash commands (interactive):** `/auth` (secure.jexxx.us login—same as `jexxxus auth login`), `/divinities`, `/chrome`, `/copy`, `/reset`, `/exit`.

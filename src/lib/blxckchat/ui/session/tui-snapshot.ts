@@ -66,9 +66,18 @@ export function writeClipboardOsc52(text: string): void {
   process.stdout.write(wrapped);
 }
 
+/**
+ * True when the native clipboard command (pbcopy/xclip) can silently fail to
+ * reach the *outer* terminal — e.g. inside tmux/screen without
+ * reattach-to-user-namespace, or over a bare SSH session. In that case we
+ * need the OSC 52 fallback even if the native command exits 0.
+ */
+function nativeClipboardMayNotReachHostTerminal(): boolean {
+  return Boolean(process.env.TMUX || process.env.STY || process.env.SSH_TTY || process.env.SSH_CONNECTION);
+}
+
 /** Copy plain text to the system clipboard (best-effort). */
 export function copyToClipboard(text: string): Promise<boolean> {
-  writeClipboardOsc52(text);
   return new Promise((resolve) => {
     const platform = process.platform;
     let cmd: string;
@@ -83,9 +92,19 @@ export function copyToClipboard(text: string): Promise<boolean> {
       args = ["-selection", "clipboard"];
     }
 
+    const finish = (nativeSucceeded: boolean): void => {
+      if (!nativeSucceeded || nativeClipboardMayNotReachHostTerminal()) {
+        // Native copy failed, or we're in a session (tmux/screen/SSH) where
+        // it can succeed locally without reaching the host terminal's real
+        // clipboard — OSC 52 is the only way to be sure in that case.
+        writeClipboardOsc52(text);
+      }
+      resolve(nativeSucceeded || nativeClipboardMayNotReachHostTerminal());
+    };
+
     const proc = spawn(cmd, args, { stdio: ["pipe", "ignore", "ignore"] });
-    proc.on("error", () => resolve(false));
-    proc.on("close", (code) => resolve(code === 0));
+    proc.on("error", () => finish(false));
+    proc.on("close", (code) => finish(code === 0));
     proc.stdin?.write(text);
     proc.stdin?.end();
   });

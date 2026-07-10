@@ -63,6 +63,58 @@ function printBanner(): void {
   );
 }
 
+interface BlxckchatInvocationOptions {
+  provider?: string;
+  shell?: boolean;
+  resume?: boolean;
+}
+
+async function launchBlxckchat(
+  prompt: string | undefined,
+  options: BlxckchatInvocationOptions,
+): Promise<void> {
+  const storedConfig = resolveStartupProvider(options.provider);
+
+  if (!storedConfig) {
+    console.error(
+      chalk.red(
+        "[ERROR] No BLXCKCHAT provider configured yet. Run 'jexxxus blxckchat configure' first."
+      )
+    );
+    process.exit(1);
+  }
+
+  const provider = resolveProvider(storedConfig);
+  const authed = Boolean(loadCredentials({ quiet: true }));
+  const tools = buildToolRegistry({
+    allowShell: Boolean(options.shell),
+    includeAccountQuery: authed,
+  });
+
+  if (options.shell) {
+    console.log(
+      chalk.yellow(
+        "[BLXCKCHAT] Shell access enabled for this session. Every command still requires confirmation and is checked against a hard-blocked pattern list."
+      )
+    );
+  }
+
+  if (prompt) {
+    const { response } = await runAgent(provider, tools, prompt);
+    console.log(chalk.white(`\n${response}\n`));
+    process.exit(0);
+  }
+
+  // Interactive blessed terminal UI — conversationHistory persists across
+  // turns within this process. Falls back to readline on narrow/non-TTY
+  // terminals. One-shot mode above stays intentionally stateless.
+  await startInteractiveChat(provider, tools, {
+    providerLabel: `${storedConfig.provider}/${storedConfig.model}`,
+    storedConfig,
+    resume: Boolean(options.resume),
+  });
+}
+
 function requireOperatorClient(target: DashboardTarget = "blxckbook") {
   const env = loadOperatorEnv();
   if (!env) {
@@ -82,19 +134,25 @@ program
   .name("jexxxus")
   .description("JEXXXUS CLI — unified control plane for the JEXXXUS Ecosystem")
   .version("1.0.0")
+  .argument("[prompt]", "One-shot prompt for BLXCKCHAT. Omit to enter interactive REPL mode.")
+  .option("-p, --provider <name>", "Named provider config to use for this invocation")
+  .option("--resume", "Resume the last autosaved BLXCKCHAT session")
+  .option("--shell", "Opt in to shell access for this session (off by default; every call still requires confirmation and is checked against a hard blocklist)")
   .hook("preAction", (_thisCommand, actionCommand) => {
     // Interactive BLXCKCHAT TUI owns the screen — figlet banner on stdout
-    // breaks blessed init and flashes back to the shell.
-    if (actionCommand.name() === "blxckchat" && actionCommand.args.length === 0) {
+    // breaks blessed init and flashes back to the shell. This applies both
+    // to the bare `jexxxus` default action and the explicit `blxckchat`
+    // subcommand, since both launch the same interactive agent.
+    const isAgentLaunch =
+      actionCommand.name() === "blxckchat" || actionCommand.name() === "jexxxus";
+    if (isAgentLaunch && actionCommand.args.length === 0) {
       return;
     }
     printBanner();
+  })
+  .action(async (prompt: string | undefined, options: BlxckchatInvocationOptions) => {
+    await launchBlxckchat(prompt, options);
   });
-
-// Show banner before displaying help when no command is given
-if (process.argv.length < 3) {
-  printBanner();
-}
 
 const doctorCmd = program
   .command("doctor")
@@ -556,47 +614,15 @@ blxckchatCmd
   .option("-p, --provider <name>", "Named provider config to use for this invocation")
   .option("--resume", "Resume the last autosaved BLXCKCHAT session")
   .option("--shell", "Opt in to shell access for this session (off by default; every call still requires confirmation and is checked against a hard blocklist)")
-  .action(async (prompt: string | undefined, options: { provider?: string; shell?: boolean; resume?: boolean }) => {
-    const storedConfig = resolveStartupProvider(options.provider);
+  .action(async (prompt: string | undefined, options: BlxckchatInvocationOptions) => {
+    await launchBlxckchat(prompt, options);
+  });
 
-    if (!storedConfig) {
-      console.error(
-        chalk.red(
-          "[ERROR] No BLXCKCHAT provider configured yet. Run 'jexxxus blxckchat configure' first."
-        )
-      );
-      process.exit(1);
-    }
-
-    const provider = resolveProvider(storedConfig);
-    const authed = Boolean(loadCredentials({ quiet: true }));
-    const tools = buildToolRegistry({
-      allowShell: Boolean(options.shell),
-      includeAccountQuery: authed,
-    });
-
-    if (options.shell) {
-      console.log(
-        chalk.yellow(
-          "[BLXCKCHAT] Shell access enabled for this session. Every command still requires confirmation and is checked against a hard-blocked pattern list."
-        )
-      );
-    }
-
-    if (prompt) {
-      const { response } = await runAgent(provider, tools, prompt);
-      console.log(chalk.white(`\n${response}\n`));
-      process.exit(0);
-    }
-
-    // Interactive blessed terminal UI — conversationHistory persists across
-    // turns within this process. Falls back to readline on narrow/non-TTY
-    // terminals. One-shot mode above stays intentionally stateless.
-    await startInteractiveChat(provider, tools, {
-      providerLabel: `${storedConfig.provider}/${storedConfig.model}`,
-      storedConfig,
-      resume: Boolean(options.resume),
-    });
+program
+  .command("shell")
+  .description("Show the JEXXXUS CLI command list (non-interactive) — bare 'jexxxus' now opens BLXCKCHAT directly.")
+  .action(() => {
+    program.outputHelp();
   });
 
 program.parseAsync().catch((err: unknown) => {

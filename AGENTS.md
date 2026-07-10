@@ -52,6 +52,16 @@ Owned by the JEXXXUS platform / tooling team.
 - `jexxxus import --target nxt` must write to `public.vessels` schema.
 - Vault operator docs live in `jexxx.us-obsidian/CLI/`; public mirror in
   `docs.jexxx.us/src/content/jexxxus-cli.md`. Keep both aligned.
+- **Command swap (July 2026):** bare `jexxxus` (no subcommand) is now the default entry point for
+  BLXCKCHAT — it shares one `launchBlxckchat()` implementation with the explicit `jexxxus blxckchat`
+  subcommand in `index.ts` (both call the same function; keep them in sync, don't duplicate logic).
+  `jexxxus shell` is new and replaces the old bare-invocation behavior (prints `program.outputHelp()`
+  non-interactively). The `preAction` hook's banner-suppression check (blessed TUI owns the screen)
+  now matches on `actionCommand.name() === "blxckchat" || actionCommand.name() === "jexxxus"` — if you
+  add another entry point that launches the interactive TUI, extend that condition too. The agent's
+  system prompt (`SYSTEM_PROMPT_BASE` in `agent-loop.ts`) explicitly enumerates the shell's
+  non-interactive command surface so it can answer "what can I do in this terminal" accurately — keep
+  that list in sync with `index.ts` when commands are added/removed/renamed.
 - BLXCKCHAT `/divinities` loads personas from `jexxx.us-obsidian/Divinities`
   (`DIVINITIES_VAULT_PATH` override). Persona extracts inject the system prompt;
   RAG docs index remains `docs.jexxx.us` only.
