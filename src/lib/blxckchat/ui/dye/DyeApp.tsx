@@ -80,6 +80,8 @@ export const DyeApp: React.FC<DyeAppProps> = ({
   const [pickerState, setPickerState] =
     React.useState<PickerDisplayState | null>(null);
   const [pickerFilterFocused, setPickerFilterFocused] = React.useState(false);
+  const [filterCursorPos, setFilterCursorPos] = React.useState(0);
+  const [filterSelectionStart, setFilterSelectionStart] = React.useState<number | null>(null);
   const pickerResolveRef = React.useRef<
     ((v: PickerItemDef | null) => void) | null
   >(null);
@@ -130,6 +132,8 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             });
             setPickerFilterFocused(!options?.hideFilter);
             setTypedQuery("");
+            setFilterCursorPos(0);
+            setFilterSelectionStart(null);
           }),
         showPrompt: (
           opts: import("./dye-types.js").PromptOverlayOptions,
@@ -213,13 +217,44 @@ export const DyeApp: React.FC<DyeAppProps> = ({
   // is managed automatically by the hook.
   usePaste(
     (text) => {
-      if (!promptState) return;
       const normalized = text.replace(/\r?\n/g, "").replace(/\t/g, "");
       if (!normalized) return;
-      setPromptState((s) => (s ? { ...s, input: s.input + normalized } : s));
+      if (promptState) {
+        setPromptState((s) => (s ? { ...s, input: s.input + normalized } : s));
+        return;
+      }
+      if (pickerState && pickerFilterFocused) {
+        const cp = filterCursorPos;
+        const sel = filterSelectionStart;
+        setTypedQuery((prev) => {
+          if (sel != null && sel !== cp) {
+            const a = Math.min(sel, cp);
+            const b = Math.max(sel, cp);
+            return prev.slice(0, a) + normalized + prev.slice(b);
+          }
+          return prev.slice(0, cp) + normalized + prev.slice(cp);
+        });
+        setFilterCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + normalized.length);
+        setFilterSelectionStart(null);
+      }
     },
-    { isActive: Boolean(promptState) },
+    { isActive: Boolean(promptState || (pickerState && pickerFilterFocused)) },
   );
+
+  // Word-boundary helpers (mirrors the same logic in InputView.tsx)
+  const wordBoundaryLeft = (text: string, pos: number): number => {
+    let p = pos;
+    while (p > 0 && text[p - 1] === " ") p--;
+    while (p > 0 && text[p - 1] !== " ") p--;
+    return p;
+  };
+
+  const wordBoundaryRight = (text: string, pos: number): number => {
+    let p = pos;
+    while (p < text.length && text[p] === " ") p++;
+    while (p < text.length && text[p] !== " ") p++;
+    return p;
+  };
 
   useInput((input, key) => {
     if (store.confirmDialog) {
@@ -275,13 +310,164 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           return;
         }
       }
-      if (input && input.length === 1 && !key.ctrl && !key.meta) {
-        setTypedQuery((q) => q + input);
-        return;
-      }
-      if (key.backspace) {
-        setTypedQuery((q) => q.slice(0, -1));
-        return;
+      if (pickerFilterFocused) {
+        // ---- Editor shortcuts for picker filter input (mirrors InputView.tsx) ----
+        if ((key.meta || key.ctrl) && !key.shift && key.leftArrow) {
+          setFilterSelectionStart(null);
+          setFilterCursorPos((prev) => wordBoundaryLeft(typedQuery, prev));
+          return;
+        }
+        if ((key.meta || key.ctrl) && !key.shift && key.rightArrow) {
+          setFilterSelectionStart(null);
+          setFilterCursorPos((prev) => wordBoundaryRight(typedQuery, prev));
+          return;
+        }
+        if ((key.meta || key.ctrl) && key.shift && key.leftArrow) {
+          setFilterCursorPos((prev) => {
+            if (filterSelectionStart == null) setFilterSelectionStart(prev);
+            return wordBoundaryLeft(typedQuery, prev);
+          });
+          return;
+        }
+        if ((key.meta || key.ctrl) && key.shift && key.rightArrow) {
+          setFilterCursorPos((prev) => {
+            if (filterSelectionStart == null) setFilterSelectionStart(prev);
+            return wordBoundaryRight(typedQuery, prev);
+          });
+          return;
+        }
+        if (!key.ctrl && !key.meta && !key.shift && key.leftArrow) {
+          setFilterSelectionStart(null);
+          setFilterCursorPos((prev) => Math.max(0, prev - 1));
+          return;
+        }
+        if (!key.ctrl && !key.meta && !key.shift && key.rightArrow) {
+          setFilterSelectionStart(null);
+          setFilterCursorPos((prev) => Math.min(typedQuery.length, prev + 1));
+          return;
+        }
+        if (!key.ctrl && !key.meta && key.shift && key.leftArrow) {
+          setFilterCursorPos((prev) => {
+            if (filterSelectionStart == null) setFilterSelectionStart(prev);
+            return Math.max(0, prev - 1);
+          });
+          return;
+        }
+        if (!key.ctrl && !key.meta && key.shift && key.rightArrow) {
+          setFilterCursorPos((prev) => {
+            if (filterSelectionStart == null) setFilterSelectionStart(prev);
+            return Math.min(typedQuery.length, prev + 1);
+          });
+          return;
+        }
+        if (key.home || (key.ctrl && input === "a")) {
+          setFilterSelectionStart(null);
+          setFilterCursorPos(0);
+          return;
+        }
+        if (key.end || (key.ctrl && input === "e")) {
+          setFilterSelectionStart(null);
+          setFilterCursorPos(typedQuery.length);
+          return;
+        }
+        if (key.ctrl && input === "u") {
+          setTypedQuery("");
+          setFilterCursorPos(0);
+          setFilterSelectionStart(null);
+          return;
+        }
+        if (key.ctrl && input === "k") {
+          setTypedQuery((prev) => prev.slice(0, filterCursorPos));
+          return;
+        }
+        if (key.ctrl && input === "w") {
+          setTypedQuery((prev) => {
+            const cp = filterCursorPos;
+            const start = wordBoundaryLeft(prev, cp);
+            setFilterCursorPos(start);
+            setFilterSelectionStart(null);
+            return prev.slice(0, start) + prev.slice(cp);
+          });
+          return;
+        }
+        if (key.meta && input === "d") {
+          setTypedQuery((prev) => {
+            const cp = filterCursorPos;
+            const end = wordBoundaryRight(prev, cp);
+            return prev.slice(0, cp) + prev.slice(end);
+          });
+          return;
+        }
+        if ((key.meta || key.ctrl) && key.backspace) {
+          setTypedQuery((prev) => {
+            const cp = filterCursorPos;
+            const start = wordBoundaryLeft(prev, cp);
+            setFilterCursorPos(start);
+            setFilterSelectionStart(null);
+            return prev.slice(0, start) + prev.slice(cp);
+          });
+          return;
+        }
+        if (key.backspace && !key.ctrl && !key.meta) {
+          setTypedQuery((prev) => {
+            const cp = filterCursorPos;
+            if (filterSelectionStart != null) {
+              const a = Math.min(filterSelectionStart, cp);
+              const b = Math.max(filterSelectionStart, cp);
+              setFilterCursorPos(a);
+              setFilterSelectionStart(null);
+              return prev.slice(0, a) + prev.slice(b);
+            }
+            if (cp > 0) {
+              setFilterCursorPos(cp - 1);
+              return prev.slice(0, cp - 1) + prev.slice(cp);
+            }
+            return prev;
+          });
+          return;
+        }
+        if (key.delete) {
+          setTypedQuery((prev) => {
+            const cp = filterCursorPos;
+            if (filterSelectionStart != null) {
+              const a = Math.min(filterSelectionStart, cp);
+              const b = Math.max(filterSelectionStart, cp);
+              setFilterCursorPos(a);
+              setFilterSelectionStart(null);
+              return prev.slice(0, a) + prev.slice(b);
+            }
+            if (cp < prev.length) {
+              return prev.slice(0, cp) + prev.slice(cp + 1);
+            }
+            return prev;
+          });
+          return;
+        }
+        if (!key.ctrl && !key.meta && input && input.length === 1) {
+          const cp = filterCursorPos;
+          const sel = filterSelectionStart;
+          setTypedQuery((prev) => {
+            if (sel != null && sel !== cp) {
+              const a = Math.min(sel, cp);
+              const b = Math.max(sel, cp);
+              return prev.slice(0, a) + input + prev.slice(b);
+            }
+            return prev.slice(0, cp) + input + prev.slice(cp);
+          });
+          setFilterCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + 1);
+          setFilterSelectionStart(null);
+          return;
+        }
+      } else {
+        // Items-focused: typing always appends, backspace removes last char
+        if (input && input.length === 1 && !key.ctrl && !key.meta) {
+          setTypedQuery((q) => q + input);
+          return;
+        }
+        if (key.backspace && !key.ctrl && !key.meta) {
+          setTypedQuery((q) => q.slice(0, -1));
+          return;
+        }
       }
       return;
     }
@@ -625,7 +811,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
                     len === 0
                       ? 0
                       : Math.min(pickerState.selectedIndex, len - 1);
-                  return { ...pickerState, selectedIndex: si, filterQuery: typedQuery };
+                  return { ...pickerState, selectedIndex: si, filterQuery: typedQuery, filterCursorPos: pickerFilterFocused ? filterCursorPos : undefined, filterSelectionStart: pickerFilterFocused ? (filterSelectionStart ?? undefined) : undefined };
                 })()
               : null
           }

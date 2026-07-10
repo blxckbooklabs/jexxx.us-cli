@@ -4,6 +4,68 @@ import type { PickerItemDef } from "./dye-types.js";
 import { THEME } from "../theme.js";
 import { OverlayCenter } from "./OverlayCenter.js";
 
+/**
+ * Render the filter query with an editor-style cursor at cursorPos and
+ * an optional word selection highlighted in pink inverse (matching the
+ * main chat input's selection rendering).
+ */
+function FilterInput({
+  query,
+  cursorPos,
+  selectionStart,
+}: {
+  query: string;
+  cursorPos: number;
+  selectionStart?: number | undefined;
+}): React.ReactElement {
+  const cp = Math.max(0, Math.min(cursorPos, query.length));
+  const sel = selectionStart ?? -1;
+  if (sel >= 0 && sel !== cp) {
+    // Selection active
+    const a = Math.min(sel, cp);
+    const b = Math.max(sel, cp);
+    if (a === cp) {
+      // Cursor is at the start of selection (backward selection)
+      const cursorCh = query[a] ?? " ";
+      return (
+        <Text color={THEME.pink}>
+          {"> "}
+          {query.slice(0, a)}
+          <Text inverse>{cursorCh}</Text>
+          <Text inverse color={THEME.pink}>
+            {query.slice(a + 1, b)}
+          </Text>
+          {query.slice(b)}
+        </Text>
+      );
+    }
+    // Forward selection (cursor at b)
+    const cursorCh = query[b] ?? " ";
+    return (
+      <Text color={THEME.pink}>
+        {"> "}
+        {query.slice(0, a)}
+        <Text inverse color={THEME.pink}>
+          {query.slice(a, b)}
+        </Text>
+        {query.slice(b, cp)}
+        <Text inverse>{cursorCh}</Text>
+        {query.slice(cp + 1)}
+      </Text>
+    );
+  }
+  // No selection — just show cursor
+  const ch = query[cp] ?? " ";
+  return (
+    <Text color={THEME.pink}>
+      {"> "}
+      {query.slice(0, cp)}
+      <Text inverse>{ch}</Text>
+      {query.slice(cp + 1)}
+    </Text>
+  );
+}
+
 export interface PickerDisplayState {
   items: PickerItemDef[];
   title?: string;
@@ -11,6 +73,10 @@ export interface PickerDisplayState {
   hideFilter?: boolean;
   statusHeader?: string;
   filterQuery: string;
+  /** 0-based cursor position within filterQuery. Undefined = no cursor (not focused). */
+  filterCursorPos?: number | undefined;
+  /** Start of selection in filterQuery (<= filterCursorPos). Undefined = no selection. */
+  filterSelectionStart?: number | undefined;
 }
 
 function filterItems(items: PickerItemDef[], query: string): PickerItemDef[] {
@@ -104,9 +170,15 @@ export const PickerOverlay: React.FC<PickerOverlayProps> = ({
         ) : null}
         {!hideFilter ? (
           <Box height={2} paddingLeft={1} paddingRight={1}>
-            <Text color={filterFocused ? THEME.pink : THEME.textMuted}>
-              {filterFocused ? `> ${state.filterQuery}█` : "type to filter"}
-            </Text>
+            {filterFocused ? (
+              <FilterInput
+                query={state.filterQuery}
+                cursorPos={state.filterCursorPos ?? state.filterQuery.length}
+                selectionStart={state.filterSelectionStart}
+              />
+            ) : (
+              <Text color={THEME.textMuted}>type to filter</Text>
+            )}
           </Box>
         ) : null}
         <Box flexGrow={1} flexDirection="column">
