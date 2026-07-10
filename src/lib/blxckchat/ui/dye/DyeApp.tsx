@@ -82,6 +82,9 @@ export const DyeApp: React.FC<DyeAppProps> = ({
   const [pickerFilterFocused, setPickerFilterFocused] = React.useState(false);
   const [filterCursorPos, setFilterCursorPos] = React.useState(0);
   const [filterSelectionStart, setFilterSelectionStart] = React.useState<number | null>(null);
+  // Search overlay cursor/selection state
+  const [searchCursorPos, setSearchCursorPos] = React.useState(0);
+  const [searchSelectionStart, setSearchSelectionStart] = React.useState<number | null>(null);
   const pickerResolveRef = React.useRef<
     ((v: PickerItemDef | null) => void) | null
   >(null);
@@ -236,9 +239,24 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         });
         setFilterCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + normalized.length);
         setFilterSelectionStart(null);
+        return;
+      }
+      if (store.searchVisible) {
+        const cp = searchCursorPos;
+        const sel = searchSelectionStart;
+        setTypedQuery((prev) => {
+          if (sel != null && sel !== cp) {
+            const a = Math.min(sel, cp);
+            const b = Math.max(sel, cp);
+            return prev.slice(0, a) + normalized + prev.slice(b);
+          }
+          return prev.slice(0, cp) + normalized + prev.slice(cp);
+        });
+        setSearchCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + normalized.length);
+        setSearchSelectionStart(null);
       }
     },
-    { isActive: Boolean(promptState || (pickerState && pickerFilterFocused)) },
+    { isActive: Boolean(promptState || (pickerState && pickerFilterFocused) || store.searchVisible) },
   );
 
   // Word-boundary helpers (mirrors the same logic in InputView.tsx)
@@ -519,11 +537,17 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       return;
     }
 
+    // ---- Editor shortcuts for search filter (same pattern as picker) ----
     if (store.searchVisible) {
+      const cp = searchCursorPos;
+      const sel = searchSelectionStart;
+
       if (key.escape) {
         store.setSearchVisible(false);
         store.setSearchQuery("");
         setTypedQuery("");
+        setSearchCursorPos(0);
+        setSearchSelectionStart(null);
         return;
       }
       if (key.return) {
@@ -531,12 +555,176 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         store.setSearchQuery(typedQuery);
         return;
       }
-      if (key.backspace) {
-        setTypedQuery((q) => q.slice(0, -1));
+
+      // Word jump (Ctrl/Meta + Left/Right, no Shift)
+      if ((key.meta || key.ctrl) && !key.shift && key.leftArrow) {
+        setSearchSelectionStart(null);
+        setSearchCursorPos((prev) => wordBoundaryLeft(typedQuery, prev));
         return;
       }
-      if (input && input.length === 1 && !key.ctrl && !key.meta) {
-        setTypedQuery((q) => q + input);
+      if ((key.meta || key.ctrl) && !key.shift && key.rightArrow) {
+        setSearchSelectionStart(null);
+        setSearchCursorPos((prev) => wordBoundaryRight(typedQuery, prev));
+        return;
+      }
+
+      // Word selection (Ctrl/Meta + Shift + Left/Right)
+      if ((key.meta || key.ctrl) && key.shift && key.leftArrow) {
+        setSearchCursorPos((prev) => {
+          if (searchSelectionStart == null) setSearchSelectionStart(prev);
+          return wordBoundaryLeft(typedQuery, prev);
+        });
+        return;
+      }
+      if ((key.meta || key.ctrl) && key.shift && key.rightArrow) {
+        setSearchCursorPos((prev) => {
+          if (searchSelectionStart == null) setSearchSelectionStart(prev);
+          return wordBoundaryRight(typedQuery, prev);
+        });
+        return;
+      }
+
+      // Character navigation (Left/Right without modifiers)
+      if (!key.ctrl && !key.meta && !key.shift && key.leftArrow) {
+        setSearchSelectionStart(null);
+        setSearchCursorPos((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (!key.ctrl && !key.meta && !key.shift && key.rightArrow) {
+        setSearchSelectionStart(null);
+        setSearchCursorPos((prev) => Math.min(typedQuery.length, prev + 1));
+        return;
+      }
+
+      // Character selection (Shift+Left/Right without Ctrl/Meta)
+      if (!key.ctrl && !key.meta && key.shift && key.leftArrow) {
+        setSearchCursorPos((prev) => {
+          if (searchSelectionStart == null) setSearchSelectionStart(prev);
+          return Math.max(0, prev - 1);
+        });
+        return;
+      }
+      if (!key.ctrl && !key.meta && key.shift && key.rightArrow) {
+        setSearchCursorPos((prev) => {
+          if (searchSelectionStart == null) setSearchSelectionStart(prev);
+          return Math.min(typedQuery.length, prev + 1);
+        });
+        return;
+      }
+
+      // Home / Ctrl+A → cursor to start
+      if (key.home || (key.ctrl && input === "a")) {
+        setSearchSelectionStart(null);
+        setSearchCursorPos(0);
+        return;
+      }
+
+      // End / Ctrl+E → cursor to end
+      if (key.end || (key.ctrl && input === "e")) {
+        setSearchSelectionStart(null);
+        setSearchCursorPos(typedQuery.length);
+        return;
+      }
+
+      // Ctrl+U → delete entire line
+      if (key.ctrl && input === "u") {
+        setTypedQuery("");
+        setSearchCursorPos(0);
+        setSearchSelectionStart(null);
+        return;
+      }
+
+      // Ctrl+K → delete from cursor to end
+      if (key.ctrl && input === "k") {
+        setTypedQuery((prev) => prev.slice(0, searchCursorPos));
+        return;
+      }
+
+      // Ctrl+W → delete word left
+      if (key.ctrl && input === "w") {
+        setTypedQuery((prev) => {
+          const c = searchCursorPos;
+          const start = wordBoundaryLeft(prev, c);
+          setSearchCursorPos(start);
+          setSearchSelectionStart(null);
+          return prev.slice(0, start) + prev.slice(c);
+        });
+        return;
+      }
+
+      // Meta+D → delete word right
+      if (key.meta && input === "d") {
+        setTypedQuery((prev) => {
+          const c = searchCursorPos;
+          const end = wordBoundaryRight(prev, c);
+          return prev.slice(0, c) + prev.slice(end);
+        });
+        return;
+      }
+
+      // Ctrl/Meta + Backspace → delete word left
+      if ((key.meta || key.ctrl) && key.backspace) {
+        setTypedQuery((prev) => {
+          const c = searchCursorPos;
+          const start = wordBoundaryLeft(prev, c);
+          setSearchCursorPos(start);
+          setSearchSelectionStart(null);
+          return prev.slice(0, start) + prev.slice(c);
+        });
+        return;
+      }
+
+      // Backspace
+      if (key.backspace && !key.ctrl && !key.meta) {
+        setTypedQuery((prev) => {
+          const c = searchCursorPos;
+          if (searchSelectionStart != null) {
+            const a = Math.min(searchSelectionStart, c);
+            const b = Math.max(searchSelectionStart, c);
+            setSearchCursorPos(a);
+            setSearchSelectionStart(null);
+            return prev.slice(0, a) + prev.slice(b);
+          }
+          if (c > 0) {
+            setSearchCursorPos(c - 1);
+            return prev.slice(0, c - 1) + prev.slice(c);
+          }
+          return prev;
+        });
+        return;
+      }
+
+      // Delete
+      if (key.delete) {
+        setTypedQuery((prev) => {
+          const c = searchCursorPos;
+          if (searchSelectionStart != null) {
+            const a = Math.min(searchSelectionStart, c);
+            const b = Math.max(searchSelectionStart, c);
+            setSearchCursorPos(a);
+            setSearchSelectionStart(null);
+            return prev.slice(0, a) + prev.slice(b);
+          }
+          if (c < prev.length) {
+            return prev.slice(0, c) + prev.slice(c + 1);
+          }
+          return prev;
+        });
+        return;
+      }
+
+      // Regular character typing
+      if (!key.ctrl && !key.meta && input && input.length === 1) {
+        setTypedQuery((prev) => {
+          if (sel != null && sel !== cp) {
+            const a = Math.min(sel, cp);
+            const b = Math.max(sel, cp);
+            return prev.slice(0, a) + input + prev.slice(b);
+          }
+          return prev.slice(0, cp) + input + prev.slice(cp);
+        });
+        setSearchCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + 1);
+        setSearchSelectionStart(null);
         return;
       }
       return;
@@ -822,7 +1010,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           <DeviceLoginOverlay state={{ status: deviceLoginText }} />
         ) : null}
         <ConfirmModal dialog={store.confirmDialog} />
-        {store.searchVisible ? <SearchOverlay query={typedQuery} /> : null}
+        {store.searchVisible ? <SearchOverlay query={typedQuery} cursorPos={searchCursorPos} selectionStart={searchSelectionStart ?? undefined} /> : null}
         {store.hotkeysVisible ? <HotkeysOverlay /> : null}
         <ToastView
           message={store.toast?.message ?? null}
