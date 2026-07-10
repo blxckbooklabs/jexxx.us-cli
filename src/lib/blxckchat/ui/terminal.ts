@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import blessed from "blessed";
-
 import { AgentAbortedError, runAgent } from "../agent-loop.js";
 import type { Provider } from "../providers/types.js";
 import type { BlxckchatTool } from "../tools/types.js";
@@ -15,22 +13,13 @@ import {
 import { resolveProvider } from "../providers/registry.js";
 import { cycleModelOption, listModelOptions } from "../providers/models.js";
 
-import { createTopBar } from "./components/top-bar.js";
-import { createCrtBackdrop } from "./components/crt-backdrop.js";
 import {
   formatHeroHint,
   formatHeroSubtitle,
-  renderJexxxusHeroBlessed,
   renderJexxxusHeroPlain,
   type JexxxusHeroMeta,
 } from "./components/jexxxus-hero.js";
 import { THEME } from "./theme.js";
-import { createMessageBox } from "./components/message-box.js";
-import { createInputBox } from "./components/input-box.js";
-import { bindFocusedKey } from "./editor/focused-key.js";
-import { createStatusBar } from "./components/status-bar.js";
-import { createSlashPopup } from "./components/slash-popup.js";
-import { createSearchOverlay } from "./components/search-overlay.js";
 import {
   createSession,
   addUserMessage,
@@ -40,9 +29,12 @@ import {
   type TerminalSession,
   type ToolStatus,
 } from "./session/session-store.js";
-import { autosaveSession, loadAutosaveSession, shouldAutosave } from "./session/autosave.js";
+import {
+  autosaveSession,
+  loadAutosaveSession,
+  shouldAutosave,
+} from "./session/autosave.js";
 import { branchUndo } from "./session/branch.js";
-import { escapeBlessed } from "./renderer/markdown.js";
 import { StreamBuffer } from "./renderer/streaming.js";
 import {
   StreamThinkingParser,
@@ -52,7 +44,6 @@ import {
 import { extractThinkingBlocks } from "./components/thinking-block.js";
 import {
   buildChromeDigestPlain,
-  buildTuISnapshot,
   buildTuISnapshotWithChrome,
   type ChromeDigestInput,
 } from "./renderer/plain-text.js";
@@ -63,34 +54,20 @@ import {
   writeChromeDigest,
   writeSnapshot,
 } from "./session/tui-snapshot.js";
-import { getSlashSuggestions } from "./slash/autocomplete.js";
 import { coerceSlashLine } from "./slash/coerce.js";
-import { dispatchSlashCommand, isSlashCommand, parseSlashInput } from "./slash/handler.js";
-
-import { bindExitKeys, gracefulTuiExit } from "./exit.js";
-import { createHotkeysOverlay } from "./components/hotkeys-overlay.js";
-import { createDivinityPickerOverlay } from "./components/divinity-picker-overlay.js";
-import { createModelPickerOverlay } from "./components/model-picker-overlay.js";
-import { createProviderOverlay } from "./components/provider-overlay.js";
+import {
+  dispatchSlashCommand,
+  isSlashCommand,
+  parseSlashInput,
+} from "./slash/handler.js";
+import { writeTerminalResetSequences } from "./tty.js";
 import { getDivinityPersonaById } from "../divinities/source.js";
 import { MessageQueue } from "./message-queue.js";
-import {
-  registerOverlayActiveCheck,
-  registerSlashMenuDismiss,
-} from "./menu-mutex.js";
-import { openExternalEditor } from "./external-editor.js";
-import { createAuthPickerOverlay } from "./components/auth-picker-overlay.js";
-import { createDeviceLoginOverlay } from "./components/device-login-overlay.js";
-import { createToastOverlay } from "./components/toast-overlay.js";
-import { createAuthTuiActions } from "./auth-tui.js";
 import { logCrash } from "../crash-log.js";
-import {
-  forceSgrMouseMode,
-  isBlessedMouseEnabled,
-  pauseBlessedForConsole,
-  restoreTerminalForReadline,
-  suspendBlessedToShell,
-} from "./tty.js";
+import { openExternalEditor } from "./external-editor.js";
+import type { DyeActionCallbacks } from "./dye/dye-types.js";
+import type { PickerItemDef } from "./dye/dye-types.js";
+import { createDyeTui } from "./dye/dye-adapter.js";
 
 export interface TerminalChatOptions {
   providerLabel?: string;
@@ -99,65 +76,11 @@ export interface TerminalChatOptions {
   resume?: boolean;
 }
 
-function createBlessedConfirm(
-  screen: blessed.Widgets.Screen,
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<boolean> {
-  return new Promise((resolve) => {
-    const argsPreview = JSON.stringify(args, null, 2).slice(0, 400);
-    const modal = blessed.box({
-      parent: screen,
-      top: "center",
-      left: "center",
-      width: "80%",
-      height: 12,
-      border: { type: "line" },
-      tags: true,
-      label: " Confirm Tool ",
-      style: {
-        fg: THEME.text,
-        bg: THEME.bgElevated,
-        border: { fg: THEME.pink },
-      },
-      content: [
-        `{#ec4899-fg}░░ tool confirm ░░{/}`,
-        `{#ec4899-fg}BLXCKCHAT{/} wants to run {bold}${toolName}{/bold}`,
-        "",
-        `{gray-fg}${escapeBlessed(argsPreview)}{/gray-fg}`,
-        "",
-        "{#67e8f9-fg}Y{/} allow  {#f87171-fg}N{/} decline",
-      ].join("\n"),
-    });
-
-    modal.key(["y", "Y"], () => {
-      modal.destroy();
-      screen.render();
-      resolve(true);
-    });
-
-    modal.key(["n", "N", "escape"], () => {
-      modal.destroy();
-      screen.render();
-      resolve(false);
-    });
-
-    modal.key(["C-c", "C-d"], () => {
-      modal.destroy();
-      gracefulTuiExit(screen);
-    });
-
-    modal.focus();
-    screen.render();
-  });
-}
-
 export async function startTerminalChat(
   provider: Provider,
   tools: BlxckchatTool[],
   options: TerminalChatOptions,
 ): Promise<void> {
-  // Load auth before blessed takes over stdout (console.warn corrupts the TUI).
   const creds = loadCredentials({ quiet: true });
   const authLabel = creds
     ? formatCredentialsShortLabel(creds)
@@ -168,62 +91,68 @@ export async function startTerminalChat(
     ? (loadAutosaveSession() ?? createSession())
     : createSession();
 
-  let screenRef: blessed.Widgets.Screen | undefined;
-  try {
-    const screen = blessed.screen({
-      smartCSR: true,
-      title: "JEXXXUS",
-      fullUnicode: true,
-      mouse: isBlessedMouseEnabled(),
-      terminal: process.env.TERM,
-      style: { bg: THEME.bg },
-    });
-    screenRef = screen;
-
-    const crtBackdrop = createCrtBackdrop(screen, { top: 2, bottom: 4 });
-
   let activeConfig: StoredProviderConfig = { ...options.storedConfig };
   let activeProvider: Provider = provider;
-
-  let topBar!: ReturnType<typeof createTopBar>;
-  let messageBox!: ReturnType<typeof createMessageBox>;
-  let statusBar!: ReturnType<typeof createStatusBar>;
-  let inputBox!: ReturnType<typeof createInputBox>;
-  const slashPopup = createSlashPopup(screen);
-  const hotkeysOverlay = createHotkeysOverlay(screen);
-  const toastOverlay = createToastOverlay(screen);
-
-  const showCopiedToast = (): void => {
-    toastOverlay.show("Copied to clipboard");
-  };
-
-  const showCopyFailedToast = (): void => {
-    toastOverlay.show("Copy failed — see ~/.jexxxus snapshot", "error");
-  };
-  const messageQueue = new MessageQueue();
-
-  let modelPickerOverlay!: ReturnType<typeof createModelPickerOverlay>;
-  let providerOverlay!: ReturnType<typeof createProviderOverlay>;
-  let divinityPickerOverlay!: ReturnType<typeof createDivinityPickerOverlay>;
-  let authPickerOverlay!: ReturnType<typeof createAuthPickerOverlay>;
-  let deviceLoginOverlay!: ReturnType<typeof createDeviceLoginOverlay>;
 
   let isProcessing = false;
   let abortController: AbortController | null = null;
 
   let cachedModelOptions = await listModelOptions(activeConfig);
 
+  const exportSession = async (): Promise<string | null> => {
+    try {
+      const { join } = await import("node:path");
+      const { homedir } = await import("node:os");
+      const { writeFileSync, mkdirSync } = await import("node:fs");
+      const dir = join(homedir(), ".jexxxus");
+      mkdirSync(dir, { recursive: true });
+      const filePath = join(dir, `session-export-${Date.now()}.json`);
+      const data = JSON.stringify(
+        {
+          messages: session.messages,
+          conversationHistory: session.conversationHistory,
+          toolResults: session.toolResults,
+          thinkingBlocks: session.thinkingBlocks,
+          activeDivinity: session.activeDivinity,
+          exportedAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      );
+      writeFileSync(filePath, data, "utf-8");
+      tui.statusBar.setMessage(`Session exported → ${filePath}`);
+      return filePath;
+    } catch {
+      tui.statusBar.setMessage("Export failed");
+      return null;
+    }
+  };
+
+  const newSession = (): void => {
+    session.messages = [];
+    session.conversationHistory = [];
+    session.toolResults = [];
+    session.thinkingBlocks = [];
+    session.activeDivinity = null;
+    tui.messageBox.clearChat();
+    showIdleHero();
+    tui.statusBar.setMessage("New session — type a message to begin");
+  };
+
+  const messageQueue = new MessageQueue();
+
   let heroMeta: JexxxusHeroMeta = {
     authLabel,
     toolCount,
-    providerLabel: options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
+    providerLabel:
+      options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
   };
 
   const showIdleHero = (): void => {
-    const heroWidth = Math.max(40, (screen.width as number) - 4);
-    messageBox.showHero(
-      renderJexxxusHeroPlain(heroWidth, heroMeta),
-      renderJexxxusHeroBlessed(heroWidth, heroMeta),
+    const width = process.stdout.columns ?? 80;
+    tui.messageBox.showHero(
+      renderJexxxusHeroPlain(Math.max(40, width - 4), heroMeta),
+      heroMeta,
     );
   };
 
@@ -233,37 +162,16 @@ export async function startTerminalChat(
       ? formatCredentialsShortLabel(liveCreds)
       : "not authenticated";
     heroMeta = { ...heroMeta, authLabel: liveAuth };
-    if (messageBox.hasHero()) {
-      messageBox.dismissHero();
+    if (tui.messageBox.hasHero()) {
+      tui.messageBox.dismissHero();
       showIdleHero();
     }
     syncSnapshot();
   };
 
-  deviceLoginOverlay = createDeviceLoginOverlay(screen, {
-    onCopied: showCopiedToast,
-    onCopyFailed: showCopyFailedToast,
-  });
-
-  const authActions = createAuthTuiActions({
-    screen,
+  const authActions = createAuthTuiActionsNoScreen({
     onAuthChanged: refreshAuthChrome,
-    deviceLoginOverlay,
   });
-
-  authPickerOverlay = createAuthPickerOverlay(screen, {
-    authActions,
-    onMessage: (message) => {
-      messageBox.appendSystem(message);
-      statusBar.setMessage(message.split("\n")[0] ?? message);
-    },
-    onFocusInput: () => inputBox.focus(),
-  });
-
-  const onDivinityChatCleared = (): void => {
-    messageBox.clearChat();
-    showIdleHero();
-  };
 
   const runSlash = async (command: string): Promise<void> => {
     const parsed = parseSlashInput(command);
@@ -275,35 +183,32 @@ export async function startTerminalChat(
       copySnapshot,
       copyChromeDigest,
       authActions,
-      openModelPicker: () => modelPickerOverlay.open(),
-      openProviderPicker: () => providerOverlay.open(),
-      openDivinityPicker: () => divinityPickerOverlay.open(),
-      openAuthPicker: () => authPickerOverlay.open(),
-      setupProvider: (catalogId) => providerOverlay.setup(catalogId),
+      openModelPicker: () => void openModelPicker(),
+      openProviderPicker: () => void openProviderPicker(),
+      openDivinityPicker: () => void openDivinityPicker(),
+      openAuthPicker: () => void openAuthPicker(),
+      setupProvider: (catalogId) => openProviderPicker(catalogId),
       onDivinityActivated: onDivinityChatCleared,
     });
     if (parsed.command === "reset") {
-      messageBox.clearChat();
+      tui.messageBox.clearChat();
       showIdleHero();
-      statusBar.setMessage("Session reset — type a message to begin");
+      tui.statusBar.setMessage("Session reset — type a message to begin");
       return;
     }
     for (const msg of result.messages) {
-      messageBox.appendSystem(msg);
+      tui.messageBox.appendSystem(msg);
     }
     if (result.exit) {
       requestExit();
       return;
-    }
-    if (!result.deferInputFocus) {
-      inputBox.focus();
     }
   };
 
   const cycleModel = async (direction: 1 | -1): Promise<void> => {
     const next = cycleModelOption(cachedModelOptions, activeConfig, direction);
     if (!next) {
-      statusBar.setMessage("No models available to cycle");
+      tui.statusBar.setMessage("No models available to cycle");
       return;
     }
     const updated: StoredProviderConfig = {
@@ -313,31 +218,32 @@ export async function startTerminalChat(
     };
     upsertProvider(updated);
     setActiveConfig(updated, resolveProvider(updated));
-    messageBox.appendSystem(`Model → ${updated.provider}/${updated.model}`);
-    statusBar.setMessage(`${updated.provider}/${updated.model}`);
+    tui.messageBox.appendSystem(`Model → ${updated.provider}/${updated.model}`);
+    tui.statusBar.setMessage(`${updated.provider}/${updated.model}`);
   };
 
   const copyLastReply = async (): Promise<void> => {
-    const text = messageBox.getLastAssistantPlainText();
+    const text = tui.messageBox.getLastAssistantPlainText();
     if (!text?.trim()) {
-      statusBar.setMessage("No assistant reply to copy");
+      tui.statusBar.setMessage("No assistant reply to copy");
       return;
     }
     const copied = await copyToClipboard(text);
-    statusBar.setMessage(copied ? "Last reply copied" : "Copy failed — see TUI snapshot");
+    tui.statusBar.setMessage(
+      copied ? "Last reply copied" : "Copy failed — see TUI snapshot",
+    );
   };
-
-  const canSnapshot = (): boolean =>
-    Boolean(topBar && messageBox && statusBar && inputBox);
 
   const collectChromeDigestInput = (): ChromeDigestInput => {
     const liveCreds = loadCredentials({ quiet: true });
     const liveAuth = liveCreds
       ? formatCredentialsDisplayName(liveCreds)
       : "not authenticated";
-    const providerLabel = topBar.getSubtitle();
+    const providerLabel = tui.topBar.getSubtitle();
     const meta: JexxxusHeroMeta = {
-      authLabel: liveCreds ? formatCredentialsShortLabel(liveCreds) : "not authenticated",
+      authLabel: liveCreds
+        ? formatCredentialsShortLabel(liveCreds)
+        : "not authenticated",
       toolCount,
       providerLabel,
     };
@@ -347,31 +253,30 @@ export async function startTerminalChat(
       toolCount,
       heroSubtitle: formatHeroSubtitle(meta),
       heroHint: formatHeroHint(),
-      statusBar: statusBar.getMessage(),
-      inputValue: inputBox.getValue(),
+      statusBar: tui.statusBar.getMessage(),
+      inputValue: tui.inputBox.getValue(),
       divinity: session.activeDivinity?.name ?? null,
     };
   };
 
   const buildSnapshotParts = () => ({
-    width: (screen.width as number) || 80,
-    topBar: topBar.getPlainText(),
-    messages: messageBox.getPlainText(),
-    statusBar: statusBar.getPlainText(),
-    input: inputBox.getPlainText(),
+    width: process.stdout.columns ?? 80,
+    topBar: tui.store.subtitle,
+    messages: tui.store.blocks.map((b) => b.content).join("\n"),
+    statusBar: tui.store.statusMessage,
+    input: tui.store.inputValue,
   });
 
   const syncSnapshot = (): void => {
-    if (!canSnapshot()) return;
     const chrome = buildChromeDigestPlain(collectChromeDigestInput());
     writeChromeDigest(chrome);
     writeSnapshot(buildTuISnapshotWithChrome(chrome, buildSnapshotParts()));
   };
 
-  const copyChromeDigest = async (): Promise<{ path: string; copied: boolean }> => {
-    if (!canSnapshot()) {
-      return { path: getChromeDigestPath(), copied: false };
-    }
+  const copyChromeDigest = async (): Promise<{
+    path: string;
+    copied: boolean;
+  }> => {
     const chrome = buildChromeDigestPlain(collectChromeDigestInput());
     const path = writeChromeDigest(chrome);
     const copied = await copyToClipboard(chrome);
@@ -379,9 +284,6 @@ export async function startTerminalChat(
   };
 
   const copySnapshot = async (): Promise<{ path: string; copied: boolean }> => {
-    if (!canSnapshot()) {
-      return { path: getSnapshotPath(), copied: false };
-    }
     const chrome = buildChromeDigestPlain(collectChromeDigestInput());
     const snapshot = buildTuISnapshotWithChrome(chrome, buildSnapshotParts());
     const path = writeSnapshot(snapshot);
@@ -389,76 +291,499 @@ export async function startTerminalChat(
     return { path, copied };
   };
 
-  const onSnapshotUpdate = (): void => {
-    syncSnapshot();
-  };
-
-  const setActiveConfig = (config: StoredProviderConfig, nextProvider: Provider): void => {
+  const setActiveConfig = (
+    config: StoredProviderConfig,
+    nextProvider: Provider,
+  ): void => {
     activeConfig = config;
     activeProvider = nextProvider;
-    topBar.setSubtitle(`${config.provider}/${config.model}`);
+    tui.topBar.setSubtitle(`${config.provider}/${config.model}`);
     saveLastUsedProvider(config);
     void listModelOptions(activeConfig).then((opts) => {
       cachedModelOptions = opts;
     });
   };
 
-  modelPickerOverlay = createModelPickerOverlay(screen, {
-    getActiveConfig: () => activeConfig,
-    setActiveConfig,
-    onApplied: (message) => {
-      messageBox.appendSystem(message);
-      statusBar.setMessage(message);
-      inputBox.focus();
-    },
-  });
+  const openModelPicker = async (): Promise<void> => {
+    const options = await listModelOptions(activeConfig);
+    const items: PickerItemDef[] = options.map((opt) => {
+      const activeMarker =
+        opt.id === activeConfig.model && opt.provider === activeConfig.provider
+          ? "▸ "
+          : "";
+      return {
+        id: `${opt.provider}/${opt.id}`,
+        label: `${activeMarker}${opt.label}`,
+        description: opt.source,
+      };
+    });
+    const activeIdx = options.findIndex(
+      (o) =>
+        o.id === activeConfig.model && o.provider === activeConfig.provider,
+    );
+    if (!tui.overlay) return;
+    const picked = await tui.overlay.showPicker(items, {
+      title: "░ models ░",
+      selectedIndex: activeIdx >= 0 ? activeIdx : 0,
+    });
+    if (!picked) return;
+    const slash = picked.id.indexOf("/");
+    if (slash === -1) return;
+    const providerName = picked.id.slice(0, slash);
+    const modelName = picked.id.slice(slash + 1);
+    const updated: StoredProviderConfig = {
+      ...activeConfig,
+      provider: providerName,
+      model: modelName,
+    };
+    upsertProvider(updated);
+    setActiveConfig(updated, resolveProvider(updated));
+    tui.messageBox.appendSystem(`Model → ${providerName}/${modelName}`);
+    tui.statusBar.setMessage(`${providerName}/${modelName}`);
+  };
 
-  providerOverlay = createProviderOverlay(screen, {
-    getActiveConfig: () => activeConfig,
-    setActiveConfig,
-    onMessage: (message) => {
-      messageBox.appendSystem(message);
-      statusBar.setMessage(message);
-      inputBox.focus();
-    },
-    onError: (message) => {
-      messageBox.appendError(message);
-      statusBar.setMessage(message);
-      inputBox.focus();
-    },
-  });
+  const openProviderPicker = async (catalogId?: string): Promise<void> => {
+    const { listProvidersRedacted, getProviderByName } =
+      await import("../config.js");
+    const { getCatalogEntry, listCatalogEntries } =
+      await import("../providers/catalog.js");
 
-  divinityPickerOverlay = createDivinityPickerOverlay(screen, {
-    session,
-    getActiveDivinityId: () => session.activeDivinity?.id ?? null,
-    onChatCleared: onDivinityChatCleared,
-    onActivated: (message) => {
-      messageBox.appendSystem(message);
-      statusBar.setMessage(message.split("\n")[0] ?? message);
-      inputBox.focus();
-    },
-  });
-
-  const maybeAutosave = (): void => {
-    if (shouldAutosave(session.messages.length)) {
-      const path = autosaveSession(session);
-      statusBar.setMessage(`Autosaved → ${path}`);
+    if (catalogId) {
+      const entry = getCatalogEntry(catalogId);
+      if (!entry) {
+        tui.messageBox.appendError(`Unknown provider: ${catalogId}`);
+        return;
+      }
+      await runProviderSetupFlow(entry);
+      return;
     }
+
+    const items: PickerItemDef[] = [];
+    const activeName = activeConfig.name;
+
+    for (const p of listProvidersRedacted()) {
+      const markers = [
+        p.name === activeName ? "▸ active" : "",
+        p.isDefault ? "default" : "",
+        p.hasKey ? "" : "no key",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      items.push({
+        id: `saved:${p.name}`,
+        label: p.name,
+        description: `${p.label} · ${p.provider}/${p.model}${markers ? ` · ${markers}` : ""}`,
+      });
+    }
+
+    for (const entry of listCatalogEntries()) {
+      items.push({
+        id: `catalog:${entry.id}`,
+        label: `+ ${entry.label}`,
+        description: entry.hint ?? `Add API key · ${entry.id}`,
+      });
+    }
+
+    if (!tui.overlay) return;
+    const picked = await tui.overlay.showPicker(items, {
+      title: "░ providers ░",
+    });
+    if (!picked) {
+      tui.messageBox.appendSystem("Provider picker closed");
+      return;
+    }
+
+    if (picked.id.startsWith("catalog:")) {
+      const cid = picked.id.slice(8);
+      const entry = getCatalogEntry(cid);
+      if (!entry) {
+        tui.messageBox.appendError(`Unknown provider: ${cid}`);
+        return;
+      }
+      await runProviderSetupFlow(entry);
+      return;
+    }
+
+    if (picked.id.startsWith("saved:")) {
+      const name = picked.id.slice(6);
+      const resolved = getProviderByName(name);
+      if (!resolved) {
+        tui.messageBox.appendError(`Unknown profile "${name}"`);
+        return;
+      }
+      setActiveConfig(resolved, resolveProvider(resolved));
+      tui.messageBox.appendSystem(
+        `Switched to "${resolved.name}" (${resolved.provider}/${resolved.model})`,
+      );
+    }
+  };
+
+  const runProviderSetupFlow = async (
+    entry: import("../providers/catalog.js").ProviderCatalogEntry,
+  ): Promise<void> => {
+    if (!tui.overlay) return;
+    const { defaultModelFor, resolveBaseUrl, resolveEnvApiKey } =
+      await import("../providers/catalog.js");
+    const {
+      listProvidersRedacted,
+      getProviderByName,
+      upsertProvider: upsertP,
+      buildProviderConfig,
+    } = await import("../config.js");
+    const { listModelsForProvider } = await import("../providers/models.js");
+    const { resolveProvider: resolveP } =
+      await import("../providers/registry.js");
+
+    let apiKey: string | undefined;
+    let baseUrl: string | undefined;
+
+    try {
+      if (entry.requiresApiKey) {
+        const envKey = resolveEnvApiKey(entry);
+        const keyHint = envKey
+          ? `Env ${entry.envKeys?.[0] ?? "key"} detected — leave blank to use it`
+          : entry.hint;
+        const keyResult = await tui.overlay.showPrompt({
+          title: `░ ${entry.label} API key ░`,
+          label: "API key",
+          secret: true,
+          ...(keyHint !== undefined ? { hint: keyHint } : {}),
+        });
+        if (keyResult === null) {
+          tui.messageBox.appendSystem("Provider setup cancelled");
+          return;
+        }
+        if (keyResult) apiKey = keyResult;
+        else if (envKey) apiKey = envKey;
+        else {
+          tui.messageBox.appendError(`API key required for ${entry.label}`);
+          return;
+        }
+      }
+
+      if (entry.requiresBaseUrl) {
+        const urlResult = await tui.overlay.showPrompt({
+          title: `░ ${entry.label} base URL ░`,
+          label: "Base URL",
+          defaultValue: entry.baseUrl ?? "",
+          ...(entry.hint !== undefined ? { hint: entry.hint } : {}),
+        });
+        if (urlResult === null) {
+          tui.messageBox.appendSystem("Provider setup cancelled");
+          return;
+        }
+        baseUrl = urlResult || entry.baseUrl;
+        if (!baseUrl?.trim()) {
+          tui.messageBox.appendError("Base URL is required");
+          return;
+        }
+      } else if (entry.baseUrl) {
+        baseUrl = entry.baseUrl;
+      }
+
+      let model = defaultModelFor(entry);
+      const resolvedBaseUrl = resolveBaseUrl(entry, baseUrl);
+
+      const modelIds = await listModelsForProvider(entry.id, {
+        ...(apiKey ? { apiKey } : {}),
+        ...(resolvedBaseUrl ? { baseUrl: resolvedBaseUrl } : {}),
+      });
+
+      const modelItems: PickerItemDef[] = [
+        ...modelIds.map((id: string) => ({
+          id,
+          label: id,
+          description: isFreeTierZenModel(entry.id, id)
+            ? "free tier"
+            : entry.suggestedModels.includes(id)
+              ? "suggested"
+              : "gateway",
+        })),
+        {
+          id: "__custom__",
+          label: "Custom model id…",
+          description: "type your own",
+        },
+      ];
+
+      const modelPicked = await tui.overlay.showPicker(modelItems, {
+        title: `░ ${entry.label} model ░`,
+      });
+      if (!modelPicked) {
+        tui.messageBox.appendSystem("Provider setup cancelled");
+        return;
+      }
+      if (modelPicked.id === "__custom__") {
+        const custom = await tui.overlay.showPrompt({
+          title: "░ custom model ░",
+          label: "Model id",
+          defaultValue: defaultModelFor(entry),
+        });
+        if (custom === null) {
+          tui.messageBox.appendSystem("Provider setup cancelled");
+          return;
+        }
+        if (custom) model = custom;
+      } else {
+        model = modelPicked.id;
+      }
+
+      const existing = listProvidersRedacted().find(
+        (p: { provider: string }) => p.provider === entry.id,
+      );
+      const nameResult = await tui.overlay.showPrompt({
+        title: "░ profile name ░",
+        label: "Name",
+        defaultValue: existing?.name ?? entry.id,
+        hint: "Saved as /provider <name>",
+      });
+      if (nameResult === null) {
+        tui.messageBox.appendSystem("Provider setup cancelled");
+        return;
+      }
+
+      const defaultResult = await tui.overlay.showPrompt({
+        title: "░ set default? ░",
+        label: "Default (y/n)",
+        hint: "y = always start TUI with this profile · n = remember for this session only",
+        defaultValue: "n",
+      });
+      if (defaultResult === null) {
+        tui.messageBox.appendSystem("Provider setup cancelled");
+        return;
+      }
+
+      const built = buildProviderConfig({
+        catalogId: entry.id,
+        model,
+        name: nameResult || entry.id,
+        isDefault: Boolean(defaultResult?.toLowerCase().startsWith("y")),
+        ...(apiKey ? { apiKey } : {}),
+        ...(baseUrl ? { baseUrl } : {}),
+      });
+      upsertP(built);
+      setActiveConfig(built, resolveP(built));
+      tui.messageBox.appendSystem(
+        `Provider ready: "${built.name}" (${built.provider}/${built.model})`,
+      );
+    } catch (err) {
+      tui.messageBox.appendError(
+        err instanceof Error ? err.message : "Provider setup failed",
+      );
+    }
+  };
+
+  const openDivinityPicker = async (): Promise<void> => {
+    const { listDivinityPersonas, getDivinitiesSearchPaths } =
+      await import("../divinities/source.js");
+    const { activateDivinityPersona, formatDivinityActivationMessage } =
+      await import("../divinities/session.js");
+
+    const personas = listDivinityPersonas();
+    if (personas.length === 0) {
+      const checked = getDivinitiesSearchPaths()
+        .map((base: string) => base + "/Personas")
+        .join("\n  ");
+      tui.messageBox.appendSystem(
+        [
+          "No Divinities found (missing Personas/ under any search path).",
+          "Set JEXXXUS_OBSIDIAN_PERSONAS_PATH to jexxx.us-obsidian/Divinities, or clone the monorepo with jexxx.us-obsidian alongside jexxx.us-cli.",
+          checked ? `Checked:\n  ${checked}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+      return;
+    }
+
+    if (!tui.overlay) return;
+    const activeId = session.activeDivinity?.id ?? null;
+    const clearRow: PickerItemDef = {
+      id: "__clear__",
+      label: "  Return to BLXCKCHAT (clear persona)",
+      description: "Default agent · no divinity overlay",
+    };
+    const items: PickerItemDef[] = [
+      clearRow,
+      ...personas.map(
+        (p: { id: string; name: string; role?: string; pillar?: string }) => {
+          const marker = p.id === activeId ? "▸ " : "  ";
+          const desc = [p.role, p.pillar].filter(Boolean).join(" · ");
+          return {
+            id: p.id,
+            label: `${marker}${p.name}`,
+            description: desc || "",
+          };
+        },
+      ),
+    ];
+    const activeIdx = items.findIndex(
+      (i) => i.id === (activeId ?? "__clear__"),
+    );
+
+    const picked = await tui.overlay.showPicker(items, {
+      title: "░ divinities ░",
+      selectedIndex: activeIdx >= 0 ? activeIdx : 0,
+    });
+    if (!picked) return;
+
+    if (picked.id === "__clear__") {
+      session.activeDivinity = null;
+      session.conversationHistory = [];
+      session.messages = [];
+      session.toolResults = [];
+      session.thinkingBlocks = [];
+      onDivinityChatCleared();
+      tui.messageBox.appendSystem(
+        "Divinity cleared — BLXCKCHAT default agent restored.",
+      );
+      return;
+    }
+
+    const persona = personas.find((p: { id: string }) => p.id === picked.id);
+    if (!persona) return;
+    activateDivinityPersona(session, persona);
+    onDivinityChatCleared();
+    tui.messageBox.appendSystem(formatDivinityActivationMessage(persona));
+  };
+
+  const openAuthPicker = async (): Promise<void> => {
+    const {
+      loadCredentials: loadCreds,
+      getTokenExpiryMinutes,
+      deleteCredentials,
+    } = await import("../../auth.js");
+
+    const creds = loadCreds({ quiet: true });
+    const items: PickerItemDef[] = [];
+    let statusHeader = "";
+
+    if (!creds) {
+      statusHeader =
+        "JEXXXUS account: not signed in\nProvider profile is separate from account auth";
+      items.push({
+        id: "login",
+        label: "Sign in",
+        description: "Device authorization — same as jexxxus auth login",
+      });
+      items.push({
+        id: "continue",
+        label: "Continue without account",
+        description: "Keep chatting with your provider profile only",
+      });
+    } else {
+      const expiry = getTokenExpiryMinutes(creds);
+      const expiryStr =
+        expiry < 0 ? "EXPIRED" : `${Math.floor(expiry)}m remaining`;
+      statusHeader = `Signed in as: ${creds.email}\nToken: ${expiryStr} · User ${creds.userId.slice(0, 8)}…`;
+      items.push({
+        id: "continue",
+        label: "Continue",
+        description: "Return to chat with current session",
+      });
+      items.push({
+        id: "logout",
+        label: "Sign out",
+        description: "Revoke CLI access and delete stored credentials",
+      });
+    }
+
+    if (!tui.overlay) return;
+    const picked = await tui.overlay.showPicker(items, {
+      title: "░ JEXXXUS account ░",
+      hideFilter: true,
+      statusHeader,
+    });
+    if (!picked) return;
+
+    if (picked.id === "continue") return;
+    if (picked.id === "login") {
+      try {
+        const deviceLogin = tui.overlay.startDeviceLogin;
+        const newCreds = await deviceLogin();
+        const { saveCredentials } = await import("../../auth.js");
+        saveCredentials(newCreds);
+        refreshAuthChrome();
+        tui.messageBox.appendSystem(`Signed in as ${newCreds.email}`);
+      } catch (err) {
+        if (err instanceof Error && err.message === "cancelled") {
+          tui.messageBox.appendSystem("Login cancelled.");
+        } else {
+          tui.messageBox.appendError(
+            `Login failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+      return;
+    }
+    if (picked.id === "logout") {
+      deleteCredentials();
+      refreshAuthChrome();
+      tui.messageBox.appendSystem(
+        "Signed out. Run /auth login to connect secure.jexxx.us again.",
+      );
+    }
+  };
+
+  const onDivinityChatCleared = (): void => {
+    tui.messageBox.clearChat();
+    showIdleHero();
+  };
+
+  const showCopiedToast = (): void => {
+    tui.store.showToast("Copied to clipboard");
+  };
+
+  const showCopyFailedToast = (): void => {
+    tui.store.showToast("Copy failed — see ~/.jexxxus snapshot", "error");
   };
 
   const abortInFlight = (): void => {
     abortController?.abort();
   };
 
+  const handleEscapeLayer = (): void => {
+    if (isProcessing) {
+      abortInFlight();
+      return;
+    }
+  };
+
+  const persistSessionState = (): void => {
+    saveLastUsedProvider(activeConfig);
+    if (session.messages.length > 0) {
+      autosaveSession(session);
+    }
+  };
+
+  const requestExit = (): void => {
+    persistSessionState();
+    writeTerminalResetSequences();
+    process.exit(0);
+  };
+
+  const updateScrollStatus = (): void => {
+    const { pinnedToBottom, percent } = tui.messageBox.getScrollState();
+    if (pinnedToBottom) {
+      tui.statusBar.setMessage(
+        "Shift+↑↓ scroll · Ctrl+B history · / commands · Ctrl+Shift+Y chrome · ? hotkeys",
+      );
+    } else {
+      tui.statusBar.setMessage(
+        `History ${percent}% · End jump latest · Ctrl+B scroll · ? hotkeys`,
+      );
+    }
+  };
+
   const runTurn = async (trimmed: string): Promise<void> => {
     isProcessing = true;
     abortController = new AbortController();
-    statusBar.setMessage("Thinking...");
+    tui.statusBar.setMessage("Thinking...");
     addUserMessage(session, trimmed);
-    messageBox.appendUser(trimmed);
+    tui.messageBox.appendUser(trimmed);
 
-    const assistantBlockIndex = messageBox.appendAssistantStart();
-    messageBox.updateAssistantStream(
+    const assistantBlockIndex = tui.messageBox.appendAssistantStart();
+    tui.messageBox.updateAssistantStream(
       assistantBlockIndex,
       formatThinkingWaitState(),
       "",
@@ -469,7 +794,7 @@ export async function startTerminalChat(
 
     const pushStreamToUi = (): void => {
       const state = thinkingParser.getState();
-      messageBox.updateAssistantStream(
+      tui.messageBox.updateAssistantStream(
         assistantBlockIndex,
         formatLiveStreamDisplay(state),
         state.visible,
@@ -479,7 +804,7 @@ export async function startTerminalChat(
 
     const showToolPending = (toolName: string): void => {
       addToolResult(session, toolName, "Running...", "pending");
-      statusBar.setMessage(`⏳ Running tool: ${toolName}...`);
+      tui.statusBar.setMessage(`⏳ Running tool: ${toolName}...`);
     };
 
     const showToolComplete = (
@@ -489,9 +814,9 @@ export async function startTerminalChat(
     ): void => {
       const entry = updateToolResult(session, toolName, result, status);
       if (entry) {
-        messageBox.appendTools([entry]);
+        tui.messageBox.appendTools([entry]);
       }
-      statusBar.setMessage("Ready — ? for hotkeys · / for commands");
+      tui.statusBar.setMessage("Ready — ? for hotkeys · / for commands");
     };
 
     const activeDivinity = session.activeDivinity;
@@ -500,7 +825,10 @@ export async function startTerminalChat(
       : null;
     const persona =
       personaRecord && activeDivinity
-        ? { name: activeDivinity.name, systemPrompt: personaRecord.systemPrompt }
+        ? {
+            name: activeDivinity.name,
+            systemPrompt: personaRecord.systemPrompt,
+          }
         : undefined;
 
     try {
@@ -515,7 +843,7 @@ export async function startTerminalChat(
           onStreamReset: () => {
             streamBuffer.reset();
             thinkingParser.reset();
-            messageBox.updateAssistantStream(
+            tui.messageBox.updateAssistantStream(
               assistantBlockIndex,
               formatThinkingWaitState(),
               "",
@@ -536,7 +864,7 @@ export async function startTerminalChat(
           onSynthesisRetry: () => {
             streamBuffer.reset();
             thinkingParser.reset();
-            messageBox.updateAssistantStream(
+            tui.messageBox.updateAssistantStream(
               assistantBlockIndex,
               formatThinkingWaitState(),
               "",
@@ -544,7 +872,7 @@ export async function startTerminalChat(
             );
           },
           confirmToolCall: (toolName, args) =>
-            createBlessedConfirm(screen, toolName, args),
+            tui.callbacks.onConfirmTool(toolName, args),
         },
       );
 
@@ -568,7 +896,7 @@ export async function startTerminalChat(
       const visible =
         parsed.visibleContent || response || streamBuffer.getContent();
       addAssistantMessage(session, visible);
-      messageBox.finalizeAssistant(
+      tui.messageBox.finalizeAssistant(
         assistantBlockIndex,
         visible,
         mergedBlocks,
@@ -576,15 +904,20 @@ export async function startTerminalChat(
       maybeAutosave();
     } catch (err) {
       if (err instanceof AgentAbortedError) {
-        messageBox.cancelInFlightAssistant();
-        messageBox.appendSystem("Turn aborted.");
-        statusBar.setMessage("Aborted — ready");
+        tui.messageBox.cancelInFlightAssistant();
+        tui.messageBox.appendSystem("Turn aborted.");
+        tui.statusBar.setMessage("Aborted — ready");
       } else {
         const msg = err instanceof Error ? err.message : "Unknown error";
-        logCrash(`runAgent turn (provider: ${activeConfig.provider}/${activeConfig.model})`, err);
-        messageBox.cancelInFlightAssistant();
-        messageBox.appendError(`[ERROR] ${msg} — full trace: ~/.jexxxus/crash.log`);
-        statusBar.setMessage(`Error: ${msg}`);
+        logCrash(
+          `runAgent turn (provider: ${activeConfig.provider}/${activeConfig.model})`,
+          err,
+        );
+        tui.messageBox.cancelInFlightAssistant();
+        tui.messageBox.appendError(
+          `[ERROR] ${msg} — full trace: ~/.jexxxus/crash.log`,
+        );
+        tui.statusBar.setMessage(`Error: ${msg}`);
       }
     } finally {
       abortController = null;
@@ -592,7 +925,7 @@ export async function startTerminalChat(
 
       const queued = messageQueue.dequeue();
       if (queued) {
-        statusBar.setMessage(
+        tui.statusBar.setMessage(
           messageQueue.length > 0
             ? `Processing queued (${messageQueue.length} remaining)...`
             : "Processing queued message...",
@@ -600,8 +933,7 @@ export async function startTerminalChat(
         void runTurn(queued);
         return;
       }
-
-      inputBox.focus();
+      tui.statusBar.setMessage("Ready — ? for hotkeys · / for commands");
     }
   };
 
@@ -611,332 +943,163 @@ export async function startTerminalChat(
     const trimmed = line.trim();
     if (!trimmed) return;
 
-    inputBox.hideSlashPopup();
-
     const slashLine = coerceSlashLine(trimmed);
     if (isSlashCommand(slashLine)) {
       await runSlash(slashLine);
-      if (!providerOverlay.isVisible()) {
-        statusBar.setMessage("Ready — ? for hotkeys · / for commands");
-      }
+      tui.statusBar.setMessage("Ready — ? for hotkeys · / for commands");
       return;
     }
 
     await runTurn(trimmed);
   };
 
-  const persistSessionState = (): void => {
-    saveLastUsedProvider(activeConfig);
-    if (session.messages.length > 0) {
-      autosaveSession(session);
+  const handleEscapeCb = (): void => {
+    handleEscapeLayer();
+  };
+
+  const handleAbort = (): void => {
+    abortInFlight();
+  };
+
+  const maybeAutosave = (): void => {
+    if (shouldAutosave(session.messages.length)) {
+      const path = autosaveSession(session);
+      tui.statusBar.setMessage(`Autosaved → ${path}`);
     }
-  };
-
-  const requestExit = (): void => {
-    persistSessionState();
-    gracefulTuiExit(screen);
-  };
-
-  const updateScrollStatus = (): void => {
-    const { pinnedToBottom, percent } = messageBox.getScrollState();
-    if (pinnedToBottom) {
-      statusBar.setMessage(
-        "Shift+↑↓ scroll · Ctrl+B history · / commands · Ctrl+Shift+Y chrome · ? hotkeys",
-      );
-    } else {
-      statusBar.setMessage(`History ${percent}% · End jump latest · Ctrl+B scroll · ? hotkeys`);
-    }
-  };
-
-  const focusMessages = (): void => {
-    hotkeysOverlay.hide();
-    searchOverlay.close();
-    messageBox.element.focus();
-    updateScrollStatus();
-  };
-
-  const bindInputScrollKeys = (): void => {
-    const scrollKeys: Array<[string[], () => void]> = [
-      [["S-up", "C-up"], () => messageBox.scrollUp()],
-      [["S-down", "C-down"], () => messageBox.scrollDown()],
-      [["S-pageup"], () => messageBox.scrollPageUp()],
-      [["S-pagedown"], () => messageBox.scrollPageDown()],
-      [["C-M-u", "M-u"], () => messageBox.scrollHalfPageUp()],
-      [["C-M-d", "M-d"], () => messageBox.scrollHalfPageDown()],
-    ];
-    for (const [keys, fn] of scrollKeys) {
-      inputBox.element.key(keys, () => {
-        fn();
-        updateScrollStatus();
-      });
-    }
-  };
-
-  const searchOverlay = createSearchOverlay(screen, (query) => {
-    messageBox.setSearchQuery(query);
-    statusBar.setMessage(query ? `Search: "${query}"` : "Search cleared");
-    inputBox.focus();
-  });
-
-  const openEditorDraft = async (): Promise<void> => {
-    if (isProcessing) return;
-    const draft = inputBox.getValue();
-    const resumeBlessed = pauseBlessedForConsole(screen);
-    try {
-      const edited = await openExternalEditor(draft);
-      if (edited !== null) {
-        inputBox.setValue(edited);
-        statusBar.setMessage("Draft updated from editor");
-      } else if (!process.env.EDITOR?.trim() && !process.env.VISUAL?.trim()) {
-        statusBar.setMessage("Set $EDITOR or $VISUAL for external editor");
-      }
-    } catch {
-      statusBar.setMessage("External editor failed");
-    } finally {
-      resumeBlessed();
-      screen.render();
-    }
-  };
-
-  const suspendTui = (): void => {
-    suspendBlessedToShell(screen, () => {
-      screen.render();
-      inputBox.focus();
-    });
   };
 
   const runBranchUndo = (): void => {
     if (isProcessing) return;
     if (branchUndo(session)) {
-      messageBox.popLastExchange();
-      statusBar.setMessage("Branch undo — last exchange removed");
+      tui.messageBox.popLastExchange();
+      tui.statusBar.setMessage("Branch undo — last exchange removed");
       syncSnapshot();
     } else {
-      statusBar.setMessage("Nothing to undo");
+      tui.statusBar.setMessage("Nothing to undo");
     }
   };
 
-  topBar = createTopBar(screen, { onUpdate: onSnapshotUpdate });
-  messageBox = createMessageBox(screen, {
-    onUpdate: onSnapshotUpdate,
-    onScrollChange: () => updateScrollStatus(),
-    onCopied: showCopiedToast,
-    onCopyFailed: showCopyFailedToast,
-  });
-  statusBar = createStatusBar(screen, { onUpdate: onSnapshotUpdate });
-
-  inputBox = createInputBox(
-    screen,
-    (line) => {
-      void handleSubmit(line);
-    },
-    {
-      onUpdate: onSnapshotUpdate,
-      onExit: requestExit,
-      onShowHotkeys: () => hotkeysOverlay.toggle(),
-      onQueueIfProcessing: () => {
-        if (!isProcessing) return false;
-        const value = inputBox.getValue().trim();
-        if (!value) return false;
-        if (messageQueue.enqueue(value)) {
-          inputBox.clear();
-          statusBar.setMessage(`Queued (${messageQueue.length}) — Tab to queue more`);
-          return true;
-        }
-        return false;
-      },
-      onOpenExternalEditor: () => void openEditorDraft(),
-      onCopied: showCopiedToast,
-      onCopyFailed: showCopyFailedToast,
-      shortcuts: {
-        onSave: () => void runSlash("/save"),
-        onCopyTui: async () => {
-          const { path, copied } = await copySnapshot();
-          statusBar.setMessage(copied ? "TUI copied" : `Snapshot: ${path}`);
-        },
-        onCopyChrome: async () => {
-          const { path, copied } = await copyChromeDigest();
-          statusBar.setMessage(
-            copied ? "Chrome copied" : `Chrome digest: ${path}`,
-          );
-        },
-        onCopyLastReply: () => void copyLastReply(),
-        onModelList: () => void modelPickerOverlay.open(),
-        onModelNext: () => void cycleModel(1),
-        onModelPrev: () => void cycleModel(-1),
-        onToggleAllThinking: () => messageBox.toggleAllThinking(),
-        onNewSession: () => void runSlash("/reset"),
-        onFocusMessages: focusMessages,
-      },
-      slashPopup,
-      getSlashSuggestions: (value) =>
-        getSlashSuggestions(value, {
-          activeConfig,
-          modelOptions: cachedModelOptions,
-        }),
-      onSetupProvider: (catalogId) => providerOverlay.setup(catalogId),
-    },
-  );
-
-  // Must run after every mouse-enabled component above has registered its
-  // first listener — blessed's Screen._listenMouse() calls
-  // program.enableMouse() (which picks legacy UTF-8 mouse mode) exactly once,
-  // on the *first* such registration, and does nothing on later ones. Forcing
-  // SGR mode any earlier would just get silently reverted by that first call.
-  if (isBlessedMouseEnabled()) {
-    forceSgrMouseMode(screen);
-  }
-
-  registerSlashMenuDismiss(() => inputBox.hideSlashPopup());
-  registerOverlayActiveCheck(
-    () =>
-      modelPickerOverlay.isVisible() ||
-      providerOverlay.isVisible() ||
-      divinityPickerOverlay.isVisible() ||
-      authPickerOverlay.isVisible() ||
-      deviceLoginOverlay.isVisible() ||
-      searchOverlay.isVisible() ||
-      hotkeysOverlay.isVisible(),
-  );
-
-  const handleEscapeLayer = (): boolean => {
-    if (isProcessing) {
-      abortInFlight();
-      return true;
-    }
-    if (deviceLoginOverlay.isVisible()) {
-      deviceLoginOverlay.cancel();
-      inputBox.focus();
-      return true;
-    }
-    if (authPickerOverlay.isVisible()) {
-      authPickerOverlay.close();
-      inputBox.focus();
-      return true;
-    }
-    if (providerOverlay.isVisible()) {
-      providerOverlay.close();
-      inputBox.focus();
-      return true;
-    }
-    if (divinityPickerOverlay.isVisible()) {
-      divinityPickerOverlay.close();
-      inputBox.focus();
-      return true;
-    }
-    if (modelPickerOverlay.isVisible()) {
-      modelPickerOverlay.close();
-      inputBox.focus();
-      return true;
-    }
-    if (searchOverlay.isVisible()) {
-      searchOverlay.close();
-      messageBox.setSearchQuery("");
-      inputBox.focus();
-      return true;
-    }
-    if (hotkeysOverlay.isVisible()) {
-      hotkeysOverlay.hide();
-      inputBox.focus();
-      return true;
-    }
-    if (slashPopup.isVisible()) {
-      inputBox.hideSlashPopup();
-      return true;
-    }
-    return false;
+  const callbacks: DyeActionCallbacks = {
+    onSubmit: handleSubmit,
+    onEscape: handleEscapeCb,
+    onAbort: handleAbort,
+    onExit: requestExit,
+    onConfirmTool: async () => true,
+    onExportSession: () => exportSession(),
+    onNewSession: newSession,
+    onToggleHotkeys: () => tui.store.setHotkeysVisible(true),
+    onOpenSearch: () => tui.store.setSearchVisible(true),
+    onCycleModelNext: () => void cycleModel(1),
+    onCycleModelPrev: () => void cycleModel(-1),
+    onBranchUndo: runBranchUndo,
+    onCopySnapshot: () =>
+      void copySnapshot().then(({ path, copied }) => {
+        tui.statusBar.setMessage(copied ? "TUI copied" : `Snapshot: ${path}`);
+      }),
+    onCopyChrome: () =>
+      void copyChromeDigest().then(({ path, copied }) => {
+        tui.statusBar.setMessage(
+          copied ? "Chrome copied" : `Chrome digest: ${path}`,
+        );
+      }),
+    onCopyLastReply: () => void copyLastReply(),
+    onToggleThinking: () => tui.messageBox.toggleAllThinking(),
+    onScrollUp: () => {},
+    onScrollDown: () => {},
+    onScrollPageUp: () => {},
+    onScrollPageDown: () => {},
+    onScrollHalfUp: () => {},
+    onScrollHalfDown: () => {},
+    onScrollToTop: () => {},
+    onScrollToBottom: () => {},
+    onFocusInput: () => {},
+    onOpenSlashPopup: () => {},
+    onOpenExternalEditor: async (initial: string) =>
+      openExternalEditor(initial),
+    onOpenModelPicker: () => void openModelPicker(),
+    onOpenProviderPicker: () => void openProviderPicker(),
+    onOpenDivinityPicker: () => void openDivinityPicker(),
+    onOpenAuthPicker: () => void openAuthPicker(),
   };
 
-  bindExitKeys(
-    screen,
-    [screen, inputBox.element, messageBox.element],
-    handleEscapeLayer,
-    { onBeforeExit: persistSessionState },
+  const tui = createDyeTui({
+    callbacks,
+    subtitle:
+      options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
+  });
+
+  await tui.ready();
+
+  tui.topBar.setSubtitle(
+    options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`,
   );
-
-  inputBox.element.key(["C-i"], () => {
-    inputBox.focus();
-    statusBar.setMessage("Input focus — Enter send · / commands · ? hotkeys");
-  });
-
-  inputBox.element.key(["C-f"], () => searchOverlay.open());
-  inputBox.element.key(["C-z"], () => suspendTui());
-  inputBox.element.key(["C-M-z", "M-z"], () => runBranchUndo());
-
-  messageBox.element.key(["pageup"], () => {
-    messageBox.scrollPageUp();
-    updateScrollStatus();
-  });
-  messageBox.element.key(["pagedown"], () => {
-    messageBox.scrollPageDown();
-    updateScrollStatus();
-  });
-  messageBox.element.key(["C-M-u", "M-u"], () => {
-    messageBox.scrollHalfPageUp();
-    updateScrollStatus();
-  });
-  messageBox.element.key(["C-M-d", "M-d"], () => {
-    messageBox.scrollHalfPageDown();
-    updateScrollStatus();
-  });
-  messageBox.element.key(["home"], () => {
-    messageBox.scrollToTop();
-    updateScrollStatus();
-  });
-  messageBox.element.key(["end"], () => {
-    messageBox.scrollToBottom();
-    updateScrollStatus();
-  });
-  bindFocusedKey(screen, messageBox.element, ["up"], () => {
-    messageBox.scrollUp();
-    updateScrollStatus();
-  });
-  bindFocusedKey(screen, messageBox.element, ["down"], () => {
-    messageBox.scrollDown();
-    updateScrollStatus();
-  });
-  messageBox.element.key(["space"], () => messageBox.toggleFocusedThinking());
-  messageBox.element.key(["C-t"], () => messageBox.toggleAllThinking());
-  messageBox.element.key(["C-o"], () => void copyLastReply());
-  messageBox.element.key(["?"], () => hotkeysOverlay.toggle());
-  messageBox.element.key(["C-i"], () => inputBox.focus());
-  messageBox.element.key(["C-f"], () => searchOverlay.open());
-  messageBox.element.key(["C-z"], () => suspendTui());
-  messageBox.element.key(["C-M-z", "M-z"], () => runBranchUndo());
-
-  topBar.setSubtitle(options.providerLabel ?? `${activeConfig.provider}/${activeConfig.model}`);
 
   if (options.resume && session.messages.length > 0) {
-    messageBox.replaySession(session);
-    messageBox.appendSystem(
+    tui.messageBox.replaySession(session);
+    tui.messageBox.appendSystem(
       `Resumed autosave (${session.messages.length} messages, ${session.conversationHistory.length} history turns).`,
     );
-    updateScrollStatus();
   } else {
     showIdleHero();
-    updateScrollStatus();
   }
 
-  bindInputScrollKeys();
   syncSnapshot();
 
-  inputBox.focus();
-  screen.render();
-
   const glitchTimer = setInterval(() => {
-    topBar.tickGlitch();
-    crtBackdrop.setGlitchSeed(Date.now() % 9);
+    tui.topBar.tickGlitch();
+    tui.store.notify();
   }, 2800);
 
-  screen.on("destroy", () => {
-    clearInterval(glitchTimer);
-  });
+  await tui.waitUntilExit();
+  clearInterval(glitchTimer);
+}
 
-  await new Promise<void>(() => {
-    // Keep process alive until exit shortcut
-  });
-  } catch (err) {
-    restoreTerminalForReadline(screenRef);
-    throw err;
-  }
+function isFreeTierZenModel(catalogId: string, modelId: string): boolean {
+  if (catalogId !== "opencode-zen") return false;
+  const lower = modelId.toLowerCase();
+  return lower.includes("-free") || lower === "big-pickle";
+}
+
+function createAuthTuiActionsNoScreen(options: {
+  onAuthChanged: () => void;
+}): import("./auth-tui.js").AuthTuiActions {
+  return {
+    async status() {
+      const { formatAuthStatusLines, loadCredentials: lc } =
+        await import("../../auth.js");
+      return formatAuthStatusLines(lc({ quiet: true }));
+    },
+    async login() {
+      return ["Login via TUI overlay (/auth or Ctrl+A)"];
+    },
+    async logout() {
+      const { loadCredentials: lc, deleteCredentials: dc } =
+        await import("../../auth.js");
+      const creds = lc({ quiet: true });
+      if (!creds) return ["Not signed in to JEXXXUS."];
+      dc();
+      options.onAuthChanged();
+      return ["Signed out. Run /auth login to connect secure.jexxx.us again."];
+    },
+    async refresh() {
+      const {
+        refreshAccessTokenViaServer,
+        loadCredentials: lc,
+        saveCredentials: sc,
+      } = await import("../../auth.js");
+      const creds = lc({ quiet: true });
+      if (!creds) return ["Not signed in. Use /auth login first."];
+      try {
+        const refreshed = await refreshAccessTokenViaServer(creds.refreshToken);
+        sc(refreshed);
+        options.onAuthChanged();
+        return [`Token refreshed for ${refreshed.email}.`];
+      } catch (err) {
+        return [
+          `Refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+          "Try /auth login.",
+        ];
+      }
+    },
+  };
 }

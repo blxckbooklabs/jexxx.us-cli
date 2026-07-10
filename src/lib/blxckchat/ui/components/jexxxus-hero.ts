@@ -1,7 +1,7 @@
 import { TAG } from "../theme.js";
 
 /** 5-row geometric block glyphs — OpenCode-style uniform width. */
-const GLYPHS: Record<string, readonly string[]> = {
+export const GLYPHS: Record<string, readonly string[]> = {
   J: ["     █", "     █", "     █", " █   █", "  ███ "],
   E: [" █████", " █    ", " ████ ", " █    ", " █████"],
   X: [" █   █", "  █ █ ", "   █  ", "  █ █ ", " █   █"],
@@ -9,12 +9,12 @@ const GLYPHS: Record<string, readonly string[]> = {
   S: ["  ███ ", " █    ", "  ███ ", "    █ ", " ███  "],
 };
 
-const WORD = ["J", "E", "X", "X", "X", "U", "S"] as const;
-const ROWS = 5;
-const LETTER_GAP = 1;
+export const WORD = ["J", "E", "X", "X", "X", "U", "S"] as const;
+export const ROWS = 5;
+export const LETTER_GAP = 1;
 
 /** Indices of X letters — brand emphasis (OpenCode keeps logo uniform; we pink the XXX). */
-const PINK_LETTER_INDEX = new Set([2, 3, 4]);
+export const PINK_LETTER_INDEX = new Set([2, 3, 4]);
 
 export interface JexxxusHeroMeta {
   /** Signed-in operator label (name + email, or auth status). */
@@ -39,7 +39,9 @@ export function formatHeroHint(): string {
 }
 
 function composeRow(letters: readonly string[], row: number): string {
-  return letters.map((ch) => GLYPHS[ch]?.[row] ?? "      ").join(" ".repeat(LETTER_GAP));
+  return letters
+    .map((ch) => GLYPHS[ch]?.[row] ?? "      ")
+    .join(" ".repeat(LETTER_GAP));
 }
 
 function colorizeRow(row: number): string {
@@ -57,7 +59,10 @@ function colorizeRow(row: number): string {
 }
 
 /** Plain block logo lines (no blessed tags). */
-export function renderJexxxusHeroPlain(width: number, meta: JexxxusHeroMeta): string {
+export function renderJexxxusHeroPlain(
+  width: number,
+  meta: JexxxusHeroMeta,
+): string {
   const logoLines = Array.from({ length: ROWS }, (_, r) => composeRow(WORD, r));
   const logoWidth = logoLines[0]?.length ?? 0;
   const left = Math.max(0, Math.floor((width - logoWidth) / 2));
@@ -78,7 +83,10 @@ export function renderJexxxusHeroPlain(width: number, meta: JexxxusHeroMeta): st
 }
 
 /** Blessed-tagged static hero (OpenCode-style standstill wordmark). */
-export function renderJexxxusHeroBlessed(width: number, meta: JexxxusHeroMeta): string {
+export function renderJexxxusHeroBlessed(
+  width: number,
+  meta: JexxxusHeroMeta,
+): string {
   const logoLines = Array.from({ length: ROWS }, (_, r) => colorizeRow(r));
   const logoWidth = composeRow(WORD, 0).length;
   const left = Math.max(0, Math.floor((width - logoWidth) / 2));

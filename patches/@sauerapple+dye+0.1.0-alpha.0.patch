@@ -1,0 +1,80 @@
+diff --git a/node_modules/@sauerapple/dye/build/selection-overlay.js b/node_modules/@sauerapple/dye/build/selection-overlay.js
+index 0000000..0000000 100644
+--- a/node_modules/@sauerapple/dye/build/selection-overlay.js
++++ b/node_modules/@sauerapple/dye/build/selection-overlay.js
+@@ -1,19 +1,49 @@
+ /**
+- * Selection overlay — applies a visual highlight to selected Screen cells.
++ * Selection overlay — applies a pink background highlight to selected cells.
+  *
+  * Mutates the Screen buffer in-place by replacing each selected cell's
+- * styleId with a new styleId that has the inverse SGR code (SGR 7).
+- * This produces a high-contrast selection that works on any terminal.
++ * styleId with a new styleId that has pink background SGR codes
++ * (SGR 48;2;236;72;153 — JEXXXUS pink #ec4899).
+  *
+  * After applying the overlay, callers should mark the frame as contaminated
+  * so the next diff doesn't blit stale highlighted cells.
+  */
+ import { getCellWord1, unpackStyleId, unpackHyperlinkId, unpackWidth, setCellAt, getCellCharId, } from './screen.js';
+ import { normalizeSelection, selectionColRange, } from './selection.js';
++
++const PINK_BG = [48, 2, 236, 72, 153];
++
++function hasPinkBg(codes) {
++  for (let i = 0; i < codes.length; i++) {
++    if (codes[i] === 48 && i + 4 < codes.length && codes[i + 1] === 2 && codes[i + 2] === 236 && codes[i + 3] === 72 && codes[i + 4] === 153) {
++      return true;
++    }
++    if (codes[i] === 48 && i + 1 < codes.length) {
++      if (codes[i + 1] === 5) i += 2;
++      else if (codes[i + 1] === 2) i += 5;
++    }
++  }
++  return false;
++}
++
++function replaceBgWithPink(codes) {
++  const result = [];
++  for (let i = 0; i < codes.length; i++) {
++    if (codes[i] === 48 && i + 1 < codes.length) {
++      if (codes[i + 1] === 5) { i += 2; continue; }
++      if (codes[i + 1] === 2) { i += 5; continue; }
++    }
++    if (codes[i] === 7) continue;
++    result.push(codes[i]);
++  }
++  result.push(...PINK_BG);
++  return result;
++}
++
+ /**
+  * Apply the selection overlay to a Screen buffer.
+  * Replaces the styleId of each selected cell with a "selected" variant
+- * (original style + inverse SGR code 7).
++ * (original style + pink background #ec4899).
+  *
+  * Must be called AFTER the main render has populated the Screen.
+  * Returns true if any cells were modified.
+@@ -38,13 +68,11 @@
+             const currentStyleId = unpackStyleId(word1);
+             const currentHyperlinkId = unpackHyperlinkId(word1);
+             const width = unpackWidth(word1);
+-            // Get the original style codes and append SGR 7 (inverse)
+             const currentCodes = screen.stylePool.resolve(currentStyleId);
+-            // Avoid adding duplicate inverse codes
+-            if (currentCodes.includes(7)) {
++            if (hasPinkBg(currentCodes)) {
+                 continue;
+             }
+-            const selectedCodes = [...currentCodes, 7];
++            const selectedCodes = replaceBgWithPink(currentCodes);
+             const selectedStyleId = screen.stylePool.intern(selectedCodes);
+             setCellAt(screen, col, row, charId, selectedStyleId, currentHyperlinkId, width);
+             mutated = true;
+@@ -52,4 +80,3 @@
+     }
+     return mutated;
+ }
+-//# sourceMappingURL=selection-overlay.js.map
+\ No newline at end of file

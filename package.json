@@ -11,7 +11,8 @@
     "build": "tsc",
     "start": "ts-node src/index.ts",
     "test": "npm run build && node --test dist/__tests__/*.test.js",
-    "smoke:rls": "npm run build && node dist/scripts/rls-smoke-test.js"
+    "smoke:rls": "npm run build && node dist/scripts/rls-smoke-test.js",
+    "postinstall": "patch-package"
   },
   "repository": {
     "type": "git",
@@ -26,6 +27,7 @@
   "homepage": "https://github.com/blxckbooklabs/jexxx.us-cli#readme",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@sauerapple/dye": "^0.1.0-alpha.0",
     "@supabase/supabase-js": "^2.107.0",
     "blessed": "^0.1.81",
     "chalk": "^4.1.2",
@@ -35,13 +37,18 @@
     "figlet": "^1.11.0",
     "gradient-string": "^3.0.0",
     "marked": "^15.0.12",
-    "openai": "^4.77.0"
+    "openai": "^4.77.0",
+    "react": "^19.2.7",
+    "react-reconciler": "^0.33.0"
   },
   "devDependencies": {
     "@types/blessed": "^0.1.27",
     "@types/figlet": "^1.7.0",
     "@types/gradient-string": "^1.1.6",
     "@types/node": "^25.9.2",
+    "@types/react": "^19.2.17",
+    "@types/react-reconciler": "^0.33.0",
+    "patch-package": "^8.0.1",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }

@@ -122,7 +122,7 @@ Owned by the JEXXXUS platform / tooling team.
   ("Could not find the function api.fn_user_tier_with_contact ... in the schema cache"), which is how
   the first draft's mistake was caught — connections.ts uses two separate `resolveVaultClient()`
   calls (one per schema) rather than one, on purpose.
-  `connect_contact_back` deliberately never offers to merge two *already-existing* duplicate
+  `connect_contact_back` deliberately never offers to merge two _already-existing_ duplicate
   contacts — that's the manual-merge feature in dxsh.blxckbook.jexxx.us's ContactDetailPanel (see
   the fix in that repo's App.tsx, July 2026: `onMerge` was dropping `linked_ecosystem_id` when the
   Clerk-linked contact wasn't picked as "keep", silently severing a real connection while leaving an
@@ -145,7 +145,7 @@ Owned by the JEXXXUS platform / tooling team.
   `src/__tests__/kingdom-routing.test.ts`, `src/__tests__/kingdom-url-sanitize.test.ts`.
 - BLXCKCHAT **Docs/Law routing** (`kingdom-surfaces.ts`, `kingdom-routing.ts`): prompts like
   "tell me about Docs and Law" must not hit `account_query` contact lookup — use RAG docs context
-  + `law_query` instead.
+  - `law_query` instead.
 - **Breaking rename (July 2026):** internal `Empire*` identifiers/files under `src/lib/blxckchat/`
   were renamed to `Kingdom*`/`Garden*` to match the linguistic style guide ("empire" is retired as
   a brand descriptor everywhere, including code identifiers not just prose). Old paths
@@ -167,6 +167,8 @@ Owned by the JEXXXUS platform / tooling team.
   block via `stream-thinking.ts` (`StreamThinkingParser` for `<think>`/API reasoning deltas;
   `formatThinkingWaitState` between tool passes). Toggle collapsed blocks: `Space` / `Ctrl+T`.
   Tests: `blxckchat-stream-thinking.test.ts`.
+- **Dye TUI — keyboard shortcuts (July 2026):** `Ctrl+G` opens `$EDITOR` (VISUAL/EDITOR env) with the current input as draft — returns edited text on save+quit, null on cancel. `Ctrl+Z` suspends the TUI to shell (SIGTSTP). `Ctrl+B` toggles message-scroll focus mode (up/down navigates thinking blocks if they exist, otherwise scrolls messages; pageup/home/end scroll as usual); `Escape` or `Ctrl+B` again exits focus mode, indicated by `▓ FOCUS ▓` on the status bar. `/` at input start triggers the slash command autocomplete popup (`SlashPopup.tsx`, keyboard-only, positioned above input line via absolute layout), filtered by `getCommandSuggestions()` with fuzzy matching; `Enter`/`Tab` applies the selected suggestion, `Escape` dismisses. Alt+b/f word-nav and Alt+d word-delete are handled in `InputView.tsx`. `Ctrl+S` exports the current session to `~/.jexxxus/session-export-<timestamp>.json`. `Ctrl+N` clears the session and starts fresh. `TopBar` displays `BLXCKCHAT │ <model> ▮ LIVE`.
+- **InputView keyboard text selection (July 2026):** `Shift+Left/Right` selects character-by-character. `Alt+Shift+Left/Right` selects word-by-word (Option+Shift+arrows on macOS; also catches CSI modifier encoding `\x1b[1;4D`/`\x1b[1;4C`). `Shift+Home`/`Shift+End` selects to start/end of line. `Ctrl+Shift+Left/Right` selects to line start/end (nearest to macOS Cmd+Shift+Left/Right behavior). `Alt+Left`/`Alt+Right` (Option+arrows) just **navigate** by word (clears selection, moves cursor) — does NOT select. Selected text is highlighted with pink inverse. On selection release (200ms debounce after last selection keypress), the selected text auto-copies to clipboard via `copyToClipboard`. Selection-aware operations: `Backspace`/`Delete` removes selection, typing replaces it, `Ctrl+K`/`Ctrl+W`/`Alt+D` operate on selection if active, `Escape` clears selection. `Ctrl+C` with no selection still exits (pass-through). TUI root Box uses `height={termHeight}` (explicit row count) instead of `height="100%"` to guarantee full-terminal layout. `TopBar` has `marginTop={1}` for breathing room. Mouse selection no longer clears immediately after copy — highlight persists until next click. `ToastView` uses ref-wrapped callback to avoid timer reset from inline `onDismiss` reference changes. Hero block (JEXXXUS logo + model/user/tool info + prompt text) is vertically centered via dynamic margin calculation inside `MessageView.tsx:buildRenderLines()` using `termHeight`. Auto-copy on mouse selection requires min 3 chars (`selectedText.length >= 3`) to avoid false positives from accidental clicks.
 - **Mouse click-drag text selection (July 2026 fix):** blessed 0.1.81's default `enableMouse()`
   picks legacy UTF-8 mouse mode (`\x1b[?1005h`) for any TERM matching xterm/screen/key_mouse — which
   is most modern terminals (iTerm2, Terminal.app, Warp, Kitty, VS Code). That mode's motion
@@ -175,7 +177,7 @@ Owned by the JEXXXUS platform / tooling team.
   independent of blessed) worked. `tty.ts#forceSgrMouseMode()` overrides this to SGR mode
   (`\x1b[?1006h`) right after all mouse-enabled components (topBar/messageBox/statusBar/inputBox)
   have registered their first listener in `terminal.ts` — must run there and not earlier, since
-  blessed's `Screen._listenMouse()` calls `program.enableMouse()` exactly once, on the *first*
+  blessed's `Screen._listenMouse()` calls `program.enableMouse()` exactly once, on the _first_
   mouse-listener registration, and would silently stomp an earlier override back to UTF-8 mode.
   Text selection then flows through the existing `attach-blessed-text-selection.ts` (mousedown →
   highlight → mouseup → copy → pink toast) unchanged — the bug was purely in which mouse protocol
@@ -192,7 +194,7 @@ Owned by the JEXXXUS platform / tooling team.
   `blxckchat-markdown.test.ts` reproduce the exact 3,000-level nested-list and 500k-char inputs
   that previously required a fatal OOM/stack-overflow to occur. Also added `crash-log.ts` —
   `logCrash()` now runs alongside every top-level error path (`terminal.ts`, `repl-ui.ts`,
-  `index.ts`'s `program.parseAsync().catch`) and appends the *full* `err.stack` to
+  `index.ts`'s `program.parseAsync().catch`) and appends the _full_ `err.stack` to
   `~/.jexxxus/crash.log`, since the UI only ever showed `err.message` before, discarding the trace
   needed to diagnose anything unexpected.
 - **`add_contact` (July 2026):** creates a brand-new contact, always via a single insert into
@@ -206,7 +208,7 @@ Owned by the JEXXXUS platform / tooling team.
   `addContact()` in `mutations.ts` also fuzzy-matches existing contacts first and refuses to create
   a duplicate — same discipline as `connect_contact_back`.
 - **Emoji corruption recurred with new emoji (July 2026, second pass):** the VS16-stripping fix
-  above only covers base+VS16 pairs — plain emoji that are *already* wide/emoji-presentation by
+  above only covers base+VS16 pairs — plain emoji that are _already_ wide/emoji-presentation by
   default (🔗 U+1F517, 💎 U+1F48E, no VS16 needed) still corrupt blessed's column tracking the same
   way. `markdown.ts#escapeBlessed()` now strips the emoji Unicode blocks themselves
   (`EMOJI_RANGES`: Misc Symbols & Pictographs, Emoticons, Transport & Map, Supplemental Symbols,
@@ -233,6 +235,16 @@ Owned by the JEXXXUS platform / tooling team.
   Whether this is finally reliable depends on the specific terminal emulator's SGR motion-event
   support, which varies. `Ctrl+O` (`copyLastReply()` in `terminal.ts`) copies the full last
   assistant reply and does not depend on mouse events at all — the reliable fallback today.
+- **Per-block thinking toggle — fully implemented in messageFocus mode (July 2026):** `Space` in messageFocus mode (Ctrl+B) now toggles the **focused** thinking block via `store.toggleFocusedThinking()` instead of all blocks. Up/Down arrows navigate between thinking blocks via `store.moveFocusedThinking(±1)` when thinking blocks exist (wraps around), otherwise fall back to scroll. The focused block is indicated by a `▸` marker. In normal mode, Space still correctly types a space in InputView. `message-store.ts` added: `getThinkingBlockCount()`, `moveFocusedThinking(delta)`.
+- **Cursor jump bug fixed (July 2026):** `InputView.tsx:43-45` — the `useEffect` that ran `setCursorPos(value.length)` on every `value` change was resetting the cursor to end-of-line after typing mid-line following `Alt+Left` word navigation. Changed to clamp-only: `setCursorPos((prev) => Math.min(prev, value.length))`.
+- **`Alt+Left/Right` changed to navigation only (July 2026):** After user feedback, `Alt+Left`/`Alt+Right` (Option+arrows on macOS) now call `clearSel()` before moving word-by-word — they do NOT set a selection anchor. Use `Option+Shift+Left/Right` for word selection (already handled by `meta+shift+B`/`meta+shift+F` handlers at `InputView.tsx:183-199`).
+- **Hero dynamic vertical centering (July 2026):** `MessageView.tsx` now dynamically centers the hero block based on `termHeight` instead of a fixed 6 blank lines. `buildRenderLines()` receives `termHeight`, calculates `viewHeight = termHeight - 6`, `totalHeroHeight = ROWS + extraLines.length`, and sets `topMargin = Math.max(2, Math.floor((viewHeight - totalHeroHeight) / 2))`. Also removed "JEXXXUS │" prefix from TopBar — header shows just `BLXCKCHAT │ <model>`.
+- **Auto-copy minimum length guard (July 2026):** `DyeApp.tsx:191` now requires `selectedText.length >= 3` before auto-copying on mouseup. Prevents "Copied to clipboard" toasts from accidental single-character clicks.
+- **Blessed tags leaking during streaming — fixed (July 2026):** `MessageView.tsx` assistant body rendering now always calls `stripTags(block.content)` regardless of `block.isStreaming`. Previously the streaming path skipped `stripTags`, so blessed format tags like `{#525252-fg}`, `{#ec4899-fg}`, `{/}` leaked through as visible text. Also added `normalizeText()` helper that replaces Dye/blessed special Unicode chars (`▌`→`|`, `◇`→`*`, `▶`→`>`, `▼`→`v`, `…`→`...`) in assistant body text only.
+- **Pink selection overlay (July 2026):** Patched `node_modules/@sauerapple/dye/build/selection-overlay.js` to use pink background (`SGR 48;2;236;72;153`, JEXXXUS pink `#ec4899`) instead of inverse (`SGR 7`) for the text selection highlight. The `applySelectionOverlay` function now replaces the cell's background color with pink and strips any existing inverse/bg codes. This makes mouse click-drag selection visible as a pink highlight across the entire TUI (message area, input box, etc.). **Now persisted via `patch-package`** — `patches/@sauerapple+dye+0.1.0-alpha.0.patch` + `"postinstall": "patch-package"` in `package.json`. This whole Dye migration (the entire `src/lib/blxckchat/ui/dye/` tree, this patch, the `@sauerapple/dye` dependency) had never been committed until this pass — it was sitting entirely in the working tree, one `git clean`/`rm -rf` away from being lost.
+- **Hero screen no longer hugs the top (July 2026 fix):** the idle hero (ASCII logo + subtitle) used to be built as blank leading lines mixed into `MessageView.tsx`'s scrollable render-line array, with `topMargin` hand-computed from a *guessed* `termHeight - 6` — but the actual available height is whatever the parent's real `flexGrow={1}` Box resolves to at render time (DyeApp.tsx wraps `MessageView` in one), which the guess never matched, so the hero always sat too close to the top regardless of terminal size. Fixed by giving the hero its own path: `MessageView.tsx`'s `HeroCentered` component renders in a dedicated `Box flexGrow={1} justifyContent="center" alignItems="center"` — real Yoga flexbox centering, using the real available space, no arithmetic. Only reachable when `store.blocks` is exactly `[heroBlock]` (i.e. before the first user message — `message-store.ts#appendUser` always calls `dismissHero()` first, so hero can never coexist with other blocks); the old per-turn `buildRenderLines()` hero case is now unreachable dead code, kept only as a `break` for exhaustiveness.
+- **Overlay/modal centering was broken everywhere (July 2026 fix):** `ConfirmModal.tsx`, `PickerOverlay.tsx`, `PromptOverlay.tsx`, `DeviceLoginOverlay.tsx`, and `HotkeysOverlay.tsx` all used `position="absolute" top="50%" left="50%"` to "center" the panel. Confirmed directly in `node_modules/@sauerapple/dye/build/styles.js`: percentage `top`/`left` resolve via Yoga's `setPositionPercent()` — a literal offset of that edge from the parent's edge, with **no** auto-subtraction of the panel's own size (no CSS `transform: translate(-50%,-50%)` equivalent exists in Dye/Yoga). So every modal's top-left corner sat at the screen's midpoint, pushing the whole panel into the bottom-right quadrant — exactly what the "picker offset toward the edge" screenshot showed. Fixed with a new shared `OverlayCenter.tsx`: a full-screen `position="absolute" top={0} left={0} width="100%" height="100%"` Box with `justifyContent="center" alignItems="center"`, wrapping each panel (now a plain non-positioned child, still using percent `width`/fixed `height` — those are fine, only `top`/`left` percent centering was broken). Apply this wrapper to any new centered overlay — do not reach for `top="50%" left="50%"` again.
+- **Picker/slash-popup selection highlight looked "dispersed" (July 2026 fix):** `PickerOverlay.tsx` and `SlashPopup.tsx` row `Box`es had `backgroundColor={isSel ? THEME.pink : undefined}` but no explicit `width` — Ink/Dye only fills the background across a Box's own resolved width, which without `flexGrow`/`width="100%"` shrinks to the row's intrinsic text content width, not the panel's full width. Selected rows highlighted only under their own text, leaving a "broken up" pink patch instead of one clean full-width bar. Fixed by adding `width="100%"` to each row `Box`. Also gave `PickerOverlay`'s outer panel an explicit `backgroundColor={THEME.bgElevated}` (previously unset, letting whatever was behind it bleed through row-by-row — the black/gray "striping" in the screenshot) — same pattern `SlashPopup` already used correctly.
 - **`list_notifications` now flags `alreadyConnected` (July 2026):** a "someone added you"
   notification persists in `contact_notifications` forever — nothing marks it resolved once
   `connect_contact_back` runs (from the CLI, the web dashboard, or a prior session). Without a
