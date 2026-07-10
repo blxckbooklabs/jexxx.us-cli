@@ -16,10 +16,13 @@ export interface SlashPopupHandle {
   setOnPick: (handler: ((index: number) => void) | undefined) => void;
 }
 
-/** Clamp list index when browsing suggestions (no wrap-around). */
+/** Step list index with wrap-around at both ends. */
 export function stepListIndex(current: number, delta: number, total: number): number {
   if (total <= 0) return 0;
-  return Math.max(0, Math.min(total - 1, current + delta));
+  const next = current + delta;
+  if (next < 0) return total - 1;
+  if (next >= total) return 0;
+  return next;
 }
 
 type ListItem = blessed.Widgets.BoxElement & { __slashMouseWired?: boolean };

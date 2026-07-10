@@ -9,6 +9,7 @@ import {
   addAssistantMessage,
   createSession,
   exportSessionToFile,
+  getDefaultSessionExportPath,
 } from "../lib/blxckchat/ui/session/session-store.js";
 import { formatToolLine } from "../lib/blxckchat/ui/components/tool-box.js";
 import * as fs from "fs";
@@ -38,6 +39,12 @@ function makeStreamingProvider(response: string): Provider {
     },
   };
 }
+
+test("default session export path includes filesystem-safe timestamp", () => {
+  const fixed = new Date("2026-07-09T14:30:00.123Z");
+  const target = getDefaultSessionExportPath(fixed);
+  assert.match(target, /session-export-2026-07-09T14-30-00Z\.json$/);
+});
 
 test("session store tracks messages and exports JSON", () => {
   const session = createSession();

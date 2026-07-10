@@ -108,9 +108,18 @@ export function updateToolResult(
   return addToolResult(session, toolName, result, status);
 }
 
+/** Filesystem-safe ISO timestamp for default /save export filenames. */
+export function formatSessionExportTimestamp(date: Date = new Date()): string {
+  return date.toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
+}
+
+export function getDefaultSessionExportPath(now: Date = new Date()): string {
+  const stamp = formatSessionExportTimestamp(now);
+  return path.join(getCredentialsDir(), `session-export-${stamp}.json`);
+}
+
 export function exportSessionToFile(session: TerminalSession, filePath?: string): string {
-  const target =
-    filePath ?? path.join(getCredentialsDir(), "session-export.json");
+  const target = filePath ?? getDefaultSessionExportPath();
   const dir = path.dirname(target);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
