@@ -172,7 +172,7 @@ export async function startTerminalChat(
   try {
     const screen = blessed.screen({
       smartCSR: true,
-      title: "BLXCKCHAT",
+      title: "JEXXXUS",
       fullUnicode: true,
       mouse: isBlessedMouseEnabled(),
       terminal: process.env.TERM,

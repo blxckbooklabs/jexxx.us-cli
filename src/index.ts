@@ -47,6 +47,12 @@ import {
   refreshAccessTokenViaServer,
 } from "./lib/auth.js";
 
+/** Rename the terminal tab/window title (OSC 2) — same technique OpenCode uses. */
+function setTerminalTitle(title: string): void {
+  if (!process.stdout.isTTY) return;
+  process.stdout.write(`\x1b]2;${title}\x07`);
+}
+
 function printBanner(): void {
   const jexxxusArt = figlet.textSync("JEXXXUS", { font: "Slant" });
   console.log(
@@ -128,6 +134,8 @@ function requireOperatorClient(target: DashboardTarget = "blxckbook") {
   }
   return createOperatorClient(env, target);
 }
+
+setTerminalTitle("JEXXXUS");
 
 const program = new Command();
 

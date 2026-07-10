@@ -10,7 +10,11 @@ export const listNotificationsTool: BlxckchatTool = {
   name: "list_notifications",
   description:
     "List the signed-in user's contact-connection notifications (someone added them on JEXXXUS) " +
-    "and pending event invites. Read-only. Requires /auth login.",
+    "and pending event invites. Read-only. Requires /auth login. Each contact notification is " +
+    "pre-checked against the user's own contacts and marked already-connected or not — a " +
+    "notification stays in this list even after connecting back (nothing marks it resolved), so " +
+    "always check this flag before offering to connect_contact_back. If alreadyConnected is true, " +
+    "just say so — do not ask 'want me to connect back?' for something already done.",
   parameters: { type: "object", properties: {} },
   requiresConfirmation: false,
   async execute(): Promise<string> {
@@ -27,8 +31,13 @@ export const listNotificationsTool: BlxckchatTool = {
     if (contactNotifications.length > 0) {
       lines.push("Contact notifications:");
       for (const n of contactNotifications) {
+        const status = n.alreadyConnected
+          ? "[already connected — do not offer to reconnect]"
+          : n.read
+            ? ""
+            : "[unread] ";
         lines.push(
-          `  • ${n.read ? "" : "[unread] "}${n.actor_name} added you (actor_user_id: ${n.actor_user_id}) — ${n.created_at}`,
+          `  • ${status}${n.actor_name} added you (actor_user_id: ${n.actor_user_id}) — ${n.created_at}`,
         );
       }
     }

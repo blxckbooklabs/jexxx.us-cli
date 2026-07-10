@@ -205,6 +205,44 @@ Owned by the JEXXXUS platform / tooling team.
   person bug already fixed once this session (the manual-merge bug in dxsh.blxckbook.jexxx.us).
   `addContact()` in `mutations.ts` also fuzzy-matches existing contacts first and refuses to create
   a duplicate — same discipline as `connect_contact_back`.
+- **Emoji corruption recurred with new emoji (July 2026, second pass):** the VS16-stripping fix
+  above only covers base+VS16 pairs — plain emoji that are *already* wide/emoji-presentation by
+  default (🔗 U+1F517, 💎 U+1F48E, no VS16 needed) still corrupt blessed's column tracking the same
+  way. `markdown.ts#escapeBlessed()` now strips the emoji Unicode blocks themselves
+  (`EMOJI_RANGES`: Misc Symbols & Pictographs, Emoticons, Transport & Map, Supplemental Symbols,
+  Dingbats, Regional Indicators/flags, Variation Selectors) rather than just VS16 — this is the
+  actual fix, VS16-stripping alone was necessary but not sufficient. Normal accented/non-Latin text
+  (café, ünïcode) is unaffected; only emoji ranges are stripped.
+- **Terminal title (July 2026):** `index.ts#setTerminalTitle()` writes OSC 2 (`\x1b]2;JEXXXUS\x07`)
+  as early as possible (before `Command` construction) so the terminal tab/window reads "JEXXXUS"
+  instead of "node" from the moment `jexxxus` is invoked — same technique OpenCode uses. Blessed's
+  own `screen({ title: ... })` option in `terminal.ts` sets the title again on TUI entry (blessed
+  does this internally regardless), so it must match ("JEXXXUS", not the old "BLXCKCHAT") or it
+  would silently revert the title moments after the CLI-level write.
+- **Text selection/copy — investigated OpenCode's implementation directly, does not port
+  cleanly (July 2026):** OpenCode's TUI is `@opentui/core` + SolidJS
+  (`/packages/tui` in their repo) — a fundamentally different, modern terminal rendering engine,
+  not blessed (blessed is unmaintained since ~2015). Its `clipboard.ts` uses the same
+  OSC-52-alongside-native-copy pattern our `tui-snapshot.ts` already does. The reliability
+  difference is the underlying rendering engine's mouse/unicode handling, not a specific trick that
+  can be ported into blessed with a small patch — a real fix would mean migrating off blessed
+  entirely, which is out of scope for an incremental change. `attach-blessed-text-selection.ts` and
+  `text-selection.ts`'s own logic were re-audited and are correct (confirmed the `mouseToTextCell`/
+  `applySelectionHighlight`/copy-on-mouseup chain has no logic bugs); the forced SGR mouse mode
+  (`tty.ts#forceSgrMouseMode()`) is also confirmed correctly changing the negotiated protocol.
+  Whether this is finally reliable depends on the specific terminal emulator's SGR motion-event
+  support, which varies. `Ctrl+O` (`copyLastReply()` in `terminal.ts`) copies the full last
+  assistant reply and does not depend on mouse events at all — the reliable fallback today.
+- **`list_notifications` now flags `alreadyConnected` (July 2026):** a "someone added you"
+  notification persists in `contact_notifications` forever — nothing marks it resolved once
+  `connect_contact_back` runs (from the CLI, the web dashboard, or a prior session). Without a
+  check, the same notification would surface as actionable indefinitely, and the agent would offer
+  to reconnect a contact that's already linked (confirmed live: this happened with Luna Verde).
+  `listNotifications()` in `connections.ts` now cross-references each notification's
+  `actor_user_id` against the signed-in user's existing `linked_ecosystem_id` contacts and computes
+  `alreadyConnected` per row (not stored — computed fresh on every call, since it can change
+  between calls). The tool's own formatted output surfaces "[already connected — do not offer to
+  reconnect]" directly so the model doesn't need to reason about it or make an extra tool call.
 
 ## 6. Child DOX Index
 

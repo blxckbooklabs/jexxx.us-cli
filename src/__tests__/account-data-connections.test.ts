@@ -126,14 +126,31 @@ test("listNotifications reads from the public-schema client, not api", async () 
       { id: "e1", invitee_user_id: "user_test", status: "pending", title: "Coffee", organizer_name: "Luna", event_date: "2026-07-10", event_type: "date" },
     ],
   });
-  const blxckbook = createMockClient({});
+  const blxckbook = createMockClient({ contacts: [] });
   const session = fakeSession(blxckbook, nxt);
 
   const result = await listNotifications(session);
   assert.equal(result.contactNotifications.length, 1);
   assert.equal(result.contactNotifications[0]?.actor_name, "Luna");
+  assert.equal(result.contactNotifications[0]?.alreadyConnected, false);
   assert.equal(result.pendingInvites.length, 1);
   assert.equal(result.pendingInvites[0]?.title, "Coffee");
+});
+
+test("listNotifications flags a notification as alreadyConnected when a linked contact exists", async () => {
+  const nxt = createMockClient({
+    contact_notifications: [
+      { id: "n1", recipient_user_id: "user_test", actor_name: "Luna", actor_user_id: "u2", read: true, created_at: "t" },
+    ],
+    event_invites: [],
+  });
+  const blxckbook = createMockClient({
+    contacts: [{ id: "c1", user_id: "user_test", name: "Luna Verde", linked_ecosystem_id: "u2" }],
+  });
+  const session = fakeSession(blxckbook, nxt);
+
+  const result = await listNotifications(session);
+  assert.equal(result.contactNotifications[0]?.alreadyConnected, true);
 });
 
 test("connectContactBack refuses to duplicate an already-linked contact", async () => {

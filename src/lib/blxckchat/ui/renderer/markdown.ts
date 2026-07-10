@@ -8,19 +8,43 @@ export const BLESSED_STREAM_CURSOR = `${TAG.pink}{bold}▌{/bold}${TAG.pinkEnd}`
 
 /**
  * Variation Selector-15/16 (U+FE0E/U+FE0F) force text/emoji presentation on
- * the preceding glyph. Blessed's column-width math doesn't account for them,
- * so a base+VS16 pair (🛠️, 🗝️, 📖 followed by VS16, etc.) throws off its
- * internal cell-offset tracking on that terminal row — producing scattered,
- * overlapping characters from adjacent lines on redraw. Stripping the
- * selector keeps the base emoji glyph but restores predictable width.
+ * the preceding glyph — not the actual root cause, just one trigger of it
+ * (kept as a separate strip since it's zero-width and always safe to drop).
+ *
+ * The real problem is broader: plain emoji that are ALREADY wide/emoji-
+ * presentation by default — 🔗 (U+1F517), 💎 (U+1F48E), etc. — need no VS16
+ * at all and still corrupt the terminal row. Blessed's column-width table
+ * predates most of Unicode's emoji blocks and doesn't know these are
+ * double-width, so its cell-offset tracking desyncs on that row; on redraw,
+ * blessed's diff renderer leaves stale glyphs from an adjacent line instead
+ * of clearing it, producing the scattered/overlapping-character corruption.
+ * Stripping VS16 alone (the original narrower fix) does not cover this
+ * class of already-wide emoji, which is why it recurred with new emoji
+ * (🔗/💎) the model started using in later replies. The robust fix is to
+ * strip the emoji ranges themselves, not just the selector that sometimes
+ * accompanies them.
  */
 function stripVariationSelectors(text: string): string {
   return text.replace(/[︎️]/g, "");
 }
 
+/**
+ * Major emoji Unicode blocks (Misc Symbols & Pictographs, Emoticons,
+ * Transport & Map, Supplemental Symbols & Pictographs, Symbols & Pictographs
+ * Extended-A, Misc Symbols, Dingbats) plus Regional Indicators (flag emoji)
+ * and Variation Selectors. Deliberately excludes plain punctuation/arrow
+ * ranges that render at predictable width and are safe in blessed.
+ */
+const EMOJI_RANGES =
+  /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{2B00}-\u{2BFF}\u{FE0E}\u{FE0F}]/gu;
+
+function stripEmoji(text: string): string {
+  return text.replace(EMOJI_RANGES, "");
+}
+
 /** Escape blessed tag delimiters in plain text segments. */
 export function escapeBlessed(text: string): string {
-  return stripVariationSelectors(text).replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
+  return stripEmoji(stripVariationSelectors(text)).replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
 }
 
 /** Short kingdom/garden href for TUI — avoids mid-slug line wraps on long URLs. */

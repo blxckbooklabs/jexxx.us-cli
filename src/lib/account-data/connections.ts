@@ -27,6 +27,15 @@ export interface ContactNotificationRow {
   actor_avatar_url: string | null;
   read: boolean;
   created_at: string;
+  /**
+   * True when the signed-in user already has a contact linked to this
+   * actor_user_id — computed here, not stored, since the notification row
+   * itself doesn't know whether connect_contact_back already ran (from the
+   * CLI, the web dashboard, or a prior CLI session). Lets callers report
+   * "already connected" up front instead of offering to reconnect and only
+   * finding out it's a no-op after asking.
+   */
+  alreadyConnected: boolean;
 }
 
 export interface EventInviteRow {
@@ -46,10 +55,18 @@ export interface NotificationSummary {
   pendingInvites: EventInviteRow[];
 }
 
-/** List unread/recent contact-connection notifications and pending event invites. */
+/**
+ * List unread/recent contact-connection notifications and pending event
+ * invites. Each contact notification is cross-referenced against the
+ * signed-in user's own contacts to flag `alreadyConnected` — a
+ * "someone added you" notification persists after connecting back (nothing
+ * deletes or marks it resolved), so without this check the same
+ * already-linked notification would surface as actionable forever.
+ */
 export async function listNotifications(
   session: AuthenticatedAccountSession,
 ): Promise<NotificationSummary> {
+  const contactsSchema = resolveVaultClient(session, "blxckbook");
   const publicSchema = resolveVaultClient(session, "nxt");
 
   const { data: notifs } = await publicSchema.client
@@ -67,8 +84,25 @@ export async function listNotifications(
     .order("created_at", { ascending: false })
     .limit(20);
 
+  const rawNotifs = (notifs ?? []) as Omit<ContactNotificationRow, "alreadyConnected">[];
+  let linkedIds = new Set<string>();
+  if (rawNotifs.length > 0) {
+    const { data: contacts } = await contactsSchema.client
+      .from("contacts")
+      .select("linked_ecosystem_id")
+      .eq("user_id", contactsSchema.effectiveUserId);
+    linkedIds = new Set(
+      ((contacts ?? []) as { linked_ecosystem_id: string | null }[])
+        .map((c) => c.linked_ecosystem_id)
+        .filter((id): id is string => Boolean(id)),
+    );
+  }
+
   return {
-    contactNotifications: (notifs ?? []) as ContactNotificationRow[],
+    contactNotifications: rawNotifs.map((n) => ({
+      ...n,
+      alreadyConnected: linkedIds.has(n.actor_user_id),
+    })),
     pendingInvites: (invites ?? []) as EventInviteRow[],
   };
 }
