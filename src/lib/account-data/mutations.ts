@@ -51,6 +51,74 @@ function sanitizeContactUpdates(
   return { fields, rejected };
 }
 
+export interface AddContactResult {
+  ok: boolean;
+  message: string;
+  contactId?: string;
+}
+
+/**
+ * Create a brand-new contact. Always inserts into `api.contacts`
+ * (BLXCKBOOK) only — `public.vessels` (NXT) is NOT written to separately.
+ * `trg_sync_contact_to_vessel` (Postgres trigger, confirmed live: insert /
+ * update / delete on api.contacts) mirrors the row into public.vessels
+ * automatically, same id, in both directions. Writing to both tables from
+ * here would race the trigger and risk two divergent rows — the exact bug
+ * class this session already fixed once (a manual-merge bug that left two
+ * rows for one person). One insert, one schema, the trigger keeps both
+ * dashboards synchronized — hence "very synchronistic" without doing
+ * anything explicit for NXT at all.
+ */
+export async function addContact(
+  session: AuthenticatedAccountSession,
+  name: string,
+  options?: {
+    notes?: string;
+    tags?: string[];
+    relationshipStatus?: string;
+    visibility?: string;
+  },
+): Promise<AddContactResult> {
+  const vault = resolveVaultClient(session, "blxckbook");
+
+  const { data: existingRows } = await vault.client
+    .from("contacts")
+    .select("*")
+    .eq("user_id", vault.effectiveUserId);
+  const existing = fuzzyMatchContact((existingRows ?? []) as { name: string }[], name);
+  if (existing) {
+    return {
+      ok: false,
+      message:
+        `A contact matching "${name}" already exists ("${existing.name}") — ` +
+        `use update_contact to edit it instead of creating a duplicate.`,
+    };
+  }
+
+  const { data: inserted, error } = await vault.client
+    .from("contacts")
+    .insert({
+      user_id: vault.effectiveUserId,
+      name,
+      notes: options?.notes ?? "",
+      tags: options?.tags ?? [],
+      relationship_status: options?.relationshipStatus ?? null,
+      visibility: options?.visibility ?? "private",
+    })
+    .select("id")
+    .single();
+
+  if (error || !inserted) {
+    return { ok: false, message: `Failed to add contact: ${error?.message ?? "unknown error"}` };
+  }
+
+  return {
+    ok: true,
+    contactId: inserted.id as string,
+    message: `Added "${name}" — synced automatically to both BLXCKBOOK and NXT (shared trigger).`,
+  };
+}
+
 /**
  * Update one BLXCKBOOK contact or NXT vessel by fuzzy name match.
  * `target` must be "blxckbook" or "nxt" — no "auto" here, since the same

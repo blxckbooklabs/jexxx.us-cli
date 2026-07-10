@@ -14,6 +14,7 @@ import {
   restoreTerminalForReadline,
 } from "./ui/tty.js";
 import { loadAutosaveSession } from "./ui/session/autosave.js";
+import { logCrash } from "./crash-log.js";
 
 export interface InteractiveChatOptions {
   providerLabel?: string;
@@ -131,8 +132,11 @@ async function startReadlineFallback(
       }
       console.log();
     } catch (err) {
+      logCrash("readline REPL turn", err);
       console.error(
-        chalk.red(`\n[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`),
+        chalk.red(
+          `\n[ERROR] ${err instanceof Error ? err.message : "Unknown error"} — full trace: ~/.jexxxus/crash.log`,
+        ),
       );
     }
     rl.prompt();

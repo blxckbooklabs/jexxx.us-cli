@@ -3,6 +3,7 @@ import * as fs from "fs";
 import type { BlxckchatTool } from "./types.js";
 import { resolveAuthenticatedAccountSession } from "../../account-data/session.js";
 import {
+  addContact,
   updateContact,
   deleteContact,
   addJournalEntry,
@@ -16,6 +17,52 @@ import {
 } from "../../account-data/mutations.js";
 import { exportVaultToDisk, type VaultExportTarget } from "../../account-data/export-to-disk.js";
 import type { DashboardTarget } from "../../supabase.js";
+
+export const addContactTool: BlxckchatTool = {
+  name: "add_contact",
+  description:
+    "Create a brand-new contact. Automatically synced to both BLXCKBOOK and NXT — a single " +
+    "Postgres trigger mirrors the row into both, so this never needs a separate call per " +
+    "dashboard. Refuses (with a suggestion to use update_contact instead) if a contact matching " +
+    "that name already exists, to avoid creating a duplicate. Requires /auth login.",
+  parameters: {
+    type: "object",
+    properties: {
+      name: { type: "string", description: "Contact's name" },
+      notes: { type: "string", description: "Optional notes" },
+      tags: { type: "array", items: { type: "string" }, description: "Optional tags" },
+      relationshipStatus: { type: "string", description: "Optional relationship status" },
+      visibility: {
+        type: "string",
+        enum: ["private", "shared", "ecosystem"],
+        description: "Optional visibility (default: private)",
+      },
+    },
+    required: ["name"],
+  },
+  requiresConfirmation: true,
+  async execute(args: Record<string, unknown>): Promise<string> {
+    const name = String(args.name ?? "").trim();
+    if (!name) return "Error: name is required.";
+
+    const resolved = await resolveAuthenticatedAccountSession();
+    if (!resolved.ok) return `Error: ${resolved.message}`;
+
+    const options: {
+      notes?: string;
+      tags?: string[];
+      relationshipStatus?: string;
+      visibility?: string;
+    } = {};
+    if (typeof args.notes === "string") options.notes = args.notes;
+    if (Array.isArray(args.tags)) options.tags = args.tags as string[];
+    if (typeof args.relationshipStatus === "string") options.relationshipStatus = args.relationshipStatus;
+    if (typeof args.visibility === "string") options.visibility = args.visibility;
+
+    const result = await addContact(resolved.session, name, options);
+    return result.message;
+  },
+};
 
 export const updateContactTool: BlxckchatTool = {
   name: "update_contact",

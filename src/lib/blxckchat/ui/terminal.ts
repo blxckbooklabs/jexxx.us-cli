@@ -83,6 +83,7 @@ import { createAuthPickerOverlay } from "./components/auth-picker-overlay.js";
 import { createDeviceLoginOverlay } from "./components/device-login-overlay.js";
 import { createToastOverlay } from "./components/toast-overlay.js";
 import { createAuthTuiActions } from "./auth-tui.js";
+import { logCrash } from "../crash-log.js";
 import {
   forceSgrMouseMode,
   isBlessedMouseEnabled,
@@ -580,8 +581,9 @@ export async function startTerminalChat(
         statusBar.setMessage("Aborted — ready");
       } else {
         const msg = err instanceof Error ? err.message : "Unknown error";
+        logCrash(`runAgent turn (provider: ${activeConfig.provider}/${activeConfig.model})`, err);
         messageBox.cancelInFlightAssistant();
-        messageBox.appendError(`[ERROR] ${msg}`);
+        messageBox.appendError(`[ERROR] ${msg} — full trace: ~/.jexxxus/crash.log`);
         statusBar.setMessage(`Error: ${msg}`);
       }
     } finally {

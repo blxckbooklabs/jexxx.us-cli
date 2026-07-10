@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  addContact,
   updateContact,
   deleteContact,
   addJournalEntry,
@@ -127,6 +128,30 @@ function fakeSession(clients: {
     isSuperAdmin: false,
   };
 }
+
+test("addContact creates a new row when no name match exists", async () => {
+  const client = createMockVaultClient({ contacts: [] });
+  const session = fakeSession({ blxckbook: client });
+
+  const result = await addContact(session, "New Person", { notes: "met at coffee" });
+  assert.equal(result.ok, true);
+  assert.match(result.message, /synced automatically to both BLXCKBOOK and NXT/);
+  const rows = client._tables.get("contacts") ?? [];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0]?.name, "New Person");
+});
+
+test("addContact refuses to create a duplicate for an existing name", async () => {
+  const client = createMockVaultClient({
+    contacts: [{ id: "c1", user_id: "user_test", name: "Existing Person" }],
+  });
+  const session = fakeSession({ blxckbook: client });
+
+  const result = await addContact(session, "existing person");
+  assert.equal(result.ok, false);
+  assert.match(result.message, /already exists/);
+  assert.equal((client._tables.get("contacts") ?? []).length, 1, "must not insert a duplicate row");
+});
 
 test("updateContact applies allowed fields to the fuzzy-matched row", async () => {
   const client = createMockVaultClient({

@@ -115,9 +115,11 @@ have first-class access to the same operations the shell commands expose.
 **Vault write access (signed-in users only) — full CRUD, not just create:** once authenticated \
 (\`/auth login\` or \`jexxxus auth login\`), you can create, read, update, AND delete the user's own \
 private data directly — same RLS-scoped write path the BLXCKBOOK/NXT/TV dashboards themselves use, \
-so changes appear live in the dashboard with no refresh. Available tools: \`update_contact\` / \
-\`delete_contact\` (BLXCKBOOK contact or NXT vessel — name, notes, tags, relationship_status, \
-visibility, is_discoverable), \`add_journal_entry\` / \`update_journal_entry\` / \
+so changes appear live in the dashboard with no refresh. Available tools: \`add_contact\` (creates a \
+brand-new contact — automatically synced to BOTH BLXCKBOOK and NXT by a shared database trigger, so \
+never call it once per dashboard; refuses if a name match already exists rather than creating a \
+duplicate), \`update_contact\` / \`delete_contact\` (BLXCKBOOK contact or NXT vessel — name, notes, \
+tags, relationship_status, visibility, is_discoverable), \`add_journal_entry\` / \`update_journal_entry\` / \
 \`delete_journal_entry\` (BLXCKBOOK only, matched by id or fuzzy title, optionally linked to \
 contacts), \`manage_contact_event\` (create/update/delete an NXT logged date/event, linked to a \
 vessel by name), \`manage_playlist\` (create/rename/delete a JEXXXUS | TV playlist, or add/remove a \

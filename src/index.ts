@@ -36,6 +36,7 @@ import { resolveProvider } from "./lib/blxckchat/providers/registry.js";
 import { buildToolRegistry } from "./lib/blxckchat/tools/registry.js";
 import { runAgent } from "./lib/blxckchat/agent-loop.js";
 import { startInteractiveChat } from "./lib/blxckchat/repl-ui.js";
+import { logCrash } from "./lib/blxckchat/crash-log.js";
 import {
   loadCredentials,
   saveCredentials,
@@ -627,6 +628,7 @@ program
 
 program.parseAsync().catch((err: unknown) => {
   const message = err instanceof Error ? err.message : "Unexpected CLI failure";
-  console.error(chalk.red(`[ERROR] ${message}`));
+  logCrash("top-level CLI failure", err);
+  console.error(chalk.red(`[ERROR] ${message} — full trace: ~/.jexxxus/crash.log`));
   process.exit(1);
 });

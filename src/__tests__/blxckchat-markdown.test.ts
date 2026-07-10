@@ -57,3 +57,27 @@ test("renderUserMessageBox wraps content in pink border", () => {
   assert.match(out, /hello kingdom/);
   assert.match(out, /╭/);
 });
+
+test("markdownToBlessed survives a pathologically deep nested list without crashing", () => {
+  // Regression test: a broken/looping model turn (free-tier/quantized
+  // models are the usual culprit) can emit thousands of nested list levels
+  // instead of terminating normally. marked.lexer()'s recursive-descent
+  // list parser has no depth limit of its own -- confirmed directly that a
+  // 5,000-level nested list blows the stack/heap before our own renderer
+  // even runs. This must not crash the whole turn ("Maximum call stack
+  // size exceeded"), just degrade gracefully.
+  let deeplyNested = "";
+  for (let i = 0; i < 3000; i++) {
+    deeplyNested += "  ".repeat(i) + "- item " + i + "\n";
+  }
+  const out = markdownToBlessed(deeplyNested);
+  assert.equal(typeof out, "string");
+  assert.ok(out.length > 0);
+});
+
+test("markdownToBlessed truncates absurdly long input rather than parsing it whole", () => {
+  const huge = "a".repeat(500_000);
+  const out = markdownToBlessed(huge);
+  assert.ok(out.length < huge.length);
+  assert.match(out, /truncated/);
+});

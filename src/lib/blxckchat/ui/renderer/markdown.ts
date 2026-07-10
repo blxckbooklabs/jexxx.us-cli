@@ -135,14 +135,40 @@ function renderBlocks(tokens: Token[]): string {
 /**
  * Convert markdown to blessed-compatible tagged text (no HTML).
  * Code blocks render in a gray bordered box; links show as `label [url]`.
+ *
+ * Defensively bounded against pathological input: a broken/looping model
+ * turn (free-tier/quantized models are the usual culprit) can emit
+ * thousands of nested list levels instead of terminating normally.
+ * `marked.lexer()`'s recursive-descent list parser has no depth limit of
+ * its own — verified directly: a 5,000-level nested list blows the V8
+ * stack/heap before our own renderer even runs. A few hundred levels is
+ * enough to hit "Maximum call stack size exceeded" well before any memory
+ * limit. There is no legitimate reply that needs anywhere near this much
+ * nesting, so this is pure defense against a broken generation, not a
+ * feature limit.
  */
+const MAX_MARKDOWN_INPUT_CHARS = 200_000;
+
 export function markdownToBlessed(markdown: string): string {
   const normalized = normalizeAgentMarkup(markdown.trim());
   if (!normalized) return "";
 
-  const tokens = marked.lexer(normalized, { gfm: true, breaks: true });
-  trimPartialClosingFences(tokens);
-  const body = renderBlocks(tokens).trimEnd();
+  const capped =
+    normalized.length > MAX_MARKDOWN_INPUT_CHARS
+      ? `${normalized.slice(0, MAX_MARKDOWN_INPUT_CHARS)}\n\n[response truncated — unusually long output]`
+      : normalized;
+
+  let body: string;
+  try {
+    const tokens = marked.lexer(capped, { gfm: true, breaks: true });
+    trimPartialClosingFences(tokens);
+    body = renderBlocks(tokens).trimEnd();
+  } catch {
+    // Malformed/pathologically-nested markdown crashed the parser or
+    // renderer (RangeError from stack overflow, or anything else) — fall
+    // back to plain escaped text rather than losing the whole turn.
+    body = escapeBlessed(capped);
+  }
   if (!body) return "";
 
   return body

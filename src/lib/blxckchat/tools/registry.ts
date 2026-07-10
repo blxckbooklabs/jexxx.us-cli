@@ -7,6 +7,7 @@ import { doctorTool, notifyTool, importContactsTool } from "./dashboard-tools.js
 import { accountQueryTool } from "./account-tools.js";
 import { shellTool } from "./shell-tool.js";
 import {
+  addContactTool,
   updateContactTool,
   deleteContactTool,
   addJournalEntryTool,
@@ -58,6 +59,7 @@ export function buildToolRegistry(
   if (options.includeAccountQuery) {
     tools.push(
       accountQueryTool,
+      addContactTool,
       updateContactTool,
       deleteContactTool,
       addJournalEntryTool,

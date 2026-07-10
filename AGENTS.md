@@ -180,6 +180,31 @@ Owned by the JEXXXUS platform / tooling team.
   Text selection then flows through the existing `attach-blessed-text-selection.ts` (mousedown →
   highlight → mouseup → copy → pink toast) unchanged — the bug was purely in which mouse protocol
   blessed negotiated with the terminal, not in the selection/copy logic itself.
+- **"Maximum call stack size exceeded" crash on some LLM turns (July 2026 fix):** free/quantized
+  reasoning models (reported with `opencode-zen/deepseek-v4-flash-free`) can loop/degrade mid-turn
+  and emit thousands of nested markdown list levels instead of terminating normally. Confirmed
+  directly: `marked.lexer()`'s recursive-descent list parser has no depth limit — a 5,000-level
+  nested list blows the V8 stack/heap before our own `renderBlock`/`renderListItem` mutual
+  recursion even runs. `markdown.ts#markdownToBlessed()` now (1) caps input at
+  `MAX_MARKDOWN_INPUT_CHARS` (200k) before parsing, and (2) wraps the parse+render in a try/catch
+  that falls back to plain escaped text on any failure (stack overflow or otherwise), so a
+  pathological turn degrades gracefully instead of crashing the whole agent. Regression tests in
+  `blxckchat-markdown.test.ts` reproduce the exact 3,000-level nested-list and 500k-char inputs
+  that previously required a fatal OOM/stack-overflow to occur. Also added `crash-log.ts` —
+  `logCrash()` now runs alongside every top-level error path (`terminal.ts`, `repl-ui.ts`,
+  `index.ts`'s `program.parseAsync().catch`) and appends the *full* `err.stack` to
+  `~/.jexxxus/crash.log`, since the UI only ever showed `err.message` before, discarding the trace
+  needed to diagnose anything unexpected.
+- **`add_contact` (July 2026):** creates a brand-new contact, always via a single insert into
+  `api.contacts` (BLXCKBOOK) — never writes to `public.vessels` (NXT) directly. The existing
+  `trg_sync_contact_to_vessel`/`trg_sync_vessel_to_contact` Postgres triggers (bidirectional,
+  `AFTER INSERT OR DELETE OR UPDATE`) already mirror the row between both tables automatically —
+  confirmed live: inserting into `api.contacts` produces a matching `public.vessels` row with the
+  same `id` within the same transaction, and deleting the contact removes the vessel too. Writing
+  to both tables from the CLI would race the trigger and risk exactly the kind of two-rows-for-one-
+  person bug already fixed once this session (the manual-merge bug in dxsh.blxckbook.jexxx.us).
+  `addContact()` in `mutations.ts` also fuzzy-matches existing contacts first and refuses to create
+  a duplicate — same discipline as `connect_contact_back`.
 
 ## 6. Child DOX Index
 
