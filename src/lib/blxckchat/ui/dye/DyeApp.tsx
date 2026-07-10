@@ -6,6 +6,7 @@ import {
   useApp,
   useWindowSize,
   useSelection,
+  usePaste,
 } from "@sauerapple/dye";
 import { THEME } from "../theme.js";
 import type { MessageStore } from "./message-store.js";
@@ -205,6 +206,21 @@ export const DyeApp: React.FC<DyeAppProps> = ({
     }
   }, [dragging, selectedText, copy, clearSelection, store]);
 
+  // Paste support when the prompt overlay is open. This is the PRIMARY
+  // paste path -- usePaste hooks into Dye's 'paste' event channel, which is
+  // separate from useInput's 'input' channel (past text is NEVER forwarded
+  // to useInput while a usePaste handler is active). Bracketed paste mode
+  // is managed automatically by the hook.
+  usePaste(
+    (text) => {
+      if (!promptState) return;
+      const normalized = text.replace(/\r?\n/g, "").replace(/\t/g, "");
+      if (!normalized) return;
+      setPromptState((s) => (s ? { ...s, input: s.input + normalized } : s));
+    },
+    { isActive: Boolean(promptState) },
+  );
+
   useInput((input, key) => {
     if (store.confirmDialog) {
       if (input === "y" || input === "Y") {
@@ -288,17 +304,9 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
         return;
       }
-      // Paste trigger: Ctrl+V, Cmd/Meta+V reads clipboard directly.
-      if ((key.ctrl || key.meta) && input === "v") {
-        void readClipboard().then((clip) => {
-          const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
-          if (!normalized) return;
-          setPromptState((s) => (s ? { ...s, input: normalized } : s));
-        });
-        return;
-      }
-      // Secret-mode fallback: Shift+P reads clipboard (since Cmd+V is
-      // intercepted by most macOS terminal emulators and never reaches Dye).
+      // Secret-mode fallback: Shift+P reads clipboard via readClipboard.
+      // Cmd+V is intercepted by macOS terminals and Ctrl+V reliability
+      // varies; the primary paste path is usePaste (separate channel).
       if (promptState.options.secret && key.shift && !key.ctrl && !key.meta && input.toLowerCase() === "p") {
         void readClipboard().then((clip) => {
           const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
@@ -307,9 +315,9 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         });
         return;
       }
-      // Regular typing AND terminal paste (Dye batches pasted text into a single
-      // useInput call with the full string as input, so input.length > 1 is paste).
-      if (input && input.length > 0 && !key.ctrl && !key.meta) {
+      // Regular character input. Paste is handled by usePaste on its own
+      // event channel and never reaches useInput while active.
+      if (input && !key.ctrl && !key.meta) {
         setPromptState((s) => (s ? { ...s, input: s.input + input } : s));
         return;
       }
