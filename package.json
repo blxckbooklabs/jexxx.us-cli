@@ -8,7 +8,7 @@
     "jexxxus": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('fs'),f='dist/index.js';const s=fs.readFileSync(f,'utf8');if(!s.startsWith('#!/usr/bin/env node')){fs.writeFileSync(f,'#!/usr/bin/env node\\n'+s)};fs.chmodSync(f,0o755)\"",
     "start": "ts-node src/index.ts",
     "test": "npm run build && node --test dist/__tests__/*.test.js",
     "smoke:rls": "npm run build && node dist/scripts/rls-smoke-test.js",
