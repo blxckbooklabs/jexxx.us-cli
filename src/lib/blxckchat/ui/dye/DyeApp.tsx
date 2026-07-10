@@ -246,23 +246,23 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         return;
       }
       if (key.upArrow) {
-        setPickerState((s) =>
-          s ? { ...s, selectedIndex: Math.max(0, s.selectedIndex - 1) } : s,
-        );
+        setPickerState((s) => {
+          if (!s) return s;
+          const len = pickerItemsFiltered(s).length;
+          if (len === 0) return s;
+          const next = ((s.selectedIndex - 1 + len) % len);
+          return { ...s, selectedIndex: next };
+        });
         return;
       }
       if (key.downArrow) {
-        setPickerState((s) =>
-          s
-            ? {
-                ...s,
-                selectedIndex: Math.min(
-                  s.items.length - 1,
-                  s.selectedIndex + 1,
-                ),
-              }
-            : s,
-        );
+        setPickerState((s) => {
+          if (!s) return s;
+          const len = pickerItemsFiltered(s).length;
+          if (len === 0) return s;
+          const next = ((s.selectedIndex + 1) % len);
+          return { ...s, selectedIndex: next };
+        });
         return;
       }
       if (key.return) {
@@ -617,7 +617,17 @@ export const DyeApp: React.FC<DyeAppProps> = ({
 
         <PickerOverlay
           state={
-            pickerState ? { ...pickerState, filterQuery: typedQuery } : null
+            pickerState
+              ? (() => {
+                  const filtered = pickerItemsFiltered(pickerState);
+                  const len = Math.max(filtered.length, 0);
+                  const si =
+                    len === 0
+                      ? 0
+                      : Math.min(pickerState.selectedIndex, len - 1);
+                  return { ...pickerState, selectedIndex: si, filterQuery: typedQuery };
+                })()
+              : null
           }
           filterFocused={pickerFilterFocused}
         />

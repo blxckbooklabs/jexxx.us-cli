@@ -31,6 +31,20 @@ interface PickerOverlayProps {
 
 const VISIBLE_ITEMS = 10;
 
+/**
+ * Resolve which item should appear selected. `state.selectedIndex` is an
+ * index into the *filtered* list (keyboard navigation maintains it within
+ * 0..filtered.length-1, wrapping). Return the id that should be highlighted,
+ * or null if the filtered list is empty / the index is out of range.
+ */
+function selectedItemId(state: PickerDisplayState): string | null {
+  const filtered = filterItems(state.items, state.filterQuery);
+  if (state.selectedIndex < 0 || state.selectedIndex >= filtered.length) {
+    return null;
+  }
+  return filtered[state.selectedIndex]?.id ?? null;
+}
+
 export const PickerOverlay: React.FC<PickerOverlayProps> = ({
   state,
   filterFocused,
@@ -40,6 +54,11 @@ export const PickerOverlay: React.FC<PickerOverlayProps> = ({
   const label = state.title ?? "picker";
   const filtered = filterItems(state.items, state.filterQuery);
   const hideFilter = state.hideFilter === true;
+
+  // Highlight is identity-based on the filtered list so it survives
+  // filtering — selectedIndex moves as a filtered-list position, so we
+  // look up the selected item by id rather than comparing raw indices.
+  const activeId = selectedItemId(state);
 
   const scrollOffsetRef = React.useRef(0);
   if (filtered.length <= VISIBLE_ITEMS) {
@@ -96,8 +115,7 @@ export const PickerOverlay: React.FC<PickerOverlayProps> = ({
             <Text color={THEME.textMuted}> No matches</Text>
           ) : (
             shownItems.map((item, vi) => {
-              const actualIndex = scrollOffset + vi;
-              const isSel = actualIndex === state.selectedIndex;
+              const isSel = item.id === activeId;
               const desc = item.description
                 ? item.description.length > 48
                   ? `${item.description.slice(0, 45)}...`
