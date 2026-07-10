@@ -181,6 +181,219 @@ export async function addJournalEntry(
   };
 }
 
+export interface JournalEntryMutationResult {
+  ok: boolean;
+  message: string;
+}
+
+async function findJournalEntry(
+  vault: { client: ReturnType<typeof resolveVaultClient>["client"]; effectiveUserId: string },
+  entryIdOrTitle: string,
+): Promise<{ id: string; title: string } | null> {
+  const { data } = await vault.client
+    .from("journal_entries")
+    .select("id, title")
+    .eq("user_id", vault.effectiveUserId);
+  const rows = (data ?? []) as { id: string; title: string }[];
+  const direct = rows.find((r) => r.id === entryIdOrTitle);
+  if (direct) return direct;
+  const needle = normalizeName(entryIdOrTitle);
+  return (
+    rows.find((r) => normalizeName(r.title ?? "") === needle) ??
+    rows.find((r) => normalizeName(r.title ?? "").includes(needle)) ??
+    null
+  );
+}
+
+/** Update an existing BLXCKBOOK journal entry's title/content/tags, matched by id or title. */
+export async function updateJournalEntry(
+  session: AuthenticatedAccountSession,
+  entryIdOrTitle: string,
+  updates: { title?: string; content?: string; tags?: string[] },
+): Promise<JournalEntryMutationResult> {
+  const vault = resolveVaultClient(session, "blxckbook");
+  const entry = await findJournalEntry(vault, entryIdOrTitle);
+  if (!entry) {
+    return { ok: false, message: `No journal entry matching "${entryIdOrTitle}" found.` };
+  }
+
+  const fields: Record<string, unknown> = {};
+  if (updates.title !== undefined) fields.title = updates.title;
+  if (updates.content !== undefined) fields.content = updates.content;
+  if (updates.tags !== undefined) fields.tags = updates.tags;
+  if (Object.keys(fields).length === 0) {
+    return { ok: false, message: "No updatable fields provided (title, content, tags)." };
+  }
+
+  const { error } = await vault.client
+    .from("journal_entries")
+    .update(fields)
+    .eq("id", entry.id)
+    .eq("user_id", vault.effectiveUserId);
+  if (error) return { ok: false, message: `Update failed: ${error.message}` };
+
+  return { ok: true, message: `Updated journal entry "${entry.title}".` };
+}
+
+/** Delete a BLXCKBOOK journal entry (and its contact links), matched by id or title. */
+export async function deleteJournalEntry(
+  session: AuthenticatedAccountSession,
+  entryIdOrTitle: string,
+): Promise<JournalEntryMutationResult> {
+  const vault = resolveVaultClient(session, "blxckbook");
+  const entry = await findJournalEntry(vault, entryIdOrTitle);
+  if (!entry) {
+    return { ok: false, message: `No journal entry matching "${entryIdOrTitle}" found.` };
+  }
+
+  await vault.client
+    .from("journal_contact_links")
+    .delete()
+    .eq("journal_id", entry.id)
+    .eq("user_id", vault.effectiveUserId);
+
+  const { error } = await vault.client
+    .from("journal_entries")
+    .delete()
+    .eq("id", entry.id)
+    .eq("user_id", vault.effectiveUserId);
+  if (error) return { ok: false, message: `Delete failed: ${error.message}` };
+
+  return { ok: true, message: `Deleted journal entry "${entry.title}".` };
+}
+
+/** Delete a BLXCKBOOK contact or NXT vessel by fuzzy name match. */
+export async function deleteContact(
+  session: AuthenticatedAccountSession,
+  target: DashboardTarget,
+  contactName: string,
+): Promise<UpdateContactResult> {
+  let vault;
+  try {
+    vault = resolveVaultClient(session, target);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+  }
+
+  const table = target === "blxckbook" ? "contacts" : "vessels";
+  const { data: rows } = await vault.client
+    .from(table)
+    .select("*")
+    .eq("user_id", vault.effectiveUserId);
+
+  const match = fuzzyMatchContact((rows ?? []) as { name: string }[], contactName);
+  if (!match) {
+    return { ok: false, message: `No ${target} contact matching "${contactName}" found.` };
+  }
+  const row = match as Record<string, unknown>;
+
+  const { error } = await vault.client
+    .from(table)
+    .delete()
+    .eq("id", row.id)
+    .eq("user_id", vault.effectiveUserId);
+  if (error) return { ok: false, message: `Delete failed: ${error.message}` };
+
+  return { ok: true, message: `Deleted ${target} contact "${row.name}".` };
+}
+
+export interface ContactEventMutationResult {
+  ok: boolean;
+  message: string;
+  eventId?: string;
+}
+
+/**
+ * Create an NXT contact_events row (a logged date/event), linked to a
+ * vessel by name. Column names verified live against a real (throwaway
+ * test) row after the schema (public.contact_events: id, user_id,
+ * vessel_id, event_date, event_type, title, location, notes, created_at,
+ * updated_at — see supabase/supabase/migrations/20260708223504_remote_schema.sql
+ * line ~1289) turned out to differ from the initial assumption (vessel_id,
+ * not contact_id; event_type, not kind).
+ */
+export async function addContactEvent(
+  session: AuthenticatedAccountSession,
+  contactName: string,
+  fields: { title: string; eventDate: string; eventType?: string; location?: string; notes?: string },
+): Promise<ContactEventMutationResult> {
+  const vault = resolveVaultClient(session, "nxt");
+  const { data: vessels } = await vault.client
+    .from("vessels")
+    .select("*")
+    .eq("user_id", vault.effectiveUserId);
+  const vessel = fuzzyMatchContact((vessels ?? []) as { name: string; id: string }[], contactName);
+  if (!vessel) {
+    return { ok: false, message: `No NXT contact matching "${contactName}" found.` };
+  }
+
+  const row: Record<string, unknown> = {
+    user_id: vault.effectiveUserId,
+    vessel_id: (vessel as { id: string }).id,
+    title: fields.title,
+    event_date: fields.eventDate,
+  };
+  if (fields.eventType !== undefined) row.event_type = fields.eventType;
+  if (fields.location !== undefined) row.location = fields.location;
+  if (fields.notes !== undefined) row.notes = fields.notes;
+
+  const { data: inserted, error } = await vault.client
+    .from("contact_events")
+    .insert(row)
+    .select("id")
+    .single();
+
+  if (error || !inserted) {
+    return { ok: false, message: `Failed to add event: ${error?.message ?? "unknown error"}` };
+  }
+  return {
+    ok: true,
+    message: `Added event "${fields.title}" for "${contactName}".`,
+    eventId: inserted.id as string,
+  };
+}
+
+/** Update an NXT contact_events row, matched by id. */
+export async function updateContactEvent(
+  session: AuthenticatedAccountSession,
+  eventId: string,
+  updates: { title?: string; eventDate?: string; eventType?: string; location?: string; notes?: string },
+): Promise<ContactEventMutationResult> {
+  const vault = resolveVaultClient(session, "nxt");
+  const fields: Record<string, unknown> = {};
+  if (updates.title !== undefined) fields.title = updates.title;
+  if (updates.eventDate !== undefined) fields.event_date = updates.eventDate;
+  if (updates.eventType !== undefined) fields.event_type = updates.eventType;
+  if (updates.location !== undefined) fields.location = updates.location;
+  if (updates.notes !== undefined) fields.notes = updates.notes;
+  if (Object.keys(fields).length === 0) {
+    return { ok: false, message: "No updatable fields provided (title, eventDate, eventType, location, notes)." };
+  }
+
+  const { error } = await vault.client
+    .from("contact_events")
+    .update(fields)
+    .eq("id", eventId)
+    .eq("user_id", vault.effectiveUserId);
+  if (error) return { ok: false, message: `Update failed: ${error.message}` };
+  return { ok: true, message: `Updated event ${eventId}.` };
+}
+
+/** Delete an NXT contact_events row, matched by id. */
+export async function deleteContactEvent(
+  session: AuthenticatedAccountSession,
+  eventId: string,
+): Promise<ContactEventMutationResult> {
+  const vault = resolveVaultClient(session, "nxt");
+  const { error } = await vault.client
+    .from("contact_events")
+    .delete()
+    .eq("id", eventId)
+    .eq("user_id", vault.effectiveUserId);
+  if (error) return { ok: false, message: `Delete failed: ${error.message}` };
+  return { ok: true, message: `Deleted event ${eventId}.` };
+}
+
 export type PlaylistAction =
   | "create"
   | "rename"

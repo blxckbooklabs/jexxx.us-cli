@@ -89,18 +89,26 @@ Owned by the JEXXXUS platform / tooling team.
   `account-data/tv-playlists.ts` (TV custom playlists). Slash: `/account status`, `/account export`.
   Query catalog: Obsidian `Account-Data-Query-Catalog.md`. Tests: `account-routing.test.ts`,
   `account-data.test.ts`, `super-admin.test.ts`.
-- **BLXCKCHAT vault writes (July 2026):** `update_contact`/`add_journal_entry`/`manage_playlist`
-  (`tools/vault-write-tools.ts`) call into `account-data/mutations.ts`, which reuses
-  `resolveVaultClient()`/`resolveTvClient()` from `session.ts` with **no `asUserId` parameter ever**
-  — unlike `account_query`, these tools have no super-admin write-on-behalf-of-another-user path by
-  design. RLS on `api.contacts`/`api.journal_entries`/`public.vessels`/`public.contact_events`/
-  `public.playlists`/`public.playlist_items` already permits full CRUD for the row owner (verified
-  against `supabase/supabase/migrations/20260708223504_remote_schema.sql`) — no new RLS policies or
-  Realtime wiring were needed, the CLI just uses the same authenticated write path the dashboards do.
+- **BLXCKCHAT vault writes (July 2026) — full CRUD:** `update_contact`/`delete_contact`,
+  `add_journal_entry`/`update_journal_entry`/`delete_journal_entry`, `manage_contact_event`
+  (create/update/delete), `manage_playlist` (`tools/vault-write-tools.ts`) call into
+  `account-data/mutations.ts`, which reuses `resolveVaultClient()`/`resolveTvClient()` from
+  `session.ts` with **no `asUserId` parameter ever** — unlike `account_query`, these tools have no
+  super-admin write-on-behalf-of-another-user path by design. RLS on `api.contacts`/
+  `api.journal_entries`/`public.vessels`/`public.contact_events`/`public.playlists`/
+  `public.playlist_items` already permits full CRUD for the row owner (verified against
+  `supabase/supabase/migrations/20260708223504_remote_schema.sql`) — no new RLS policies or Realtime
+  wiring were needed, the CLI just uses the same authenticated write path the dashboards do.
   `mutations.ts`'s `sanitizeContactUpdates()` hard-blocks `id`/`user_id`/`created_at` regardless of
   what the model tries to pass. `export_vault`/`sync_export_file`
   (`account-data/export-to-disk.ts`, `mutations.ts#syncBlxckbookExport`) support the
   export-edit-reupload workflow — sync matches by `id`, creates rows without one, never deletes.
+  **`public.contact_events` columns are `vessel_id`/`event_type`, not `contact_id`/`kind`** — the
+  first implementation guessed wrong and only surfaced when tested live against a real (throwaway)
+  row; `addContactEvent`/`updateContactEvent` in `mutations.ts` use the correct names now. Lesson:
+  when adding a new table to `mutations.ts`, verify column names against
+  `supabase/supabase/migrations/20260708223504_remote_schema.sql` directly rather than inferring from
+  a sibling table's naming convention.
 - **BLXCKCHAT local file tools (`tools/local-file-tools.ts`):** `read_local_file`/
   `write_local_file`/`edit_local_file` default relative paths to `~/.jexxxus/workspace`; absolute
   paths outside `~/.jexxxus` are permitted but flagged in the tool's return message. `edit_local_file`
@@ -139,6 +147,19 @@ Owned by the JEXXXUS platform / tooling team.
   block via `stream-thinking.ts` (`StreamThinkingParser` for `<think>`/API reasoning deltas;
   `formatThinkingWaitState` between tool passes). Toggle collapsed blocks: `Space` / `Ctrl+T`.
   Tests: `blxckchat-stream-thinking.test.ts`.
+- **Mouse click-drag text selection (July 2026 fix):** blessed 0.1.81's default `enableMouse()`
+  picks legacy UTF-8 mouse mode (`\x1b[?1005h`) for any TERM matching xterm/screen/key_mouse — which
+  is most modern terminals (iTerm2, Terminal.app, Warp, Kitty, VS Code). That mode's motion
+  (drag) reporting is unreliable on those terminals, so click-drag silently never fired
+  `mousemove` — nothing highlighted, nothing copied, only Cmd+A (native OS select-all,
+  independent of blessed) worked. `tty.ts#forceSgrMouseMode()` overrides this to SGR mode
+  (`\x1b[?1006h`) right after all mouse-enabled components (topBar/messageBox/statusBar/inputBox)
+  have registered their first listener in `terminal.ts` — must run there and not earlier, since
+  blessed's `Screen._listenMouse()` calls `program.enableMouse()` exactly once, on the *first*
+  mouse-listener registration, and would silently stomp an earlier override back to UTF-8 mode.
+  Text selection then flows through the existing `attach-blessed-text-selection.ts` (mousedown →
+  highlight → mouseup → copy → pink toast) unchanged — the bug was purely in which mouse protocol
+  blessed negotiated with the terminal, not in the selection/copy logic itself.
 
 ## 6. Child DOX Index
 

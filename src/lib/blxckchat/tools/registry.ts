@@ -8,7 +8,11 @@ import { accountQueryTool } from "./account-tools.js";
 import { shellTool } from "./shell-tool.js";
 import {
   updateContactTool,
+  deleteContactTool,
   addJournalEntryTool,
+  updateJournalEntryTool,
+  deleteJournalEntryTool,
+  manageContactEventTool,
   managePlaylistTool,
   exportVaultTool,
   syncExportFileTool,
@@ -50,7 +54,11 @@ export function buildToolRegistry(
     tools.push(
       accountQueryTool,
       updateContactTool,
+      deleteContactTool,
       addJournalEntryTool,
+      updateJournalEntryTool,
+      deleteJournalEntryTool,
+      manageContactEventTool,
       managePlaylistTool,
       exportVaultTool,
       syncExportFileTool,

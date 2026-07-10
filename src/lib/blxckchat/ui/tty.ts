@@ -41,6 +41,31 @@ export function isSlashPopupMouseEnabled(): boolean {
   return true;
 }
 
+type MouseCapableProgram = {
+  setMouse: (opt: Record<string, boolean>, enable: boolean) => void;
+};
+
+/**
+ * Blessed's Screen._listenMouse() calls program.enableMouse(), which for
+ * plain xterm-like TERM values (the common case: xterm-256color, screen,
+ * or anything with a terminfo key_mouse string — i.e. what iTerm2, Terminal.app,
+ * Warp, Kitty, and VS Code's integrated terminal all report) picks legacy
+ * UTF-8 mouse mode (`\x1b[?1005h`), not SGR extended mode (`\x1b[?1006h`).
+ * UTF-8 mouse mode's coordinate encoding is fragile and most modern terminal
+ * emulators don't reliably deliver motion (drag) reports under it — clicks
+ * limp through but click-drag text selection silently never fires
+ * `mousemove`, so nothing highlights and nothing copies. SGR mode has none
+ * of these limits and is universally supported. Call this once, right after
+ * screen construction, to override blessed's default choice.
+ */
+export function forceSgrMouseMode(screen: blessed.Widgets.Screen): void {
+  const program = screen.program as unknown as MouseCapableProgram;
+  program.setMouse(
+    { vt200Mouse: true, cellMotion: true, allMotion: true, sgrMouse: true, utfMouse: false },
+    true,
+  );
+}
+
 export function prepareStdinForTui(): void {
   if (!process.stdin.isTTY) return;
   process.stdin.setEncoding("utf8");

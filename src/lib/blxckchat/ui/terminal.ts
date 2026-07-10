@@ -84,6 +84,7 @@ import { createDeviceLoginOverlay } from "./components/device-login-overlay.js";
 import { createToastOverlay } from "./components/toast-overlay.js";
 import { createAuthTuiActions } from "./auth-tui.js";
 import {
+  forceSgrMouseMode,
   isBlessedMouseEnabled,
   pauseBlessedForConsole,
   restoreTerminalForReadline,
@@ -774,6 +775,15 @@ export async function startTerminalChat(
       onSetupProvider: (catalogId) => providerOverlay.setup(catalogId),
     },
   );
+
+  // Must run after every mouse-enabled component above has registered its
+  // first listener — blessed's Screen._listenMouse() calls
+  // program.enableMouse() (which picks legacy UTF-8 mouse mode) exactly once,
+  // on the *first* such registration, and does nothing on later ones. Forcing
+  // SGR mode any earlier would just get silently reverted by that first call.
+  if (isBlessedMouseEnabled()) {
+    forceSgrMouseMode(screen);
+  }
 
   registerSlashMenuDismiss(() => inputBox.hideSlashPopup());
   registerOverlayActiveCheck(
