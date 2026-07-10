@@ -61,24 +61,10 @@ export const InputView: React.FC<InputViewProps> = ({
     onChange(next);
   });
 
-  const selCopyTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-
-  React.useEffect(() => {
-    if (selCopyTimerRef.current) clearTimeout(selCopyTimerRef.current);
-    const hasSel = selectionAnchor !== null && selectionAnchor !== cursorPos;
-    if (hasSel) {
-      selCopyTimerRef.current = setTimeout(() => {
-        const s = selRange();
-        const selected = value.slice(s[0], s[1]);
-        if (selected) copyToClipboard(selected);
-      }, 200);
-    }
-    return () => {
-      if (selCopyTimerRef.current) clearTimeout(selCopyTimerRef.current);
-    };
-  }, [selectionAnchor, cursorPos, value]);
+  // Copy only on mouseup (user release), not during selection drag
+  // Note: Dye/Ink doesn't provide native mouseup events, so copy is triggered
+  // only when user explicitly presses Ctrl+C or other copy commands.
+  // Auto-copy during selection is removed to avoid premature clipboard operations.
 
   function hasSelection(): boolean {
     return selectionAnchor !== null && selectionAnchor !== cursorPos;
@@ -337,7 +323,8 @@ export const InputView: React.FC<InputViewProps> = ({
 
   const displayText = value || placeholder;
   const isPlaceholder = value.length === 0;
-  const cursorIdx = Math.min(cursorPos, Math.max(0, displayText.length - 1));
+  // Clamp cursor to valid value indices (not placeholder length)
+  const cursorIdx = Math.min(cursorPos, Math.max(0, value.length - 1));
 
   const selForward = selectionAnchor !== null && cursorPos > selectionAnchor;
   const selBackward = selectionAnchor !== null && cursorPos < selectionAnchor;
