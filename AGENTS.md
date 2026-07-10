@@ -245,6 +245,60 @@ Owned by the JEXXXUS platform / tooling team.
 - **Hero screen no longer hugs the top (July 2026 fix):** the idle hero (ASCII logo + subtitle) used to be built as blank leading lines mixed into `MessageView.tsx`'s scrollable render-line array, with `topMargin` hand-computed from a *guessed* `termHeight - 6` — but the actual available height is whatever the parent's real `flexGrow={1}` Box resolves to at render time (DyeApp.tsx wraps `MessageView` in one), which the guess never matched, so the hero always sat too close to the top regardless of terminal size. Fixed by giving the hero its own path: `MessageView.tsx`'s `HeroCentered` component renders in a dedicated `Box flexGrow={1} justifyContent="center" alignItems="center"` — real Yoga flexbox centering, using the real available space, no arithmetic. Only reachable when `store.blocks` is exactly `[heroBlock]` (i.e. before the first user message — `message-store.ts#appendUser` always calls `dismissHero()` first, so hero can never coexist with other blocks); the old per-turn `buildRenderLines()` hero case is now unreachable dead code, kept only as a `break` for exhaustiveness.
 - **Overlay/modal centering was broken everywhere (July 2026 fix):** `ConfirmModal.tsx`, `PickerOverlay.tsx`, `PromptOverlay.tsx`, `DeviceLoginOverlay.tsx`, and `HotkeysOverlay.tsx` all used `position="absolute" top="50%" left="50%"` to "center" the panel. Confirmed directly in `node_modules/@sauerapple/dye/build/styles.js`: percentage `top`/`left` resolve via Yoga's `setPositionPercent()` — a literal offset of that edge from the parent's edge, with **no** auto-subtraction of the panel's own size (no CSS `transform: translate(-50%,-50%)` equivalent exists in Dye/Yoga). So every modal's top-left corner sat at the screen's midpoint, pushing the whole panel into the bottom-right quadrant — exactly what the "picker offset toward the edge" screenshot showed. Fixed with a new shared `OverlayCenter.tsx`: a full-screen `position="absolute" top={0} left={0} width="100%" height="100%"` Box with `justifyContent="center" alignItems="center"`, wrapping each panel (now a plain non-positioned child, still using percent `width`/fixed `height` — those are fine, only `top`/`left` percent centering was broken). Apply this wrapper to any new centered overlay — do not reach for `top="50%" left="50%"` again.
 - **Picker/slash-popup selection highlight looked "dispersed" (July 2026 fix):** `PickerOverlay.tsx` and `SlashPopup.tsx` row `Box`es had `backgroundColor={isSel ? THEME.pink : undefined}` but no explicit `width` — Ink/Dye only fills the background across a Box's own resolved width, which without `flexGrow`/`width="100%"` shrinks to the row's intrinsic text content width, not the panel's full width. Selected rows highlighted only under their own text, leaving a "broken up" pink patch instead of one clean full-width bar. Fixed by adding `width="100%"` to each row `Box`. Also gave `PickerOverlay`'s outer panel an explicit `backgroundColor={THEME.bgElevated}` (previously unset, letting whatever was behind it bleed through row-by-row — the black/gray "striping" in the screenshot) — same pattern `SlashPopup` already used correctly.
+- **Hero subtitle info (model/user/tool count, "type a message", /help, ? hotkeys) looked
+  right-aligned, not centered (July 2026 fix):** in `HeroCentered` (`MessageView.tsx`), the ASCII
+  logo rows and the subtitle lines were both plain `<Text>` children of one Box with
+  `alignItems="center"`. The multi-segment logo rows happened to center correctly; the
+  single-string subtitle lines did not — Ink/Dye's bare `Text` nodes don't reliably shrink-wrap to
+  their own content width inside a column flex container the way `alignItems="center"` assumes, so
+  centering had no visible effect on them specifically. Fixed by wrapping *every* line (logo rows
+  and subtitle lines alike) in its own `<Box width="100%" justifyContent="center">` — this
+  guarantees each row is definitely full-width and definitely centers its `Text` child via
+  `justifyContent` on a row-direction Box, sidestepping any ambiguity in how Ink measures bare Text
+  width. Don't go back to relying on a parent's `alignItems="center"` alone for centering `Text`
+  children in this codebase — wrap each line explicitly.
+- **Option/Alt+Shift+Left/Right word-select did nothing (July 2026 fix):** `InputView.tsx`'s
+  word-selection handler checked `key.meta && key.shift && input === "B"` / `"F"` — but a real
+  arrow-key press (confirmed directly in
+  `node_modules/@sauerapple/dye/build/parse-keypress.js`'s `fnKeyRe` branch and
+  `hooks/use-input.js`'s `leftArrow: keypress.name === 'left'` mapping) comes through as
+  `key.leftArrow`/`key.rightArrow` booleans with `key.meta`/`key.shift` set from the terminal's CSI
+  modifier byte — never as `input === "B"/"F"` (that only matches a literal Option+Shift+B/F
+  *letter* keypress, an unrelated shortcut). The condition could never fire for an actual arrow-key
+  press. Fixed to check `key.meta && key.shift && key.leftArrow` / `key.rightArrow`, mirroring the
+  already-correct plain-`Shift+Arrow` single-char-select clause a few lines above it.
+- **Click-drag text selection never visually highlighted, even though copy-to-clipboard worked
+  (July 2026 fix) — root cause was in `@sauerapple/dye` itself, not app code:** traced through
+  Dye's actual render pipeline (`renderer.js`, `output.js`, `ink.js`) and found a real architecture
+  bug. `Output.get()` builds TWO parallel representations of the same frame in one pass: a plain 2D
+  character grid (which the returned `output` STRING — what actually gets written to the terminal
+  — is serialized from) and a separately-packed `Screen` buffer (interned charId/styleId cells,
+  used by `SelectionManager`/`applySelectionOverlay` for selection tracking and the pink-highlight
+  patch). `ink.js#doRender()` calls `applySelectionOverlay(screen, sel)` to mutate the `Screen`
+  buffer pink — but this happens *after* `output.get()` already returned the finalized `output`
+  string for that frame, built from the OTHER (unmutated) representation. The mutation has zero
+  effect on what's written to the terminal that frame, or any frame, ever — `screen.stylePool
+  .resolve()`/`getCellCharId()` reads (used by `getSelectedText()` for copy/clipboard) still see
+  the correct mutated cell content, which is exactly why copy-to-clipboard + the toast always
+  worked while the visual highlight silently never rendered. Confirmed via a direct unit-level
+  test (construct a `Screen`, call `applySelectionOverlay`, serialize before/after) that no pink
+  SGR code (`48;2;236;72;153`) ever reached the pre-existing string-generation path.
+  **Fix:** added `node_modules/@sauerapple/dye/build/screen-to-styled-string.js` — a proper
+  styled-string serializer using `StylePool.transition(fromId, toId)` (the pool's own cached
+  style-transition escape generator, same one used internally by the rest of Dye) to walk the
+  mutated `Screen` buffer row/cell by row/cell and emit a correctly-styled ANSI string, skipping
+  `CellWidth.SpacerTail` cells for wide characters. Patched `ink.js#doRender()` to call this
+  function and reassign `output`/`outputHeight` whenever `applySelectionOverlay` reports a mutation
+  (`output`'s destructure changed `const` → `let` to allow this). Verified functionally, not just
+  architecturally: constructed a real `Screen`+selection, confirmed the serialized string contains
+  no pink code before the overlay and does contain `48;2;236;72;153` wrapping exactly the selected
+  range after — both before AND after a full `patch-package` reinstall cycle (fresh install →
+  `npm run postinstall` → re-verify). **Patch-package gotcha:** the patch file must be generated via
+  `git diff --no-color` (commit pristine → overwrite with patched → diff), not a raw `diff -ruN` —
+  patch-package uses its own internal patch parser/applier (`applyPatches.js`'s `executeEffects`,
+  not `git apply`/native `patch`), which is strict about matching `git diff`'s exact header/hunk
+  format; a manually-built `diff -ruN`-style patch applies fine via plain `git apply` but is
+  silently rejected by patch-package's own applier.
 - **`list_notifications` now flags `alreadyConnected` (July 2026):** a "someone added you"
   notification persists in `contact_notifications` forever — nothing marks it resolved once
   `connect_contact_back` runs (from the CLI, the web dashboard, or a prior session). Without a

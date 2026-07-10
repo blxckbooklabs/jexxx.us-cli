@@ -197,26 +197,25 @@ const HeroCentered: React.FC<{ content: string }> = ({ content }) => {
   const extraLines = plain.split("\n").slice(ROWS).filter((l) => l.length > 0);
 
   return (
-    <Box
-      flexGrow={1}
-      flexDirection="column"
-      justifyContent="center"
-      alignItems="center"
-    >
+    <Box flexGrow={1} flexDirection="column" justifyContent="center">
       {rows.map((row) => (
-        <Text key={row.key}>
-          {row.segments.map((seg, si) => (
-            <Text key={si} color={seg.color}>
-              {seg.text}
-            </Text>
-          ))}
-        </Text>
+        <Box key={row.key} width="100%" justifyContent="center">
+          <Text>
+            {row.segments.map((seg, si) => (
+              <Text key={si} color={seg.color}>
+                {seg.text}
+              </Text>
+            ))}
+          </Text>
+        </Box>
       ))}
       <Box height={1} />
       {extraLines.map((line, li) => (
-        <Text key={`hero-extra-${li}`} color={TEXT_MUTED} dimColor>
-          {line.trim()}
-        </Text>
+        <Box key={`hero-extra-${li}`} width="100%" justifyContent="center">
+          <Text color={TEXT_MUTED} dimColor>
+            {line.trim()}
+          </Text>
+        </Box>
       ))}
     </Box>
   );

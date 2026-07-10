@@ -1,5 +1,89 @@
+diff --git a/node_modules/@sauerapple/dye/build/ink.js b/node_modules/@sauerapple/dye/build/ink.js
+index 8db635d..7348ae1 100644
+--- a/node_modules/@sauerapple/dye/build/ink.js
++++ b/node_modules/@sauerapple/dye/build/ink.js
+@@ -17,6 +17,7 @@ import { dispatchClick, dispatchHover } from './events/dispatch.js';
+ import { SelectionManager } from './selection-manager.js';
+ import SelectionContext from './components/SelectionContext.js';
+ import { applySelectionOverlay } from './selection-overlay.js';
++import { screenToStyledString } from './screen-to-styled-string.js';
+ import { FrameTimer } from './frame-event.js';
+ import * as dom from './dom.js';
+ import { hideCursorEscape, showCursorEscape } from './cursor-helpers.js';
+@@ -349,7 +350,7 @@ export default class Ink {
+             this.nextRenderCommit = undefined;
+         }
+         const startTime = performance.now();
+-        const { output, outputHeight, staticOutput, screen } = render(this.rootNode, this.isScreenReaderEnabled);
++        let { output, outputHeight, staticOutput, screen } = render(this.rootNode, this.isScreenReaderEnabled);
+         // Everything inside render() is reconcile + layout + render-to-screen.
+         // We can't easily split these three phases without instrumenting the
+         // renderer internals, so we attribute the whole block to `render`.
+@@ -361,7 +362,11 @@ export default class Ink {
+             // Apply selection overlay if there's an active selection
+             const sel = this.selectionManager.getSelection();
+             if (sel) {
+-                applySelectionOverlay(screen, sel);
++                const mutated = applySelectionOverlay(screen, sel);
++                if (mutated) {
++                    output = screenToStyledString(screen);
++                    outputHeight = output === '' ? 0 : output.split('\n').length;
++                }
+             }
+         }
+         this.options.onRender?.({ renderTime: performance.now() - startTime });
+diff --git a/node_modules/@sauerapple/dye/build/screen-to-styled-string.js b/node_modules/@sauerapple/dye/build/screen-to-styled-string.js
+new file mode 100644
+index 0000000..7cbd1ff
+--- /dev/null
++++ b/node_modules/@sauerapple/dye/build/screen-to-styled-string.js
+@@ -0,0 +1,44 @@
++/**
++ * Serialize a Screen buffer (packed charId/styleId cells) into a styled ANSI
++ * string, using StylePool's cached transition() escapes for minimal codes.
++ *
++ * Needed because Output.get() builds two PARALLEL representations of the
++ * same frame in the same pass -- a plain 2D character grid (which the
++ * returned `output` string is generated from) and this packed Screen buffer
++ * (which selection tracking/overlay operates on). Mutating the Screen buffer
++ * after Output.get() has already returned has zero effect on the `output`
++ * string, since that string was serialized from the OTHER representation
++ * before the mutation ever happens. applySelectionOverlay() correctly
++ * colors Screen cells pink, but without this function to re-derive `output`
++ * from the mutated Screen afterward, none of that ever reaches the
++ * terminal -- selection tracking/copy still works (it reads Screen cell
++ * content directly), but the visual highlight silently never renders.
++ */
++import { getCellCharId, getCellWord1, unpackStyleId, unpackWidth, CellWidth, } from './screen.js';
++
++export function screenToStyledString(screen) {
++    const lines = [];
++    for (let y = 0; y < screen.height; y++) {
++        let line = '';
++        let currentStyleId = 0;
++        for (let x = 0; x < screen.width; x++) {
++            const w1 = getCellWord1(screen, x, y);
++            const width = unpackWidth(w1);
++            if (width === CellWidth.SpacerTail) {
++                continue;
++            }
++            const styleId = unpackStyleId(w1);
++            if (styleId !== currentStyleId) {
++                line += screen.stylePool.transition(currentStyleId, styleId);
++                currentStyleId = styleId;
++            }
++            const charId = getCellCharId(screen, x, y);
++            line += screen.charPool.resolve(charId);
++        }
++        if (currentStyleId !== 0) {
++            line += screen.stylePool.transition(currentStyleId, 0);
++        }
++        lines.push(line.trimEnd());
++    }
++    return lines.join('\n');
++}
 diff --git a/node_modules/@sauerapple/dye/build/selection-overlay.js b/node_modules/@sauerapple/dye/build/selection-overlay.js
-index 0000000..0000000 100644
+index 8d925a1..cee053b 100644
 --- a/node_modules/@sauerapple/dye/build/selection-overlay.js
 +++ b/node_modules/@sauerapple/dye/build/selection-overlay.js
 @@ -1,19 +1,49 @@
@@ -56,7 +140,7 @@ index 0000000..0000000 100644
   *
   * Must be called AFTER the main render has populated the Screen.
   * Returns true if any cells were modified.
-@@ -38,13 +68,11 @@
+@@ -38,13 +68,11 @@ export function applySelectionOverlay(screen, selection) {
              const currentStyleId = unpackStyleId(word1);
              const currentHyperlinkId = unpackHyperlinkId(word1);
              const width = unpackWidth(word1);
@@ -72,7 +156,7 @@ index 0000000..0000000 100644
              const selectedStyleId = screen.stylePool.intern(selectedCodes);
              setCellAt(screen, col, row, charId, selectedStyleId, currentHyperlinkId, width);
              mutated = true;
-@@ -52,4 +80,3 @@
+@@ -52,4 +80,3 @@ export function applySelectionOverlay(screen, selection) {
      }
      return mutated;
  }

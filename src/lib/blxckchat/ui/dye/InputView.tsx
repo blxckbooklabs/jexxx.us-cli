@@ -179,8 +179,14 @@ export const InputView: React.FC<InputViewProps> = ({
       return;
     }
 
-    // --- Word selection: Alt+Shift+Left/Right ---
-    if (key.meta && key.shift && input === "B") {
+    // --- Word selection: Option/Alt+Shift+Left/Right ---
+    // A real arrow-key press (even with modifiers held) comes through as
+    // key.leftArrow/key.rightArrow with key.meta/key.shift booleans set from
+    // the terminal's CSI modifier byte (see parse-keypress.js's fnKeyRe
+    // branch) -- never as `input === "B"/"F"`. That only matches a literal
+    // Option+Shift+B/F letter keypress, which is a different shortcut
+    // entirely (and not what "Option+Shift+Left/Right arrow" sends).
+    if (key.meta && key.shift && key.leftArrow) {
       if (!hasSelection()) setSelectionAnchor(cursorPos);
       let pos = cursorPos;
       while (pos > 0 && value[pos - 1] === " ") pos--;
@@ -189,7 +195,7 @@ export const InputView: React.FC<InputViewProps> = ({
       return;
     }
 
-    if (key.meta && key.shift && input === "F") {
+    if (key.meta && key.shift && key.rightArrow) {
       if (!hasSelection()) setSelectionAnchor(cursorPos);
       let pos = cursorPos;
       while (pos < value.length && value[pos] === " ") pos++;
