@@ -215,7 +215,7 @@ const HeroCentered: React.FC<{ content: string }> = ({ content }) => {
       <Box height={1} />
       {extraLines.map((line, li) => (
         <Text key={`hero-extra-${li}`} color={TEXT_MUTED} dimColor>
-          {line}
+          {line.trim()}
         </Text>
       ))}
     </Box>
