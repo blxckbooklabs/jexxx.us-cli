@@ -157,6 +157,10 @@ jexxxus shell
 
 **Signed-in vault reads:** After `jexxxus auth login`, BLXCKCHAT can query your own BLXCKBOOK, NXT, and private TV playlists via `account_query` (RLS-scoped; requires `SUPABASE_ANON_KEY` in `.env`). Cross-user reads require JEXXXUS super-admin credentials plus service-role key—see [SECURITY.md](./SECURITY.md).
 
+**Signed-in vault writes:** `update_contact`, `add_journal_entry`, and `manage_playlist` use the exact same RLS-scoped client as the reads above—`createUserSupabaseClient()` with the signed-in user's own Clerk JWT, never the service-role key. Since BLXCKBOOK/NXT/TV dashboards already subscribe to Realtime on these tables, a write from the CLI shows up live in the dashboard with no refresh. These tools **never** accept `asUserId`—unlike `account_query`, there is no super-admin write-on-behalf-of-another-user path; a signed-in agent session can only ever mutate its own account's rows.
+
+**Vault export/re-upload roundtrip:** `export_vault` writes BLXCKBOOK/NXT data to a local JSON file (default `~/.jexxxus/exports/`, or a folder you specify). Edit the file yourself, or ask BLXCKCHAT to edit it via `edit_local_file`, then run `sync_export_file` to re-apply it—rows matched by `id` are updated, rows without one are created, and rows missing from the file are left untouched (no destructive delete-by-omission). `read_local_file`/`write_local_file`/`edit_local_file` are scoped to `~/.jexxxus/{exports,imports,workspace}` by default; an absolute path elsewhere is allowed but flagged as outside the managed directory, and every write/edit still requires confirmation like any other write tool.
+
 **Tools available to BLXCKCHAT:**
 
 | Tool | Mode | Notes |
@@ -168,6 +172,14 @@ jexxxus shell
 | `send_notification` | write, confirm | Wraps `jexxxus notify`—prompts for confirmation |
 | `import_contacts` | write, confirm | Wraps `jexxxus import`—prompts for confirmation |
 | `account_query` | read-only (RLS) | Signed-in user's vault, NXT, and TV playlists; super-admin `asUserId` optional |
+| `update_contact` | write, confirm (RLS) | BLXCKBOOK contact or NXT vessel field edit—live in dashboard, no `asUserId` ever |
+| `add_journal_entry` | write, confirm (RLS) | BLXCKBOOK journal entry, optionally linked to contacts |
+| `manage_playlist` | write, confirm (RLS) | Create/rename/delete a TV playlist, or add/remove a video |
+| `export_vault` | write, confirm | Export BLXCKBOOK/NXT data to a local JSON file (default `~/.jexxxus/exports`) |
+| `sync_export_file` | write, confirm | Re-apply an edited export JSON back to BLXCKBOOK (matches by `id`, never deletes) |
+| `read_local_file` | read-only | Scoped to `~/.jexxxus/{exports,imports,workspace}`; absolute paths elsewhere allowed |
+| `write_local_file` | write, confirm | Same scoping as read; flags paths outside `~/.jexxxus` |
+| `edit_local_file` | write, confirm | Exact-match text replacement (pi/opencode-style); same scoping |
 | `run_shell` | write, confirm, **opt-in via `--shell`** | Off by default; regex blocklist (not a sandbox—see SECURITY.md) |
 
 **Kingdom/Garden synthesis:** For thematic asks (confession, named series, church-girl beats), BLXCKCHAT combines scripture, VEIL articles, and TV watch recommendations in one reply. Short follow-ups inherit recent conversation context.

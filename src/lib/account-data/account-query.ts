@@ -61,11 +61,11 @@ export interface AccountSummary {
   };
 }
 
-function normalizeName(value: string): string {
+export function normalizeName(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function fuzzyMatchContact<T extends { name: string }>(
+export function fuzzyMatchContact<T extends { name: string }>(
   rows: T[],
   contactName: string,
 ): T | undefined {

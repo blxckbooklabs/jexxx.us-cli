@@ -6,6 +6,18 @@ import { lawTool } from "./law-tools.js";
 import { doctorTool, notifyTool, importContactsTool } from "./dashboard-tools.js";
 import { accountQueryTool } from "./account-tools.js";
 import { shellTool } from "./shell-tool.js";
+import {
+  updateContactTool,
+  addJournalEntryTool,
+  managePlaylistTool,
+  exportVaultTool,
+  syncExportFileTool,
+} from "./vault-write-tools.js";
+import {
+  readLocalFileTool,
+  writeLocalFileTool,
+  editLocalFileTool,
+} from "./local-file-tools.js";
 
 export interface BuildToolRegistryOptions {
   allowShell?: boolean;
@@ -29,10 +41,20 @@ export function buildToolRegistry(
     doctorTool,
     notifyTool,
     importContactsTool,
+    readLocalFileTool,
+    writeLocalFileTool,
+    editLocalFileTool,
   ];
 
   if (options.includeAccountQuery) {
-    tools.push(accountQueryTool);
+    tools.push(
+      accountQueryTool,
+      updateContactTool,
+      addJournalEntryTool,
+      managePlaylistTool,
+      exportVaultTool,
+      syncExportFileTool,
+    );
   }
 
   if (options.allowShell) {

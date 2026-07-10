@@ -89,6 +89,25 @@ Owned by the JEXXXUS platform / tooling team.
   `account-data/tv-playlists.ts` (TV custom playlists). Slash: `/account status`, `/account export`.
   Query catalog: Obsidian `Account-Data-Query-Catalog.md`. Tests: `account-routing.test.ts`,
   `account-data.test.ts`, `super-admin.test.ts`.
+- **BLXCKCHAT vault writes (July 2026):** `update_contact`/`add_journal_entry`/`manage_playlist`
+  (`tools/vault-write-tools.ts`) call into `account-data/mutations.ts`, which reuses
+  `resolveVaultClient()`/`resolveTvClient()` from `session.ts` with **no `asUserId` parameter ever**
+  — unlike `account_query`, these tools have no super-admin write-on-behalf-of-another-user path by
+  design. RLS on `api.contacts`/`api.journal_entries`/`public.vessels`/`public.contact_events`/
+  `public.playlists`/`public.playlist_items` already permits full CRUD for the row owner (verified
+  against `supabase/supabase/migrations/20260708223504_remote_schema.sql`) — no new RLS policies or
+  Realtime wiring were needed, the CLI just uses the same authenticated write path the dashboards do.
+  `mutations.ts`'s `sanitizeContactUpdates()` hard-blocks `id`/`user_id`/`created_at` regardless of
+  what the model tries to pass. `export_vault`/`sync_export_file`
+  (`account-data/export-to-disk.ts`, `mutations.ts#syncBlxckbookExport`) support the
+  export-edit-reupload workflow — sync matches by `id`, creates rows without one, never deletes.
+- **BLXCKCHAT local file tools (`tools/local-file-tools.ts`):** `read_local_file`/
+  `write_local_file`/`edit_local_file` default relative paths to `~/.jexxxus/workspace`; absolute
+  paths outside `~/.jexxxus` are permitted but flagged in the tool's return message. `edit_local_file`
+  requires an exact, unique `oldText` match (pi/opencode parity) — refuses on zero or multiple
+  matches rather than guessing. These are intentionally narrow (vault-data roundtrip use case), not
+  general filesystem access — do not widen scope to arbitrary project/code editing without
+  revisiting "not a general coding agent" in the system prompt. Tests: `blxckchat-local-file-tools.test.ts`.
 - BLXCKCHAT kingdom/garden routing (`src/lib/blxckchat/kingdom-routing.ts`) plans multi-tool replies:
   thematic TV/VEIL asks also get `companionVerses` (explicit Book Ch:V refs) and `tvSearchQuery`
   (e.g. `Forgive Me Father`) — never pass series titles as bible queries. `garden-prefetch.ts`
