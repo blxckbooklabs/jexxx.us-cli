@@ -176,30 +176,27 @@ export const DyeApp: React.FC<DyeAppProps> = ({
     [store.blocks],
   );
 
-  // Text selection auto-copy via Dye's SelectionManager.
-  // Enabled by mouseTracking on AlternateScreen — click-drag highlights visually
-  // through Dye's built-in selection overlay. On mouseup (detected via 200ms
-  // debounce of selectedText), copy to clipboard via OSC 52 and show toast.
-  const { selectedText, copy, clearSelection } = useSelection();
-  const selDebounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
-  const prevSelTextRef = React.useRef("");
+  // Text selection auto-copy via Dye's SelectionManager. Enabled by
+  // mouseTracking on AlternateScreen — click-drag highlights visually
+  // through Dye's built-in selection overlay. Copies + shows the toast
+  // exactly on mouse release, not on a fixed timer: the original 200ms
+  // "no change for 200ms" debounce fired mid-drag whenever the user paused
+  // dragging for a beat, well before actually releasing the mouse.
+  // `dragging` (patches/@sauerapple+dye+...patch) reflects the manager's
+  // real press/drag/release state, notified on every transition including
+  // release (which the unpatched manager never notified on at all).
+  const { selectedText, dragging, copy, clearSelection } = useSelection();
+  const prevDraggingRef = React.useRef(dragging);
 
   React.useEffect(() => {
-    if (selDebounceRef.current) clearTimeout(selDebounceRef.current);
-    if (selectedText && selectedText.length >= 3) {
-      selDebounceRef.current = setTimeout(() => {
-        copy().then((success) => {
-          if (success) store.showToast("Copied to clipboard");
-        });
-      }, 200);
+    const wasDragging = prevDraggingRef.current;
+    prevDraggingRef.current = dragging;
+    if (wasDragging && !dragging && selectedText && selectedText.length >= 3) {
+      copy().then((success) => {
+        if (success) store.showToast("Copied to clipboard");
+      });
     }
-    prevSelTextRef.current = selectedText;
-    return () => {
-      if (selDebounceRef.current) clearTimeout(selDebounceRef.current);
-    };
-  }, [selectedText, copy, clearSelection, store]);
+  }, [dragging, selectedText, copy, clearSelection, store]);
 
   useInput((input, key) => {
     if (store.confirmDialog) {

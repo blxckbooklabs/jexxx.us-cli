@@ -1,5 +1,13 @@
 import React from "react";
-import { Box, Text, useInput, useStdin, usePaste } from "@sauerapple/dye";
+import {
+  Box,
+  Text,
+  useInput,
+  useStdin,
+  usePaste,
+  useSelection,
+} from "@sauerapple/dye";
+import type { ClickEvent } from "@sauerapple/dye";
 import { copyToClipboard } from "../session/tui-snapshot.js";
 
 const PINK = "#ec4899";
@@ -40,6 +48,19 @@ export const InputView: React.FC<InputViewProps> = ({
   const [historyIdx, setHistoryIdx] = React.useState(-1);
   const [draft, setDraft] = React.useState("");
 
+  // Dye's own SelectionManager runs a separate, global mouse-tracking
+  // pipeline (wired via <AlternateScreen mouseTracking> in DyeApp.tsx) that
+  // paints its own pink cell-selection overlay on ANY click/drag anywhere on
+  // screen -- including over this input box -- independent of this
+  // component's own cursorPos/selectionAnchor state. A single click here
+  // was landing as a (possibly zero-width) Dye-level "selection" at the
+  // clicked screen cell, rendered as a stray pink block with no relationship
+  // to this component's actual text-cursor position. clearSelection() wipes
+  // that global overlay; onClick below also maps the click to a real
+  // cursorPos so clicking actually moves the text cursor instead of leaving
+  // Dye's own selection highlight floating disconnected from the text.
+  const { clearSelection: clearDyeSelection } = useSelection();
+
   React.useEffect(() => {
     setCursorPos((prev) => Math.min(prev, value.length));
   }, [value]);
@@ -61,10 +82,20 @@ export const InputView: React.FC<InputViewProps> = ({
     onChange(next);
   });
 
-  // Copy only on mouseup (user release), not during selection drag
-  // Note: Dye/Ink doesn't provide native mouseup events, so copy is triggered
-  // only when user explicitly presses Ctrl+C or other copy commands.
-  // Auto-copy during selection is removed to avoid premature clipboard operations.
+  // Map a click's local column to a text index (accounting for the box's
+  // border + paddingLeft={1}) and position the cursor there. Also dismisses
+  // Dye's own global selection overlay for this click -- without this, a
+  // single click still starts a Dye-level "selection" at the raw screen
+  // cell, rendered as a pink block with no relationship to where the actual
+  // text cursor ends up.
+  const handleClick = (event: ClickEvent): void => {
+    if (disabled) return;
+    clearSel();
+    const BORDER_WIDTH = 1;
+    const PADDING_LEFT = 1;
+    const textCol = event.localCol - BORDER_WIDTH - PADDING_LEFT;
+    setCursorPos(Math.max(0, Math.min(value.length, textCol)));
+  };
 
   function hasSelection(): boolean {
     return selectionAnchor !== null && selectionAnchor !== cursorPos;
@@ -77,6 +108,11 @@ export const InputView: React.FC<InputViewProps> = ({
 
   function clearSel(): void {
     setSelectionAnchor(null);
+    // Every existing clearSel() call site (arrow keys, home/end, escape,
+    // submit, etc.) now also dismisses Dye's own global selection overlay --
+    // otherwise a stray click-selection from earlier could keep rendering
+    // its pink highlight even as the user moves the cursor with the keyboard.
+    clearDyeSelection();
   }
 
   function deleteSelection(): void {
@@ -337,6 +373,7 @@ export const InputView: React.FC<InputViewProps> = ({
       backgroundColor={focused ? BG_PANEL : BG_ELEVATED}
       paddingLeft={1}
       height={3}
+      onClick={handleClick}
     >
       {isPlaceholder ? (
         <Text color={TEXT_MUTED}>{placeholder}</Text>

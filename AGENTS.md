@@ -299,6 +299,39 @@ Owned by the JEXXXUS platform / tooling team.
   not `git apply`/native `patch`), which is strict about matching `git diff`'s exact header/hunk
   format; a manually-built `diff -ruN`-style patch applies fine via plain `git apply` but is
   silently rejected by patch-package's own applier.
+- **Click-drag copy fired mid-drag instead of on release (July 2026 fix, same investigation as
+  above):** the original auto-copy effect (`DyeApp.tsx`) used a 200ms "no selection change" timer
+  as a mouseup proxy — it fired whenever the user paused dragging for a beat, well before actually
+  releasing the mouse, showing the "Copied to clipboard" toast mid-selection. Root cause: Dye's
+  `SelectionManager.handleMouseRelease()` (`selection-manager.js`) only ever set a private
+  `dragging` field to `false` — it never called `notify()`, and `dragging` was never part of the
+  snapshot `useSelection()` exposes, so there was **no way** for app code to observe "mouse
+  released" at all; a timer was the only option available. Patched `selection-manager.js` to
+  include `dragging` in the snapshot (`refreshSnapshot()`) and to call `refreshSnapshot()` +
+  `notify()` from `handleMouseRelease()` too; patched `hooks/use-selection.js` (+ both packages'
+  `.d.ts` files) to expose `dragging` from the hook. `DyeApp.tsx`'s effect now fires copy+toast
+  exactly on the `dragging: true → false` transition (tracked via a ref), not a timer. Verified via
+  a direct `SelectionManager` press/drag/release sequence: `dragging` correctly transitions
+  true→true→false and each step notifies subscribers — confirmed both before and after a full
+  `patch-package` reinstall cycle.
+- **Input box: clicking or arrowing showed a pink block unrelated to the actual cursor position, and
+  "click 11 places past 5 typed characters" was possible (July 2026 fix):** `InputView.tsx` has no
+  mouse handling of its own — Dye's *global* `SelectionManager` (the same one wired via
+  `<AlternateScreen mouseTracking>` in `DyeApp.tsx`) intercepts every click/drag on screen,
+  including over the input box, and paints its own pink cell-selection overlay at the raw clicked
+  screen coordinate — entirely independent of `InputView`'s own `cursorPos`/`selectionAnchor`
+  React state. Confirmed this couldn't be `InputView`'s own rendering: when `value.length === 0`
+  (the reported screenshot's case), the render path is `isPlaceholder ? <Text>{placeholder}</Text>
+  : ...` — plain text, no cursor block possible in that branch at all. Fixed two ways: (1) added
+  `onClick` (Dye's `Box` supports it, giving `event.localCol` relative to the component) to map the
+  click to a real text index — accounting for the 1-cell border + `paddingLeft={1}` — and set
+  `cursorPos` there, clamped to `[0, value.length]`; (2) routed every existing `clearSel()` call
+  site (arrow keys, home/end, escape, submit) through Dye's own `clearSelection()` too (via
+  `useSelection()`), so a stale click-selection from earlier doesn't keep rendering its own pink
+  block even after the user moves the cursor with the keyboard. A prior pass (by a different model,
+  commit `2320de1`) had diagnosed this as a `displayText.length` vs `value.length` cursor-clamping
+  bug in `InputView.tsx`'s own render — that fix was harmless but didn't touch the actual cause
+  (Dye's global overlay), since the affected render branch is unreachable when the box is empty.
 - **`list_notifications` now flags `alreadyConnected` (July 2026):** a "someone added you"
   notification persists in `contact_notifications` forever — nothing marks it resolved once
   `connect_contact_back` runs (from the CLI, the web dashboard, or a prior session). Without a
