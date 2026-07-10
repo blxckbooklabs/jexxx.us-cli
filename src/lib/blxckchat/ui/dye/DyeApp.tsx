@@ -197,6 +197,12 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         if (success) store.showToast("Copied to clipboard");
       });
     }
+    // Clear zero-width selection on simple clicks (no drag) — without this,
+    // Dye's global SelectionManager paints a pink cell highlight on every
+    // click that never disappears until an arrow key triggers clearSel().
+    if (wasDragging && !dragging && (!selectedText || selectedText.length < 3)) {
+      clearSelection();
+    }
   }, [dragging, selectedText, copy, clearSelection, store]);
 
   useInput((input, key) => {
@@ -282,11 +288,8 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
         return;
       }
-      // Paste detection: Ctrl+V, Cmd/Meta+V, or Shift+P fallback for secret mode
-      if (
-        (key.ctrl || key.meta) && input === "v" ||
-        (promptState.options.secret && !key.ctrl && !key.meta && input === "P")
-      ) {
+      // Paste trigger: Ctrl+V, Cmd/Meta+V reads clipboard directly.
+      if ((key.ctrl || key.meta) && input === "v") {
         void readClipboard().then((clip) => {
           const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
           if (!normalized) return;
@@ -294,7 +297,19 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         });
         return;
       }
-      if (input && input.length === 1 && !key.ctrl && !key.meta) {
+      // Secret-mode fallback: Shift+P reads clipboard (since Cmd+V is
+      // intercepted by most macOS terminal emulators and never reaches Dye).
+      if (promptState.options.secret && key.shift && !key.ctrl && !key.meta && input.toLowerCase() === "p") {
+        void readClipboard().then((clip) => {
+          const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
+          if (!normalized) return;
+          setPromptState((s) => (s ? { ...s, input: normalized } : s));
+        });
+        return;
+      }
+      // Regular typing AND terminal paste (Dye batches pasted text into a single
+      // useInput call with the full string as input, so input.length > 1 is paste).
+      if (input && input.length > 0 && !key.ctrl && !key.meta) {
         setPromptState((s) => (s ? { ...s, input: s.input + input } : s));
         return;
       }
