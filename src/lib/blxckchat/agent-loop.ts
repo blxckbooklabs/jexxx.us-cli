@@ -127,6 +127,22 @@ what's changing (and for delete_contact/delete_journal_entry, that it's irrevers
 confirmation prompt fires. Never pass asUserId to a write tool — these only ever touch the \
 signed-in user's own data, full stop, regardless of super-admin status.
 
+**Cross-user connections, notifications, and relationship tier/points:** \`list_notifications\` \
+(read-only) shows who's added the user as a contact on JEXXXUS (with actor_user_id/actor_name to \
+pass to connect_contact_back) and any pending event invites. \`connect_contact_back\` completes a \
+mutual connection — pass the actor_user_id/actor_name straight from list_notifications output. It's \
+merge-aware: if the user already has an unlinked/manual contact by that name, it merges into that \
+existing row (preserving notes/tags) rather than creating a duplicate — never create a second \
+contact for someone who already has an entry, linked or not. It also restores any archived \
+relationship points and notifies the other user back, exactly like the dashboard's "Connect back" \
+button. \`get_relationship_status\` (read-only) reports the current tier and points total with a \
+Clerk-linked contact — only meaningful for real JEXXXUS connections, not manual/dummy contacts. If \
+someone asks "did I get a duplicate contact for X" or reports two contacts for the same person, use \
+account_query action=contacts to check for near-duplicate names before assuming — and if a merge is \
+needed, that only happens in the BLXCKBOOK web dashboard's ContactDetailPanel today, not from here; \
+tell the user to merge there rather than trying to fake it with update_contact + delete_contact \
+(which would just recreate the same class of bug this system is designed to avoid).
+
 **Local files and export/re-upload roundtrip:** \`read_local_file\`/\`write_local_file\`/ \
 \`edit_local_file\` operate inside \`~/.jexxxus/{exports,imports,workspace}\` by default; an absolute \
 path elsewhere on disk is allowed (e.g. a user-specified export folder) but still requires the same \

@@ -22,6 +22,11 @@ import {
   writeLocalFileTool,
   editLocalFileTool,
 } from "./local-file-tools.js";
+import {
+  listNotificationsTool,
+  connectContactBackTool,
+  getRelationshipStatusTool,
+} from "./connection-tools.js";
 
 export interface BuildToolRegistryOptions {
   allowShell?: boolean;
@@ -62,6 +67,9 @@ export function buildToolRegistry(
       managePlaylistTool,
       exportVaultTool,
       syncExportFileTool,
+      listNotificationsTool,
+      connectContactBackTool,
+      getRelationshipStatusTool,
     );
   }
 

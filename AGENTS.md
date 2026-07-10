@@ -109,6 +109,26 @@ Owned by the JEXXXUS platform / tooling team.
   when adding a new table to `mutations.ts`, verify column names against
   `supabase/supabase/migrations/20260708223504_remote_schema.sql` directly rather than inferring from
   a sibling table's naming convention.
+- **BLXCKCHAT cross-user connections (`tools/connection-tools.ts`, `account-data/connections.ts`,
+  July 2026):** `list_notifications`/`connect_contact_back`/`get_relationship_status` mirror
+  dxsh.blxckbook.jexxx.us's `handleAddBack()` (App.tsx) and `relationship-tiers.ts` exactly — same
+  merge-aware contact insert, same `restore_relationship` RPC call, same reciprocal
+  `contact_notifications` row. **Schema split, confirmed live (not just from the migration file):**
+  `contacts` is in the `api` schema (`resolveVaultClient(session, "blxckbook")`), but
+  `contact_notifications`/`event_invites`/`relationship_tiers`/`point_transactions` and the RPCs
+  (`fn_user_tier_with_contact`/`restore_relationship`/`cancel_relationship`/
+  `award_relationship_points`) are all in `public` (`resolveVaultClient(session, "nxt")` — same
+  schema NXT uses). Calling an RPC or table on the wrong schema client fails loudly
+  ("Could not find the function api.fn_user_tier_with_contact ... in the schema cache"), which is how
+  the first draft's mistake was caught — connections.ts uses two separate `resolveVaultClient()`
+  calls (one per schema) rather than one, on purpose.
+  `connect_contact_back` deliberately never offers to merge two *already-existing* duplicate
+  contacts — that's the manual-merge feature in dxsh.blxckbook.jexxx.us's ContactDetailPanel (see
+  the fix in that repo's App.tsx, July 2026: `onMerge` was dropping `linked_ecosystem_id` when the
+  Clerk-linked contact wasn't picked as "keep", silently severing a real connection while leaving an
+  orphaned name-only row). The CLI's system prompt explicitly tells the agent to point users to that
+  web UI for existing duplicates rather than attempting `update_contact` + `delete_contact` as a
+  workaround, which would reproduce the same bug class.
 - **BLXCKCHAT local file tools (`tools/local-file-tools.ts`):** `read_local_file`/
   `write_local_file`/`edit_local_file` default relative paths to `~/.jexxxus/workspace`; absolute
   paths outside `~/.jexxxus` are permitted but flagged in the tool's return message. `edit_local_file`

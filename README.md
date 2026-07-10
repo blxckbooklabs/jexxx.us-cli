@@ -161,6 +161,8 @@ jexxxus shell
 
 **Vault export/re-upload roundtrip:** `export_vault` writes BLXCKBOOK/NXT data to a local JSON file (default `~/.jexxxus/exports/`, or a folder you specify). Edit the file yourself, or ask BLXCKCHAT to edit it via `edit_local_file`, then run `sync_export_file` to re-apply it—rows matched by `id` are updated, rows without one are created, and rows missing from the file are left untouched (no destructive delete-by-omission). `read_local_file`/`write_local_file`/`edit_local_file` are scoped to `~/.jexxxus/{exports,imports,workspace}` by default; an absolute path elsewhere is allowed but flagged as outside the managed directory, and every write/edit still requires confirmation like any other write tool.
 
+**Cross-user connections, notifications, and relationship tier/points:** `list_notifications` shows who's added the signed-in user as a contact on JEXXXUS (with the `actor_user_id`/`actor_name` needed to connect back) plus pending event invites. `connect_contact_back` completes a mutual connection exactly like the BLXCKBOOK dashboard's "Connect back" button—same merge-aware insert (an existing unlinked/manual contact by that name is merged into, never duplicated), same `restore_relationship` RPC call, same reciprocal notification. `get_relationship_status` reports the current tier and points total with a Clerk-linked contact. These three read/write `public.contact_notifications`/`public.event_invites`/`public.relationship_tiers` and call `public.fn_user_tier_with_contact`/`public.restore_relationship`—note these live in the `public` schema (same as NXT), not `api` (BLXCKBOOK's schema), even though the connection itself is represented on the `api.contacts` row.
+
 **Tools available to BLXCKCHAT:**
 
 | Tool | Mode | Notes |
@@ -178,6 +180,9 @@ jexxxus shell
 | `update_journal_entry` | write, confirm (RLS) | Edit title/content/tags on an existing entry, matched by id or title |
 | `delete_journal_entry` | write, confirm (RLS) | Permanently delete an entry and its contact links—irreversible |
 | `manage_contact_event` | write, confirm (RLS) | Create/update/delete an NXT logged date/event, linked to a vessel |
+| `list_notifications` | read-only (RLS) | Who's added the user on JEXXXUS + pending event invites |
+| `connect_contact_back` | write, confirm (RLS) | Complete a mutual connection—merge-aware (no duplicate contact), restores points, notifies back |
+| `get_relationship_status` | read-only (RLS) | Current tier + points total with a Clerk-linked contact |
 | `manage_playlist` | write, confirm (RLS) | Create/rename/delete a TV playlist, or add/remove a video |
 | `export_vault` | write, confirm | Export BLXCKBOOK/NXT data to a local JSON file (default `~/.jexxxus/exports`) |
 | `sync_export_file` | write, confirm | Re-apply an edited export JSON back to BLXCKBOOK (matches by `id`, never deletes) |
