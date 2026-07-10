@@ -6,9 +6,21 @@ import { TAG } from "../theme.js";
 /** Pink streaming cursor for blessed TUI (ANSI breaks blessed wrap). */
 export const BLESSED_STREAM_CURSOR = `${TAG.pink}{bold}▌{/bold}${TAG.pinkEnd}`;
 
+/**
+ * Variation Selector-15/16 (U+FE0E/U+FE0F) force text/emoji presentation on
+ * the preceding glyph. Blessed's column-width math doesn't account for them,
+ * so a base+VS16 pair (🛠️, 🗝️, 📖 followed by VS16, etc.) throws off its
+ * internal cell-offset tracking on that terminal row — producing scattered,
+ * overlapping characters from adjacent lines on redraw. Stripping the
+ * selector keeps the base emoji glyph but restores predictable width.
+ */
+function stripVariationSelectors(text: string): string {
+  return text.replace(/[︎️]/g, "");
+}
+
 /** Escape blessed tag delimiters in plain text segments. */
 export function escapeBlessed(text: string): string {
-  return text.replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
+  return stripVariationSelectors(text).replace(/[{}]/g, (ch) => (ch === "{" ? "{open}" : "{close}"));
 }
 
 /** Short kingdom/garden href for TUI — avoids mid-slug line wraps on long URLs. */
