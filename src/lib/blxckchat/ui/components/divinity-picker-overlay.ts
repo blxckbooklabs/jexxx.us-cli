@@ -1,6 +1,8 @@
+import * as path from "path";
 import type blessed from "blessed";
 
 import {
+  getDivinitiesSearchPaths,
   listDivinityPersonas,
   type DivinityPersona,
 } from "../../divinities/source.js";
@@ -85,8 +87,17 @@ export function createDivinityPickerOverlay(
     open() {
       const personas = listDivinityPersonas();
       if (personas.length === 0) {
+        const checked = getDivinitiesSearchPaths()
+          .map((base) => path.join(base, "Personas"))
+          .join("\n  ");
         opts.onActivated(
-          "No Divinities found. Set JEXXXUS_OBSIDIAN_PERSONAS_PATH (or DIVINITIES_VAULT_PATH) to your jexxx.us-obsidian/Divinities folder.",
+          [
+            "No Divinities found (missing Personas/ under any search path).",
+            "Set JEXXXUS_OBSIDIAN_PERSONAS_PATH to jexxx.us-obsidian/Divinities, or clone the monorepo with jexxx.us-obsidian alongside jexxx.us-cli.",
+            checked ? `Checked:\n  ${checked}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
         );
         return;
       }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import * as fs from "fs";
 import * as path from "path";
 import { test, afterEach } from "node:test";
 
@@ -28,10 +29,13 @@ const FIXTURE_ROOT = path.join(
 );
 
 const priorVault = process.env.DIVINITIES_VAULT_PATH;
+const priorObsidian = process.env.JEXXXUS_OBSIDIAN_PERSONAS_PATH;
 
 afterEach(() => {
   if (priorVault === undefined) delete process.env.DIVINITIES_VAULT_PATH;
   else process.env.DIVINITIES_VAULT_PATH = priorVault;
+  if (priorObsidian === undefined) delete process.env.JEXXXUS_OBSIDIAN_PERSONAS_PATH;
+  else process.env.JEXXXUS_OBSIDIAN_PERSONAS_PATH = priorObsidian;
   clearDivinityPersonaCache();
 });
 
@@ -44,6 +48,27 @@ test("parsePersonaMetadata reads title and role", () => {
   const meta = parsePersonaMetadata("# Luna Verde\n\n- **Role**: CMO\n");
   assert.equal(meta.name, "Luna Verde");
   assert.equal(meta.role, "CMO");
+});
+
+test("listDivinityPersonas auto-discovers monorepo jexxx.us-obsidian/Divinities", () => {
+  delete process.env.DIVINITIES_VAULT_PATH;
+  delete process.env.JEXXXUS_OBSIDIAN_PERSONAS_PATH;
+  clearDivinityPersonaCache();
+
+  const monorepoPersonas = path.join(
+    process.cwd(),
+    "..",
+    "jexxx.us-obsidian",
+    "Divinities",
+    "Personas",
+  );
+  if (!fs.existsSync(monorepoPersonas)) {
+    return;
+  }
+
+  const personas = listDivinityPersonas(true);
+  assert.ok(personas.length > 0);
+  assert.ok(personas.some((p) => p.name.includes("Lil") || p.name.includes("Luna")));
 });
 
 test("listDivinityPersonas loads vault Personas tree", () => {

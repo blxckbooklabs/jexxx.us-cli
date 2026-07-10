@@ -10,21 +10,52 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/** jexxx.us-cli package root (dist/.../divinities → four levels up). */
+const CLI_PACKAGE_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
+
 /**
  * Divinities resolution strategy (priority order):
- * 1. Local versioned data files in CLI repo (src/lib/blxckchat/divinities/data/personas)
- *    → No private repo access needed; managed via extraction script
- * 2. External Obsidian vault (JEXXXUS_OBSIDIAN_PERSONAS_PATH or DIVINITIES_VAULT_PATH)
- *    → For developers with private repo access; overrides local data when present
+ * 1. JEXXXUS_OBSIDIAN_PERSONAS_PATH or DIVINITIES_VAULT_PATH (explicit override)
+ * 2. Bundled data/ in the CLI package (if Personas/ exists)
+ * 3. Monorepo sibling jexxx.us-obsidian/Divinities (walk up from cwd + CLI root)
  */
-function getDivinitiesSearchPaths(): string[] {
-  const cliDataDir = path.resolve(__dirname, "data");
+function discoverMonorepoDivinitiesPaths(): string[] {
+  const candidates: string[] = [
+    path.join(CLI_PACKAGE_ROOT, "..", "jexxx.us-obsidian", "Divinities"),
+    path.join(CLI_PACKAGE_ROOT, "jexxx.us-obsidian", "Divinities"),
+  ];
+
+  let dir = process.cwd();
+  for (let depth = 0; depth < 8; depth++) {
+    candidates.push(path.join(dir, "jexxx.us-obsidian", "Divinities"));
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return candidates;
+}
+
+export function getDivinitiesSearchPaths(): string[] {
+  const seen = new Set<string>();
+  const paths: string[] = [];
+  const add = (raw: string): void => {
+    const resolved = path.resolve(raw);
+    if (!resolved || seen.has(resolved)) return;
+    seen.add(resolved);
+    paths.push(resolved);
+  };
+
   const envPath =
     process.env.JEXXXUS_OBSIDIAN_PERSONAS_PATH?.trim() ||
     process.env.DIVINITIES_VAULT_PATH?.trim();
+  if (envPath) add(envPath);
 
-  const paths: string[] = [cliDataDir];
-  if (envPath) paths.push(envPath);
+  add(path.resolve(__dirname, "data"));
+  for (const candidate of discoverMonorepoDivinitiesPaths()) {
+    add(candidate);
+  }
+
   return paths;
 }
 
