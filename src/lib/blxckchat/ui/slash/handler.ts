@@ -331,7 +331,7 @@ async function handleDivinities(
         handled: true,
         messages: [
           "No Divinities vault found.",
-          "Set DIVINITIES_VAULT_PATH to jexxx.us-obsidian/Divinities",
+          "Set JEXXXUS_OBSIDIAN_PERSONAS_PATH (or DIVINITIES_VAULT_PATH) to jexxx.us-obsidian/Divinities",
         ],
       };
     }

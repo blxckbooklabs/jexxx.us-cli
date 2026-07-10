@@ -86,7 +86,7 @@ export function createDivinityPickerOverlay(
       const personas = listDivinityPersonas();
       if (personas.length === 0) {
         opts.onActivated(
-          "No Divinities found. Set DIVINITIES_VAULT_PATH to your jexxx.us-obsidian/Divinities folder.",
+          "No Divinities found. Set JEXXXUS_OBSIDIAN_PERSONAS_PATH (or DIVINITIES_VAULT_PATH) to your jexxx.us-obsidian/Divinities folder.",
         );
         return;
       }
