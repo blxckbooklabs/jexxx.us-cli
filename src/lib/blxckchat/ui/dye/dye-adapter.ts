@@ -13,6 +13,15 @@ import type {
   TerminalSession,
 } from "../session/session-store.js";
 
+function getViewportHeight(): number {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("process").stdout.rows ?? 24;
+  } catch {
+    return 24;
+  }
+}
+
 export interface DyeMessageBoxHandle {
   showHero: (plain: string, meta?: JexxxusHeroMeta) => void;
   dismissHero: () => boolean;
@@ -89,16 +98,6 @@ export interface DyeAdapterOptions {
   callbacks: DyeActionCallbacks;
   initialInputValue?: string;
   subtitle?: string;
-}
-
-const { stdout } = require("process");
-
-function getViewportHeight(): number {
-  try {
-    return (stdout as any).rows ?? 24;
-  } catch {
-    return 24;
-  }
 }
 
 export function createDyeTui(options: DyeAdapterOptions): DyeTuiHandles {
