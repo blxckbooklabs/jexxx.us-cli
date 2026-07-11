@@ -33,6 +33,7 @@ export class MessageStore {
   searchVisible = false;
   hotkeysVisible = false;
   heroMeta: JexxxusHeroMeta | null = null;
+  scrollOffset = 0;
   private _version = 0;
 
   subscribe(l: Listener): () => void {
@@ -238,6 +239,50 @@ export class MessageStore {
   setSubtitle(text: string): void {
     this.subtitle = text;
     this.notify();
+  }
+
+  // --- Scroll methods ---
+  setScrollOffset(offset: number): void {
+    this.scrollOffset = offset;
+    this.pinnedToBottom = false;
+    this.notify();
+  }
+
+  scrollUp(): void {
+    this.scrollOffset += 1;
+    this.pinnedToBottom = false;
+    this.notify();
+  }
+
+  scrollDown(): void {
+    this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+    if (this.scrollOffset === 0) this.pinnedToBottom = true;
+    this.notify();
+  }
+
+  scrollPageUp(viewportHeight: number): void {
+    this.scrollOffset += viewportHeight;
+    this.pinnedToBottom = false;
+    this.notify();
+  }
+
+  scrollPageDown(viewportHeight: number): void {
+    this.scrollOffset = Math.max(0, this.scrollOffset - viewportHeight);
+    if (this.scrollOffset === 0) this.pinnedToBottom = true;
+    this.notify();
+  }
+
+  scrollToTop(): void {
+    this.scrollOffset = 0;
+    this.pinnedToBottom = true;
+    this.notify();
+  }
+
+  getScrollState(): ScrollState {
+    return {
+      pinnedToBottom: this.pinnedToBottom,
+      percent: this.pinnedToBottom ? 100 : this.scrollOffset > 0 ? 50 : 100,
+    };
   }
 
   tickGlitch(): void {

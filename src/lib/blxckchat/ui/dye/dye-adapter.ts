@@ -91,8 +91,19 @@ export interface DyeAdapterOptions {
   subtitle?: string;
 }
 
+const { stdout } = require("process");
+
+function getViewportHeight(): number {
+  try {
+    return (stdout as any).rows ?? 24;
+  } catch {
+    return 24;
+  }
+}
+
 export function createDyeTui(options: DyeAdapterOptions): DyeTuiHandles {
   const store = new MessageStore();
+  const termHeight = getViewportHeight();
   if (options.subtitle) store.subtitle = options.subtitle;
 
   const overlayRef: { current: DyeAppOverlayHandles | null } = {
@@ -151,14 +162,31 @@ export function createDyeTui(options: DyeAdapterOptions): DyeTuiHandles {
     appendSystem(message) {
       store.appendSystem(message);
     },
-    scrollUp() {},
-    scrollDown() {},
-    scrollPageUp() {},
-    scrollPageDown() {},
-    scrollHalfPageUp() {},
-    scrollHalfPageDown() {},
-    scrollToTop() {},
-    scrollToBottom() {},
+    scrollUp() {
+      store.scrollUp();
+    },
+    scrollDown() {
+      store.scrollDown();
+    },
+    scrollPageUp() {
+      store.scrollPageUp(termHeight);
+    },
+    scrollPageDown() {
+      store.scrollPageDown(termHeight);
+    },
+    scrollHalfPageUp() {
+      store.setScrollOffset(store.scrollOffset + Math.floor(termHeight / 2));
+    },
+    scrollHalfPageDown() {
+      store.setScrollOffset(Math.max(0, store.scrollOffset - Math.floor(termHeight / 2)));
+    },
+    scrollToTop() {
+      store.scrollToTop();
+    },
+    scrollToBottom() {
+      store.setScrollOffset(0);
+      store.pinnedToBottom = true;
+    },
     getScrollState(): ScrollState {
       return {
         pinnedToBottom: store.pinnedToBottom,

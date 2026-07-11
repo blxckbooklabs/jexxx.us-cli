@@ -65,8 +65,6 @@ export const DyeApp: React.FC<DyeAppProps> = ({
   overlayRef,
 }) => {
   const { columns: termWidth, rows: termHeight } = useWindowSize();
-
-  const [scrollOffset, setScrollOffset] = React.useState(0);
   const [inputValue, setInputValue] = React.useState(initialInputValue);
   const [typedQuery, setTypedQuery] = React.useState("");
 
@@ -1180,8 +1178,8 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         >
           <MessageView
             store={store}
-            scrollOffset={scrollOffset}
-            onScroll={setScrollOffset}
+            scrollOffset={store.scrollOffset}
+            onScroll={(offset) => store.setScrollOffset(offset)}
             terminalWidth={termWidth}
             terminalHeight={termHeight}
           />
