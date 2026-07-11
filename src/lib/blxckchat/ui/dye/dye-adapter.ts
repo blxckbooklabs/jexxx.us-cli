@@ -15,8 +15,7 @@ import type {
 
 function getViewportHeight(): number {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require("process").stdout.rows ?? 24;
+    return process.stdout.rows ?? 24;
   } catch {
     return 24;
   }
