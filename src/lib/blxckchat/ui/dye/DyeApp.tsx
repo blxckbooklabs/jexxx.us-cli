@@ -94,6 +94,8 @@ export const DyeApp: React.FC<DyeAppProps> = ({
   const promptResolveRef = React.useRef<((v: string | null) => void) | null>(
     null,
   );
+  const [promptCursorPos, setPromptCursorPos] = React.useState(0);
+  const [promptSelectionStart, setPromptSelectionStart] = React.useState<number | null>(null);
 
   const [deviceLoginText, setDeviceLoginText] = React.useState<string | null>(
     null,
@@ -144,6 +146,8 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           new Promise((resolve) => {
             promptResolveRef.current = resolve;
             setPromptState({ options: opts, input: opts.defaultValue ?? "" });
+            setPromptCursorPos((opts.defaultValue ?? "").length);
+            setPromptSelectionStart(null);
           }),
         startDeviceLogin: async () => {
           const { startDeviceAuth, pollDeviceAuth, openDeviceAuthBrowser } =
@@ -223,7 +227,29 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       const normalized = text.replace(/\r?\n/g, "").replace(/\t/g, "");
       if (!normalized) return;
       if (promptState) {
-        setPromptState((s) => (s ? { ...s, input: s.input + normalized } : s));
+        // For non-secret prompts, paste at cursor position
+        if (!promptState.options.secret) {
+          const cp = promptCursorPos;
+          const sel = promptSelectionStart;
+          setPromptState((s) => {
+            if (!s) return s;
+            const prev = s.input;
+            if (sel != null && sel !== cp) {
+              const a = Math.min(sel, cp);
+              const b = Math.max(sel, cp);
+              const next = a + normalized.length;
+              setPromptCursorPos(next);
+              setPromptSelectionStart(null);
+              return { ...s, input: prev.slice(0, a) + normalized + prev.slice(b) };
+            }
+            const next = cp + normalized.length;
+            setPromptCursorPos(next);
+            return { ...s, input: prev.slice(0, cp) + normalized + prev.slice(cp) };
+          });
+        } else {
+          // Secret mode: replace entire input
+          setPromptState((s) => (s ? { ...s, input: normalized } : s));
+        }
         return;
       }
       if (pickerState && pickerFilterFocused) {
@@ -490,27 +516,211 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       return;
     }
 
-    if (promptState) {
+    // ---- Prompt overlay editor shortcuts ----
+    // Secret mode is handled by usePaste + Shift+P fallback (below)
+    // Non-secret prompts get full editor support
+    if (promptState && !promptState.options.secret) {
       const resolve = promptResolveRef.current;
+      const cp = promptCursorPos;
+      const sel = promptSelectionStart;
+
       if (key.escape) {
         resolve?.(null);
         promptResolveRef.current = null;
         setPromptState(null);
+        setPromptCursorPos(0);
+        setPromptSelectionStart(null);
         return;
       }
       if (key.return) {
         resolve?.(promptState.input.trim());
         promptResolveRef.current = null;
         setPromptState(null);
+        setPromptCursorPos(0);
+        setPromptSelectionStart(null);
         return;
       }
-      if (key.backspace) {
-        setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
+
+      // Word jump (Ctrl/Meta + Left/Right, no Shift)
+      if ((key.meta || key.ctrl) && !key.shift && key.leftArrow) {
+        setPromptSelectionStart(null);
+        setPromptCursorPos((prev) => wordBoundaryLeft(promptState.input, prev));
         return;
       }
-      // Secret-mode fallback: Shift+P reads clipboard via readClipboard.
-      // Cmd+V is intercepted by macOS terminals and Ctrl+V reliability
-      // varies; the primary paste path is usePaste (separate channel).
+      if ((key.meta || key.ctrl) && !key.shift && key.rightArrow) {
+        setPromptSelectionStart(null);
+        setPromptCursorPos((prev) => wordBoundaryRight(promptState.input, prev));
+        return;
+      }
+
+      // Word selection (Ctrl/Meta + Shift + Left/Right)
+      if ((key.meta || key.ctrl) && key.shift && key.leftArrow) {
+        setPromptCursorPos((prev) => {
+          if (promptSelectionStart == null) setPromptSelectionStart(prev);
+          return wordBoundaryLeft(promptState.input, prev);
+        });
+        return;
+      }
+      if ((key.meta || key.ctrl) && key.shift && key.rightArrow) {
+        setPromptCursorPos((prev) => {
+          if (promptSelectionStart == null) setPromptSelectionStart(prev);
+          return wordBoundaryRight(promptState.input, prev);
+        });
+        return;
+      }
+
+      // Character navigation (Left/Right without modifiers)
+      if (!key.ctrl && !key.meta && !key.shift && key.leftArrow) {
+        setPromptSelectionStart(null);
+        setPromptCursorPos((prev) => Math.max(0, prev - 1));
+        return;
+      }
+      if (!key.ctrl && !key.meta && !key.shift && key.rightArrow) {
+        setPromptSelectionStart(null);
+        setPromptCursorPos((prev) => Math.min(promptState.input.length, prev + 1));
+        return;
+      }
+
+      // Character selection (Shift+Left/Right without Ctrl/Meta)
+      if (!key.ctrl && !key.meta && key.shift && key.leftArrow) {
+        setPromptCursorPos((prev) => {
+          if (promptSelectionStart == null) setPromptSelectionStart(prev);
+          return Math.max(0, prev - 1);
+        });
+        return;
+      }
+      if (!key.ctrl && !key.meta && key.shift && key.rightArrow) {
+        setPromptCursorPos((prev) => {
+          if (promptSelectionStart == null) setPromptSelectionStart(prev);
+          return Math.min(promptState.input.length, prev + 1);
+        });
+        return;
+      }
+
+      // Home / Ctrl+A
+      if (key.home || (key.ctrl && input === "a")) {
+        setPromptSelectionStart(null);
+        setPromptCursorPos(0);
+        return;
+      }
+
+      // End / Ctrl+E
+      if (key.end || (key.ctrl && input === "e")) {
+        setPromptSelectionStart(null);
+        setPromptCursorPos(promptState.input.length);
+        return;
+      }
+
+      // Ctrl+U — delete line
+      if (key.ctrl && input === "u") {
+        setPromptState((s) => (s ? { ...s, input: "" } : s));
+        setPromptCursorPos(0);
+        setPromptSelectionStart(null);
+        return;
+      }
+
+      // Ctrl+K — delete to end
+      if (key.ctrl && input === "k") {
+        setPromptState((s) => (s ? { ...s, input: s.input.slice(0, promptCursorPos) } : s));
+        return;
+      }
+
+      // Ctrl+W — delete word left
+      if (key.ctrl && input === "w") {
+        setPromptState((s) => {
+          if (!s) return s;
+          const c = s.input;
+          const start = wordBoundaryLeft(c, promptCursorPos);
+          setPromptCursorPos(start);
+          setPromptSelectionStart(null);
+          return { ...s, input: c.slice(0, start) + c.slice(promptCursorPos) };
+        });
+        return;
+      }
+
+      // Meta+D — delete word right
+      if (key.meta && input === "d") {
+        setPromptState((s) => {
+          if (!s) return s;
+          const c = s.input;
+          const end = wordBoundaryRight(c, promptCursorPos);
+          return { ...s, input: c.slice(0, promptCursorPos) + c.slice(end) };
+        });
+        return;
+      }
+
+      // Ctrl/Meta + Backspace — delete word left
+      if ((key.meta || key.ctrl) && key.backspace) {
+        setPromptState((s) => {
+          if (!s) return s;
+          const c = s.input;
+          const start = wordBoundaryLeft(c, promptCursorPos);
+          setPromptCursorPos(start);
+          setPromptSelectionStart(null);
+          return { ...s, input: c.slice(0, start) + c.slice(promptCursorPos) };
+        });
+        return;
+      }
+
+      // Backspace
+      if (key.backspace && !key.ctrl && !key.meta) {
+        setPromptState((s) => {
+          if (!s) return s;
+          const c = s.input;
+          if (promptSelectionStart != null) {
+            const a = Math.min(promptSelectionStart, promptCursorPos);
+            const b = Math.max(promptSelectionStart, promptCursorPos);
+            setPromptCursorPos(a);
+            setPromptSelectionStart(null);
+            return { ...s, input: c.slice(0, a) + c.slice(b) };
+          }
+          if (promptCursorPos > 0) {
+            setPromptCursorPos(promptCursorPos - 1);
+            return { ...s, input: c.slice(0, promptCursorPos - 1) + c.slice(promptCursorPos) };
+          }
+          return s;
+        });
+        return;
+      }
+
+      // Delete
+      if (key.delete) {
+        setPromptState((s) => {
+          if (!s) return s;
+          const c = s.input;
+          if (promptSelectionStart != null) {
+            const a = Math.min(promptSelectionStart, promptCursorPos);
+            const b = Math.max(promptSelectionStart, promptCursorPos);
+            setPromptCursorPos(a);
+            setPromptSelectionStart(null);
+            return { ...s, input: c.slice(0, a) + c.slice(b) };
+          }
+          if (promptCursorPos < c.length) {
+            return { ...s, input: c.slice(0, promptCursorPos) + c.slice(promptCursorPos + 1) };
+          }
+          return s;
+        });
+        return;
+      }
+
+      // Regular character typing with cursor support
+      if (!key.ctrl && !key.meta && input && input.length === 1) {
+        setPromptState((s) => {
+          if (!s) return s;
+          const c = s.input;
+          if (sel != null && sel !== cp) {
+            const a = Math.min(sel, cp);
+            const b = Math.max(sel, cp);
+            return { ...s, input: c.slice(0, a) + input + c.slice(b) };
+          }
+          return { ...s, input: c.slice(0, cp) + input + c.slice(cp) };
+        });
+        setPromptCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + 1);
+        setPromptSelectionStart(null);
+        return;
+      }
+
+      // Secret-mode: pass through to legacy handler
       if (promptState.options.secret && key.shift && !key.ctrl && !key.meta && input.toLowerCase() === "p") {
         void readClipboard().then((clip) => {
           const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
@@ -519,13 +729,16 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         });
         return;
       }
-      // Regular character input. Paste is handled by usePaste on its own
-      // event channel and never reaches useInput while active.
-      if (input && !key.ctrl && !key.meta) {
+      // Legacy backspace for secret mode (appends to end)
+      if (key.backspace) {
+        setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
+        return;
+      }
+      // Legacy character append for secret mode
+      if (!key.ctrl && !key.meta && input && input.length === 1) {
         setPromptState((s) => (s ? { ...s, input: s.input + input } : s));
         return;
       }
-      return;
     }
 
     if (deviceLoginText) {
@@ -1005,7 +1218,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           }
           filterFocused={pickerFilterFocused}
         />
-        <PromptOverlay state={promptState} />
+        <PromptOverlay state={promptState ? { ...promptState, cursorPos: promptCursorPos, selectionStart: promptSelectionStart ?? undefined } : null} />
         {deviceLoginText ? (
           <DeviceLoginOverlay state={{ status: deviceLoginText }} />
         ) : null}
