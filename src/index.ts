@@ -634,7 +634,15 @@ program
     program.outputHelp();
   });
 
-program.parseAsync().catch((err: unknown) => {
+/**
+ * Commander only auto-strips argv[1] when argv[0] is `node`. Under
+ * ELECTRON_RUN_AS_NODE (JEXXXUS desktop PTY), argv[0] is the app binary so
+ * the script path would be mis-parsed as the optional `[prompt]` argument and
+ * launch a one-shot agent instead of the BLXCKCHAT TUI.
+ */
+const cliUserArgs = process.argv.slice(2);
+
+program.parseAsync(cliUserArgs, { from: "user" }).catch((err: unknown) => {
   const message = err instanceof Error ? err.message : "Unexpected CLI failure";
   logCrash("top-level CLI failure", err);
   console.error(chalk.red(`[ERROR] ${message} — full trace: ~/.jexxxus/crash.log`));

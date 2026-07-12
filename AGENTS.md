@@ -52,6 +52,10 @@ Owned by the JEXXXUS platform / tooling team.
 - `jexxxus import --target nxt` must write to `public.vessels` schema.
 - Vault operator docs live in `jexxx.us-obsidian/CLI/`; public mirror in
   `docs.jexxx.us/src/content/jexxxus-cli.md`. Keep both aligned.
+- **JEXXXUS desktop PTY:** when spawned via `ELECTRON_RUN_AS_NODE`, `argv[0]` is the app binary (not
+  `node`), so `program.parseAsync()` must use `process.argv.slice(2)` with `{ from: "user" }` —
+  otherwise Commander treats the script path as the optional `[prompt]` and runs a one-shot agent
+  instead of the BLXCKCHAT TUI. Regression test: `src/__tests__/cli-argv.test.ts`.
 - **Command swap (July 2026):** bare `jexxxus` (no subcommand) is now the default entry point for
   BLXCKCHAT — it shares one `launchBlxckchat()` implementation with the explicit `jexxxus blxckchat`
   subcommand in `index.ts` (both call the same function; keep them in sync, don't duplicate logic).
