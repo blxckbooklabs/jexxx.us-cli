@@ -1,3 +1,4 @@
+import { loadCredentials } from "../../auth.js";
 import type { BlxckchatTool } from "./types.js";
 import { bibleTool } from "./bible-tools.js";
 import { veilTool } from "./veil-tools.js";
@@ -80,6 +81,16 @@ export function buildToolRegistry(
   }
 
   return tools;
+}
+
+/** Fresh registry each call — picks up /auth login mid-session. */
+export function resolveBlxckchatTools(
+  options: Omit<BuildToolRegistryOptions, "includeAccountQuery"> = {},
+): BlxckchatTool[] {
+  return buildToolRegistry({
+    ...options,
+    includeAccountQuery: Boolean(loadCredentials({ quiet: true })),
+  });
 }
 
 export function findTool(

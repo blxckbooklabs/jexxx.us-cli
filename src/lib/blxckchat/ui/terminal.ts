@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { AgentAbortedError, runAgent } from "../agent-loop.js";
 import type { Provider } from "../providers/types.js";
+import { resolveBlxckchatTools } from "../tools/registry.js";
 import type { BlxckchatTool } from "../tools/types.js";
 import type { StoredProviderConfig } from "../config.js";
 import { saveLastUsedProvider, upsertProvider } from "../config.js";
@@ -74,6 +75,7 @@ export interface TerminalChatOptions {
   toolCount?: number;
   storedConfig: StoredProviderConfig;
   resume?: boolean;
+  allowShell?: boolean;
 }
 
 export async function startTerminalChat(
@@ -85,7 +87,9 @@ export async function startTerminalChat(
   const authLabel = creds
     ? formatCredentialsShortLabel(creds)
     : "not authenticated";
-  const toolCount = options.toolCount ?? tools.length;
+  const allowShell = Boolean(options.allowShell);
+  const liveTools = () => resolveBlxckchatTools({ allowShell });
+  let toolCount = options.toolCount ?? liveTools().length;
 
   const session: TerminalSession = options.resume
     ? (loadAutosaveSession() ?? createSession())
@@ -161,7 +165,8 @@ export async function startTerminalChat(
     const liveAuth = liveCreds
       ? formatCredentialsShortLabel(liveCreds)
       : "not authenticated";
-    heroMeta = { ...heroMeta, authLabel: liveAuth };
+    toolCount = liveTools().length;
+    heroMeta = { ...heroMeta, authLabel: liveAuth, toolCount };
     if (tui.messageBox.hasHero()) {
       tui.messageBox.dismissHero();
       showIdleHero();
@@ -832,9 +837,13 @@ export async function startTerminalChat(
         : undefined;
 
     try {
+      const activeTools = liveTools();
+      toolCount = activeTools.length;
+      heroMeta = { ...heroMeta, toolCount };
+
       const { response, history } = await runAgent(
         activeProvider,
-        tools,
+        activeTools,
         trimmed,
         session.conversationHistory,
         {
@@ -1004,14 +1013,14 @@ export async function startTerminalChat(
       }),
     onCopyLastReply: () => void copyLastReply(),
     onToggleThinking: () => tui.messageBox.toggleAllThinking(),
-    onScrollUp: () => {},
-    onScrollDown: () => {},
-    onScrollPageUp: () => {},
-    onScrollPageDown: () => {},
-    onScrollHalfUp: () => {},
-    onScrollHalfDown: () => {},
-    onScrollToTop: () => {},
-    onScrollToBottom: () => {},
+    onScrollUp: () => tui.messageBox.scrollUp(),
+    onScrollDown: () => tui.messageBox.scrollDown(),
+    onScrollPageUp: () => tui.messageBox.scrollPageUp(),
+    onScrollPageDown: () => tui.messageBox.scrollPageDown(),
+    onScrollHalfUp: () => tui.messageBox.scrollHalfPageUp(),
+    onScrollHalfDown: () => tui.messageBox.scrollHalfPageDown(),
+    onScrollToTop: () => tui.messageBox.scrollToTop(),
+    onScrollToBottom: () => tui.messageBox.scrollToBottom(),
     onFocusInput: () => {},
     onOpenSlashPopup: () => {},
     onOpenExternalEditor: async (initial: string) =>

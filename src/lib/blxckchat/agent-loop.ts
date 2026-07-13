@@ -259,7 +259,8 @@ async function buildSignedInOperatorContext(): Promise<string | null> {
     return buildOperatorIdentityContext(resolved.session);
   }
 
-  return buildOfflineOperatorIdentityContext(creds);
+  const offline = buildOfflineOperatorIdentityContext(creds);
+  return `${offline}\n\nVault session error (credentials on disk): ${resolved.message}`;
 }
 
 /**

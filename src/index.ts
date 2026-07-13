@@ -33,7 +33,7 @@ import {
   runConfigureFlow,
 } from "./lib/blxckchat/config.js";
 import { resolveProvider } from "./lib/blxckchat/providers/registry.js";
-import { buildToolRegistry } from "./lib/blxckchat/tools/registry.js";
+import { resolveBlxckchatTools } from "./lib/blxckchat/tools/registry.js";
 import { runAgent } from "./lib/blxckchat/agent-loop.js";
 import { startInteractiveChat } from "./lib/blxckchat/repl-ui.js";
 import { logCrash } from "./lib/blxckchat/crash-log.js";
@@ -92,10 +92,8 @@ async function launchBlxckchat(
   }
 
   const provider = resolveProvider(storedConfig);
-  const authed = Boolean(loadCredentials({ quiet: true }));
-  const tools = buildToolRegistry({
+  const tools = resolveBlxckchatTools({
     allowShell: Boolean(options.shell),
-    includeAccountQuery: authed,
   });
 
   if (options.shell) {
@@ -119,6 +117,7 @@ async function launchBlxckchat(
     providerLabel: `${storedConfig.provider}/${storedConfig.model}`,
     storedConfig,
     resume: Boolean(options.resume),
+    allowShell: Boolean(options.shell),
   });
 }
 

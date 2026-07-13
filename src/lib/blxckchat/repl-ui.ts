@@ -1,6 +1,7 @@
 import chalk from "chalk";
 
 import type { Provider } from "./providers/types.js";
+import { resolveBlxckchatTools } from "./tools/registry.js";
 import type { BlxckchatTool } from "./tools/types.js";
 import { runAgent } from "./agent-loop.js";
 import { getDivinityPersonaById } from "./divinities/source.js";
@@ -20,6 +21,7 @@ export interface InteractiveChatOptions {
   providerLabel?: string;
   storedConfig: StoredProviderConfig;
   resume?: boolean;
+  allowShell?: boolean;
 }
 
 const MIN_TERMINAL_COLS = 40;
@@ -32,11 +34,13 @@ function isSpuriousMouseInput(line: string): boolean {
 
 async function startReadlineFallback(
   provider: Provider,
-  tools: BlxckchatTool[],
+  _tools: BlxckchatTool[],
   providerLabel: string,
   storedConfig: StoredProviderConfig,
   resume: boolean,
+  allowShell = false,
 ): Promise<void> {
+  const liveTools = () => resolveBlxckchatTools({ allowShell });
   console.log(
     chalk.cyan(
       `[BLXCKCHAT] Interactive mode (readline fallback) — ${providerLabel}. Type /help for commands.\n`,
@@ -83,7 +87,7 @@ async function startReadlineFallback(
       const result = await dispatchSlashCommand(trimmed, {
         session,
         activeConfig,
-        toolCount: tools.length,
+        toolCount: liveTools().length,
         setActiveConfig: (config, nextProvider) => {
           activeConfig = config;
           activeProvider = nextProvider;
@@ -121,7 +125,7 @@ async function startReadlineFallback(
 
       const { response, history } = await runAgent(
         activeProvider,
-        tools,
+        liveTools(),
         trimmed,
         session.conversationHistory,
         persona ? { persona } : {},
@@ -169,6 +173,7 @@ export async function startInteractiveChat(
       providerLabel,
       options.storedConfig,
       Boolean(options.resume),
+      Boolean(options.allowShell),
     );
     return;
   }
@@ -182,6 +187,7 @@ export async function startInteractiveChat(
       toolCount: tools.length,
       storedConfig: options.storedConfig,
       resume: Boolean(options.resume),
+      allowShell: Boolean(options.allowShell),
     });
   } catch (err) {
     restoreTerminalForReadline();
@@ -200,6 +206,7 @@ export async function startInteractiveChat(
       providerLabel,
       options.storedConfig,
       Boolean(options.resume),
+      Boolean(options.allowShell),
     );
   }
 }
