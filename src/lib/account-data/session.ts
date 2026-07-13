@@ -38,9 +38,26 @@ export type AccountSessionResult =
   | { ok: false; reason: AccountSessionFailure; message: string };
 
 /**
+ * Optional host override (e.g. blxckchat.jexxx.us Clerk cookie session).
+ * When set, resolveAuthenticatedAccountSession() delegates here instead of ~/.jexxxus creds.
+ */
+let accountSessionResolverOverride: (() => Promise<AccountSessionResult>) | null =
+  null;
+
+export function setAccountSessionResolver(
+  resolver: (() => Promise<AccountSessionResult>) | null,
+): void {
+  accountSessionResolverOverride = resolver;
+}
+
+/**
  * Resolve a signed-in user's RLS-scoped Supabase clients for both dashboards.
  */
 export async function resolveAuthenticatedAccountSession(): Promise<AccountSessionResult> {
+  if (accountSessionResolverOverride) {
+    return accountSessionResolverOverride();
+  }
+
   if (!loadCredentials({ quiet: true })) {
     return {
       ok: false,

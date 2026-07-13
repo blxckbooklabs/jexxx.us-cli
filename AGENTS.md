@@ -81,6 +81,11 @@ Owned by the JEXXXUS platform / tooling team.
   `embed_url`/stream URLs, Supabase, or internal Obsidian TV docs. Env: `TV_CONTENT_PATH`,
   `TV_PUBLIC_BASE_URL`.
 - BLXCKCHAT `lib/bible.ts` `findBook()` normalizes numbered book names (`1 Samuel` ↔ vault folder `09-1Samuel`).
+- **BLXCKCHAT web parity (`blxckchat.jexxx.us`, July 2026):** `/api/agent` (Node runtime) loads this
+  package's built `dist/` via `lib/kingdom-agent/cli-loader.ts`, injects `setAccountSessionResolver()`
+  with Clerk cookie → Supabase RLS (`resolveWebAccountSession`), and runs the same `buildToolRegistry`
+  tool surface as the CLI. Signed-in chat turns route to `/api/agent`; unsigned BYOK stays on `/api/chat`.
+  Monorepo build: `blxckchat` `prebuild` compiles `jexxx.us-cli` first.
 - BLXCKCHAT `account_query` reads **signed-in user's** BLXCKBOOK + NXT vault data and private
   JEXXXUS | TV playlists (`api.playlists`, RLS-scoped Clerk JWT from `/auth login` via
   `createUserSupabaseClient` + `SUPABASE_ANON_KEY`). Operator identity (Clerk name, email,

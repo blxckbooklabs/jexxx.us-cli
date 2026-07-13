@@ -161,6 +161,9 @@ ${KINGDOM_CONTENT_ROUTING}
 
 ${ACCOUNT_CONTENT_ROUTING}`;
 
+/** Shared with blxckchat.jexxx.us kingdom-agent (web + CLI parity). */
+export const EMPIRE_AGENT_SYSTEM_PROMPT = SYSTEM_PROMPT_BASE;
+
 const MAX_TURNS = 8;
 
 // Caps how many prior turns are replayed to the model each call. Prevents

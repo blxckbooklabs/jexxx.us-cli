@@ -4,6 +4,19 @@
   "description": "The native CLI agent tool for JEXXXUS",
   "main": "dist/index.js",
   "type": "module",
+  "exports": {
+    ".": "./dist/index.js",
+    "./agent-loop": "./dist/lib/blxckchat/agent-loop.js",
+    "./tools/registry": "./dist/lib/blxckchat/tools/registry.js",
+    "./account-data/session": "./dist/lib/account-data/session.js",
+    "./account-routing": "./dist/lib/blxckchat/account-routing.js",
+    "./kingdom-routing": "./dist/lib/blxckchat/kingdom-routing.js",
+    "./account-prefetch": "./dist/lib/blxckchat/account-prefetch.js",
+    "./garden-prefetch": "./dist/lib/blxckchat/garden-prefetch.js",
+    "./operator-identity": "./dist/lib/operator-identity.js",
+    "./super-admin": "./dist/lib/super-admin.js",
+    "./user-supabase": "./dist/lib/user-supabase.js"
+  },
   "bin": {
     "jexxxus": "./dist/index.js"
   },
