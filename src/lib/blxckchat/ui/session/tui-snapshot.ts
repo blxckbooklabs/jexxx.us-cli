@@ -84,6 +84,13 @@ function nativeClipboardMayNotReachHostTerminal(): boolean {
 
 /** Copy plain text to the system clipboard (best-effort). */
 export function copyToClipboard(text: string): Promise<boolean> {
+  if (process.env.JEXXXUS_EMBEDDED === "1") {
+    // Electron PTY: pbcopy/xclip often hang or target the wrong clipboard.
+    // OSC 52 is intercepted by jexxx.us-desktop and written to the host OS.
+    writeClipboardOsc52(text);
+    return Promise.resolve(true);
+  }
+
   return new Promise((resolve) => {
     const platform = process.platform;
     let cmd: string;
