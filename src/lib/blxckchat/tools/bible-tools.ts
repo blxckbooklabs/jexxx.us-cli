@@ -4,7 +4,8 @@ import {
   getBibleBooks,
   getBibleChapters,
   findBook,
-  findVerse,
+  findVerseWithFallback,
+  hasLocalBibleVault,
   looksLikeVerseReference,
 } from "../../bible.js";
 import { formatBibleVerseForChat } from "../bible-format.js";
@@ -65,12 +66,25 @@ export const bibleTool: BlxckchatTool = {
     const wantsVerse = Boolean(query) || rawAction === "query" || rawAction.includes("verse");
 
     if (wantsSections) {
-      return JSON.stringify(getBibleSections());
+      const sections = getBibleSections();
+      if (sections.length === 0) {
+        return (
+          "Local Bible vault is not mounted on this host. Use action=query with a verse reference " +
+          "(e.g. 'Genesis 1:1') — web lookup via bible.jexxx.us is used automatically."
+        );
+      }
+      return JSON.stringify(sections);
     }
 
     if (wantsBooks) {
       if (!section) return "Error: 'section' is required to list books.";
-      return JSON.stringify(getBibleBooks(section));
+      const books = getBibleBooks(section);
+      if (books.length === 0 && !hasLocalBibleVault()) {
+        return (
+          "Local Bible vault is not mounted. Use action=query with Book Chapter:Verse for web lookup."
+        );
+      }
+      return JSON.stringify(books);
     }
 
     if (wantsChapters) {
@@ -78,6 +92,11 @@ export const bibleTool: BlxckchatTool = {
         return (
           "Error: chapter listing requires section + book. For a single verse use action=query " +
           "with Book Chapter:Verse (e.g. '1 John 1:9')."
+        );
+      }
+      if (!hasLocalBibleVault()) {
+        return (
+          `Local Bible vault is not mounted. Use action=query with "${bookArg} 1:1" style references for web lookup.`
         );
       }
       const bookInfo = findBook(bookArg);
@@ -99,7 +118,7 @@ export const bibleTool: BlxckchatTool = {
           `For VEIL articles, use veil_query.`
         );
       }
-      const verse = findVerse(query);
+      const verse = await findVerseWithFallback(query);
       if (!verse) {
         return (
           `No verse found matching "${query}". If the user meant a JEXXXUS | TV video or channel, ` +

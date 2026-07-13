@@ -23,7 +23,7 @@ import {
   getVerse,
   getChapter,
   findBook,
-  findVerse,
+  findVerseWithFallback,
 } from "./lib/bible.js";
 import { createOperatorClient } from "./lib/supabase.js";
 import type { DashboardTarget } from "./lib/supabase.js";
@@ -552,9 +552,9 @@ bibleCmd
 bibleCmd
   .command("query <query>")
   .description("Query a verse (e.g., \"Genesis 1:1\" or \"John 3 16\")")
-  .action((query: string) => {
+  .action(async (query: string) => {
     try {
-      const verseData = findVerse(query);
+      const verseData = await findVerseWithFallback(query);
       if (!verseData) {
         console.error(chalk.red(`[ERROR] Verse not found: ${query}`));
         process.exit(1);

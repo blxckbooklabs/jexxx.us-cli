@@ -1,4 +1,4 @@
-import { findVerse } from "../bible.js";
+import { findVerseWithFallback } from "../bible.js";
 import { getTvContentSourceInfo, listTvVideos, searchTvVideos } from "../tv.js";
 import { getVeilContentSourceInfo, listVeilArticles, searchVeilArticles } from "../veil.js";
 import { formatBibleVerseForChat } from "./bible-format.js";
@@ -83,7 +83,7 @@ export async function prefetchGardenContext(
   if (verses.length > 0) {
     const lines = ["", "### Companion scripture"];
     for (const ref of verses) {
-      const verse = findVerse(ref);
+      const verse = await findVerseWithFallback(ref);
       if (verse) {
         lines.push(formatBibleVerseForChat(verse));
         lines.push("");

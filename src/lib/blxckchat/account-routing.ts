@@ -48,6 +48,22 @@ export const ACCOUNT_PHRASE_COLLISIONS: readonly AccountPhraseCollision[] = [
     note: "BLXCKBOOK contact list → account_query contacts.",
   },
   {
+    id: "blxckbook-write-capability",
+    pattern:
+      /\b((?:are you )?capable of|can you)\s+(?:making\s+)?edit(?:s|ing)?\s+(?:to\s+)?(?:my\s+)?blxckbook\b/i,
+    action: "summary",
+    target: "blxckbook",
+    note: "BLXCKBOOK write capability — vault write tools (add/update/delete contact, journal, playlists).",
+  },
+  {
+    id: "blxckbook-write-intent",
+    pattern:
+      /\b(edit(?:s|ing)?|update|change|modify|add to)\s+(?:my\s+)?blxckbook\b/i,
+    action: "summary",
+    target: "blxckbook",
+    note: "BLXCKBOOK write intent — use vault write tools when user specifies the change.",
+  },
+  {
     id: "dating-status",
     pattern: /\b(who am i dating|currently dating|people i(?:'m| am) dating)\b/i,
     action: "contacts",
@@ -199,7 +215,8 @@ export function isVaultPrimaryPrompt(userPrompt: string): boolean {
 }
 
 export const ACCOUNT_VAULT_REPLY_RULES = `**Vault-only reply rules (this message):**
-- Call **account_query only** — do NOT call tv_query, veil_query, or bible_query.
+- Prefer **account_query** for reads; use vault **write** tools (add_contact, update_contact, delete_contact, journal tools, manage_playlist) only when the user clearly requested a change.
+- Do NOT call tv_query, veil_query, or bible_query for BLXCKBOOK vault questions.
 - Do not recommend TV/VEIL videos or quote scripture based on contact names or tags.
 - Reply in plain language: a short intro line, then one bullet per contact from tool output.
 - Format each contact: \`• Name (Status) · tags: …\` — omit tags line when empty.

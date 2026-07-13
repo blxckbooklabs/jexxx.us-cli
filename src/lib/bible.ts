@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
-import { resolveBibleVaultPath, validateVaultPath } from "./path-resolver.js";
+import { fetchVerseFromWeb } from "./bible-web.js";
+import { resolveBibleVaultPath } from "./path-resolver.js";
 
 /**
  * Bible lookup library for verse-level retrieval from the obsidian-bible vault.
@@ -29,18 +30,13 @@ function getVaultPath(): string | null {
   return resolveBibleVaultPath();
 }
 
-function requireVaultPath(): string {
-  const vaultPath = requireVaultPath();
-  if (!vaultPath) {
-    throw new Error(
-      "[Bible] Local vault not configured. Set JEXXXUS_BIBLE_VAULT_PATH env var or use web-based queries."
-    );
-  }
-  return vaultPath;
+export function hasLocalBibleVault(): boolean {
+  return getVaultPath() !== null;
 }
 
 export function getBibleSections(): string[] {
-  const vaultPath = requireVaultPath();
+  const vaultPath = getVaultPath();
+  if (!vaultPath) return [];
   const entries = fs.readdirSync(vaultPath);
   return entries
     .filter(
@@ -52,7 +48,8 @@ export function getBibleSections(): string[] {
 }
 
 export function getBibleBooks(section: string): string[] {
-  const vaultPath = requireVaultPath();
+  const vaultPath = getVaultPath();
+  if (!vaultPath) return [];
   const sectionPath = path.join(vaultPath, section);
   if (!fs.existsSync(sectionPath)) {
     throw new Error(`[Bible] Section not found: ${section}`);
@@ -68,7 +65,8 @@ export function getBibleBooks(section: string): string[] {
 }
 
 export function getBibleChapters(section: string, book: string): string[] {
-  const vaultPath = requireVaultPath();
+  const vaultPath = getVaultPath();
+  if (!vaultPath) return [];
   const bookPath = path.join(vaultPath, section, book);
   if (!fs.existsSync(bookPath)) {
     throw new Error(`[Bible] Book not found: ${section}/${book}`);
@@ -88,7 +86,8 @@ export function getBibleVerses(
   book: string,
   chapter: string
 ): string[] {
-  const vaultPath = requireVaultPath();
+  const vaultPath = getVaultPath();
+  if (!vaultPath) return [];
   const chapterPath = path.join(vaultPath, section, book, chapter);
   if (!fs.existsSync(chapterPath)) {
     throw new Error(
@@ -138,7 +137,12 @@ export function getVerse(
   chapter: string,
   verseFile: string
 ): BibleVerse {
-  const vaultPath = requireVaultPath();
+  const vaultPath = getVaultPath();
+  if (!vaultPath) {
+    throw new Error(
+      "[Bible] Local vault not configured. Set JEXXXUS_BIBLE_VAULT_PATH or use bible_query action=query for web lookup.",
+    );
+  }
   const versePath = path.join(vaultPath, section, book, chapter, verseFile);
 
   if (!fs.existsSync(versePath)) {
@@ -190,6 +194,7 @@ export function findBook(bookName: string): {
   section: string;
   book: string;
 } | null {
+  if (!getVaultPath()) return null;
   const sections = getBibleSections();
   const queryKey = normalizeBookLookupKey(bookName);
 
@@ -226,6 +231,10 @@ export function parseVerseReference(
 }
 
 export function findVerse(query: string): BibleVerse | null {
+  return findVerseFromLocalVault(query);
+}
+
+function findVerseFromLocalVault(query: string): BibleVerse | null {
   const parsed = parseVerseReference(query);
   if (!parsed) return null;
 
@@ -240,14 +249,31 @@ export function findVerse(query: string): BibleVerse | null {
     const verses = getBibleVerses(
       bookInfo.section,
       bookInfo.book,
-      chapter
+      chapter,
     );
     const verseFile = verses.find((v) =>
-      v.startsWith(`${chapterNum}-${verseNum}`)
+      v.startsWith(`${chapterNum}-${verseNum}`),
     );
     if (!verseFile) return null;
     return getVerse(bookInfo.section, bookInfo.book, chapter, verseFile);
   } catch {
     return null;
   }
+}
+
+/** Local obsidian vault first, then bible.jexxx.us web API when vault is absent. */
+export async function findVerseWithFallback(
+  query: string,
+): Promise<BibleVerse | null> {
+  const local = findVerseFromLocalVault(query);
+  if (local) return local;
+
+  const parsed = parseVerseReference(query);
+  if (!parsed) return null;
+
+  return fetchVerseFromWeb(
+    parsed.bookName,
+    parsed.chapter,
+    parsed.verse,
+  );
 }
