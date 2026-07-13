@@ -84,6 +84,13 @@ export function describeMissingUserEnv(): string {
   );
 
   if (!hasUrl && !hasAnon) {
+    if (process.env.JEXXXUS_EMBEDDED === "1") {
+      return (
+        "Missing MAMAbase public credentials in the embedded JEXXXUS | CLI session. " +
+        "Restart the app or sign in again — the desktop shell should inject SUPABASE_URL " +
+        "and SUPABASE_ANON_KEY automatically."
+      );
+    }
     return (
       "Missing SUPABASE_URL and SUPABASE_ANON_KEY in jexxx.us-cli/.env. " +
       "Copy VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from dxsh.blxckbook.jexxx.us/.env " +

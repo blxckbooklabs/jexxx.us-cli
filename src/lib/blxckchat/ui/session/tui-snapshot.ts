@@ -73,7 +73,13 @@ export function writeClipboardOsc52(text: string): void {
  * need the OSC 52 fallback even if the native command exits 0.
  */
 function nativeClipboardMayNotReachHostTerminal(): boolean {
-  return Boolean(process.env.TMUX || process.env.STY || process.env.SSH_TTY || process.env.SSH_CONNECTION);
+  return Boolean(
+    process.env.JEXXXUS_EMBEDDED === "1" ||
+      process.env.TMUX ||
+      process.env.STY ||
+      process.env.SSH_TTY ||
+      process.env.SSH_CONNECTION,
+  );
 }
 
 /** Copy plain text to the system clipboard (best-effort). */
