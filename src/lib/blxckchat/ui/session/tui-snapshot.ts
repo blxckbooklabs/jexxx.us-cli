@@ -1,5 +1,7 @@
 import * as fs from "fs";
+import { execFile } from "node:child_process";
 import { spawn } from "node:child_process";
+import { promisify } from "node:util";
 
 import { getCredentialsDir } from "../../../auth.js";
 
@@ -28,6 +30,29 @@ export function writeSnapshot(text: string): string {
 /** Persist the latest chrome digest (text indicators only). */
 export function writeChromeDigest(text: string): string {
   return writeSnapshotFile(getChromeDigestPath(), text);
+}
+
+const execFileAsync = promisify(execFile);
+
+/** Normalize clipboard text for single-line secret inputs (API keys). */
+export function normalizeSecretClipboardPaste(text: string): string {
+  return text.replace(/\r?\n/g, "").replace(/\t/g, "").trim();
+}
+
+/** macOS pasteboard — explicit path; spawn('pbpaste') can fail in some PATH contexts. */
+export async function readClipboardRobust(): Promise<string> {
+  if (process.platform === "darwin") {
+    try {
+      const { stdout } = await execFileAsync("/usr/bin/pbpaste", [], {
+        encoding: "utf8",
+        maxBuffer: 2 * 1024 * 1024,
+      });
+      return stdout;
+    } catch {
+      return readClipboard();
+    }
+  }
+  return readClipboard();
 }
 
 /** Read plain text from the system clipboard (best-effort). */

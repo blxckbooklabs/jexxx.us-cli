@@ -7,6 +7,8 @@ import {
   useWindowSize,
   useSelection,
   usePaste,
+  measureElement,
+  type DOMElement,
 } from "@sauerapple/dye";
 import { THEME } from "../theme.js";
 import type { MessageStore } from "./message-store.js";
@@ -33,7 +35,12 @@ import {
   pageScrollDelta,
   halfPageScrollDelta,
 } from "../components/scroll-state.js";
-import { readClipboard } from "../session/tui-snapshot.js";
+import {
+  normalizeSecretClipboardPaste,
+  readClipboardRobust,
+} from "../session/tui-snapshot.js";
+import { isSecretPromptPasteKey } from "../secret-prompt-input.js";
+import { useMouseScroll } from "./use-mouse-scroll.js";
 
 export interface DyeAppOverlayHandles {
   showPicker: (
@@ -182,6 +189,33 @@ export const DyeApp: React.FC<DyeAppProps> = ({
     store.confirmDialog || pickerState || promptState || deviceLoginText,
   );
 
+  // The message area's real row count is whatever Yoga computes for its
+  // flexGrow=1 box after TopBar/StatusBar/InputView claim their fixed
+  // heights — a hardcoded "terminalHeight - N" guess in MessageView drifts
+  // whenever that chrome's total height changes. Overlays and the slash
+  // popup are `position="absolute"` (don't affect sibling layout), so a
+  // resize is the only thing that changes this; measureElement only
+  // returns real numbers post-layout, hence the effect + ref instead of
+  // computing it inline during render.
+  const messageAreaRef = React.useRef<DOMElement>(null);
+  const [messageAreaHeight, setMessageAreaHeight] = React.useState<
+    number | undefined
+  >(undefined);
+
+  React.useLayoutEffect(() => {
+    if (!messageAreaRef.current) return;
+    const { height } = measureElement(messageAreaRef.current);
+    if (height > 0) setMessageAreaHeight(height);
+  }, [termWidth, termHeight]);
+
+  useMouseScroll(
+    {
+      onScrollUp: callbacks.onScrollUp,
+      onScrollDown: callbacks.onScrollDown,
+    },
+    !overlayActive,
+  );
+
   const maxScrollLines = React.useMemo(
     () => store.blocks.flatMap((b) => (b.content || "").split("\n")).length,
     [store.blocks],
@@ -222,7 +256,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
   // is managed automatically by the hook.
   usePaste(
     (text) => {
-      const normalized = text.replace(/\r?\n/g, "").replace(/\t/g, "");
+      const normalized = normalizeSecretClipboardPaste(text);
       if (!normalized) return;
       if (promptState) {
         // For non-secret prompts, paste at cursor position
@@ -514,9 +548,50 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       return;
     }
 
-    // ---- Prompt overlay editor shortcuts ----
-    // Secret mode is handled by usePaste + Shift+P fallback (below)
-    // Non-secret prompts get full editor support
+    // ---- Secret prompt overlay (API keys) ----
+    if (promptState?.options.secret) {
+      const resolve = promptResolveRef.current;
+
+      const pasteSecretFromClipboard = (): void => {
+        void readClipboardRobust().then((clip) => {
+          const normalized = normalizeSecretClipboardPaste(clip);
+          if (!normalized) return;
+          setPromptState((s) => (s ? { ...s, input: normalized } : s));
+        });
+      };
+
+      if (key.escape) {
+        resolve?.(null);
+        promptResolveRef.current = null;
+        setPromptState(null);
+        setPromptCursorPos(0);
+        setPromptSelectionStart(null);
+        return;
+      }
+      if (key.return) {
+        resolve?.(promptState.input.trim());
+        promptResolveRef.current = null;
+        setPromptState(null);
+        setPromptCursorPos(0);
+        setPromptSelectionStart(null);
+        return;
+      }
+      if (isSecretPromptPasteKey(input, key)) {
+        pasteSecretFromClipboard();
+        return;
+      }
+      if (key.backspace && !key.ctrl && !key.meta) {
+        setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
+        return;
+      }
+      if (!key.ctrl && !key.meta && input && input.length === 1) {
+        setPromptState((s) => (s ? { ...s, input: s.input + input } : s));
+        return;
+      }
+      return;
+    }
+
+    // ---- Prompt overlay editor shortcuts (non-secret) ----
     if (promptState && !promptState.options.secret) {
       const resolve = promptResolveRef.current;
       const cp = promptCursorPos;
@@ -715,26 +790,6 @@ export const DyeApp: React.FC<DyeAppProps> = ({
         });
         setPromptCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + 1);
         setPromptSelectionStart(null);
-        return;
-      }
-
-      // Secret-mode: pass through to legacy handler
-      if (promptState.options.secret && key.shift && !key.ctrl && !key.meta && input.toLowerCase() === "p") {
-        void readClipboard().then((clip) => {
-          const normalized = clip.replace(/\r?\n/g, "").replace(/\t/g, "");
-          if (!normalized) return;
-          setPromptState((s) => (s ? { ...s, input: normalized } : s));
-        });
-        return;
-      }
-      // Legacy backspace for secret mode (appends to end)
-      if (key.backspace) {
-        setPromptState((s) => (s ? { ...s, input: s.input.slice(0, -1) } : s));
-        return;
-      }
-      // Legacy character append for secret mode
-      if (!key.ctrl && !key.meta && input && input.length === 1) {
-        setPromptState((s) => (s ? { ...s, input: s.input + input } : s));
         return;
       }
     }
@@ -1172,6 +1227,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       >
         <TopBar subtitle={store.subtitle} glitchSeed={store.glitchSeed} />
         <Box
+          ref={messageAreaRef}
           flexGrow={1}
           flexDirection="column"
           backgroundColor={THEME.bgInset}
@@ -1182,6 +1238,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             onScroll={(offset) => store.setScrollOffset(offset)}
             terminalWidth={termWidth}
             terminalHeight={termHeight}
+            viewportHeight={messageAreaHeight}
           />
         </Box>
         <StatusBar message={store.statusMessage} messageFocus={messageFocus} />
