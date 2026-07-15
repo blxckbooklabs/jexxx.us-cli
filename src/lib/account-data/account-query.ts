@@ -12,6 +12,11 @@ import type { AuthenticatedAccountSession } from "./session.js";
 import { resolveTvClient, resolveVaultClient } from "./session.js";
 import { formatCredentialsDisplayName } from "../operator-identity.js";
 import type { DashboardTarget } from "../supabase.js";
+import {
+  executeAccountQueryViaApi,
+  fetchAccountSummaryViaApi,
+  getJexxxusApiBaseUrl,
+} from "./jexxxus-api-client.js";
 
 export type AccountQueryAction =
   | "summary"
@@ -95,6 +100,17 @@ export async function fetchAccountSummary(
   session: AuthenticatedAccountSession,
   asUserId?: string,
 ): Promise<AccountSummary> {
+  if (getJexxxusApiBaseUrl()) {
+    try {
+      return await fetchAccountSummaryViaApi(session, asUserId);
+    } catch (err) {
+      console.warn(
+        "[account] JEXXXUS | API summary failed — falling back to direct Supabase:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   const bbVault = resolveVaultClient(session, "blxckbook", asUserId);
   const nxtVault = resolveVaultClient(session, "nxt", asUserId);
   const tvVault = resolveTvClient(session, asUserId);
@@ -219,6 +235,17 @@ export async function executeAccountQuery(
   session: AuthenticatedAccountSession,
   args: AccountQueryArgs,
 ): Promise<string> {
+  if (getJexxxusApiBaseUrl()) {
+    try {
+      return await executeAccountQueryViaApi(session, args);
+    } catch (err) {
+      console.warn(
+        "[account] JEXXXUS | API query failed — falling back to direct Supabase:",
+        err instanceof Error ? err.message : err,
+      );
+    }
+  }
+
   const action = args.action;
   const target = args.target ?? "auto";
   const limit = Math.min(Math.max(args.limit ?? 10, 1), 50);

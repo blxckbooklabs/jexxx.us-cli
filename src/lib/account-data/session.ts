@@ -26,6 +26,8 @@ export interface AuthenticatedAccountSession {
   isSuperAdmin: boolean;
   /** Service-role clients — only when super-admin + SUPABASE_KEY in .env */
   operator?: OperatorClients;
+  /** Fresh Clerk JWT for JEXXXUS | API Bearer auth (web cookie / CLI refresh). */
+  resolveAccessToken?: () => Promise<string | null>;
 }
 
 export type AccountSessionFailure =
@@ -94,6 +96,7 @@ export async function resolveAuthenticatedAccountSession(): Promise<AccountSessi
       nxt: createUserSupabaseClient(env, getAccessToken, "nxt"),
       tv: createUserSupabaseClient(env, getAccessToken, "blxckbook"),
       isSuperAdmin,
+      resolveAccessToken: getAccessToken,
     };
 
     if (isSuperAdmin && operatorEnv) {
