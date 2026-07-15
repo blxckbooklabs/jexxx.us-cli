@@ -82,7 +82,7 @@ export const accountQueryTool: BlxckchatTool = {
     },
     required: ["action"],
   },
-  requiresConfirmation: true,
+  requiresConfirmation: false,
   async execute(args: Record<string, unknown>): Promise<string> {
     const action = resolveAction(String(args.action ?? ""));
     if (!action) {
