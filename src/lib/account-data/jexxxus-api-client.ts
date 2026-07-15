@@ -1,6 +1,19 @@
 import type { AccountQueryArgs, AccountSummary } from "./account-query.js";
 import type { AuthenticatedAccountSession } from "./session.js";
 
+export type AccountExportTarget = "blxckbook" | "nxt" | "all";
+
+export interface AccountExportPayload {
+  exported_at?: string;
+  live?: boolean;
+  source?: string;
+  user?: { id: string; email: string };
+  elevated?: boolean;
+  blxckbook?: unknown;
+  nxt?: unknown;
+  tv?: unknown;
+}
+
 const DISABLED = new Set(["off", "false", "0", "disabled", "none"]);
 
 export function getJexxxusApiBaseUrl(): string | null {
@@ -109,4 +122,27 @@ export async function executeAccountQueryViaApi(
     return JSON.stringify(payload.data, null, 2);
   }
   return JSON.stringify(payload, null, 2);
+}
+
+export async function fetchAccountExportViaApi(
+  session: AuthenticatedAccountSession,
+  options: {
+    target: AccountExportTarget;
+    includeTv?: boolean;
+    asUserId?: string;
+  },
+): Promise<AccountExportPayload> {
+  const params = new URLSearchParams();
+  params.set("target", options.target);
+  if (options.includeTv) {
+    params.set("includeTv", "true");
+  }
+  if (options.asUserId?.trim()) {
+    params.set("asUserId", options.asUserId.trim());
+  }
+
+  return accountApiFetch<AccountExportPayload>(
+    session,
+    `/api/v1/account/export?${params.toString()}`,
+  );
 }
