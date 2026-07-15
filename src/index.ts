@@ -42,6 +42,7 @@ import {
   saveCredentials,
   deleteCredentials,
   getTokenExpiryMinutes,
+  ensureValidToken,
   promptYesNo,
   runInteractiveDeviceLogin,
   refreshAccessTokenViaServer,
@@ -156,6 +157,12 @@ program
     if (isAgentLaunch && actionCommand.args.length === 0) {
       return;
     }
+    // `jexxxus auth token -q` must emit only the JWT on stdout (Hermes/curl).
+    let cmd: typeof actionCommand | null = actionCommand;
+    while (cmd) {
+      if (cmd.name() === "auth") return;
+      cmd = cmd.parent;
+    }
     printBanner();
   })
   .action(async (prompt: string | undefined, options: BlxckchatInvocationOptions) => {
@@ -261,6 +268,33 @@ authCmd
     } catch (err) {
       console.error(
         chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`)
+      );
+      process.exit(1);
+    }
+  });
+
+authCmd
+  .command("token")
+  .description("Print a fresh Bearer token (auto-refreshes when expiring)")
+  .option("-q, --quiet", "Print only the token (for scripts / Hermes preflight)")
+  .action(async (opts: { quiet?: boolean }) => {
+    try {
+      const creds = await ensureValidToken(refreshAccessTokenViaServer);
+      if (opts.quiet) {
+        process.stdout.write(creds.accessToken);
+      } else {
+        console.log(creds.accessToken);
+        const minutes = getTokenExpiryMinutes(creds);
+        console.error(
+          chalk.dim(
+            `[token] ${creds.email} · ${Math.max(0, Math.floor(minutes * 60))}s until expiry · use jexxxus auth token before each Hermes API call`,
+          ),
+        );
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        chalk.red(`[ERROR] ${err instanceof Error ? err.message : "Unknown error"}`),
       );
       process.exit(1);
     }

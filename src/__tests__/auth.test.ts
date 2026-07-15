@@ -123,9 +123,9 @@ test("isTokenValid returns true for future expiry, false for past", () => {
   assert.equal(isTokenValid(null), false);
 });
 
-test("shouldRefreshToken detects < 5 min to expiry", () => {
-  const soon = new Date(Date.now() + 240000).toISOString(); // 4 minutes from now
-  const later = new Date(Date.now() + 600000).toISOString(); // 10 minutes from now
+test("shouldRefreshToken detects < 45s to expiry", () => {
+  const soon = new Date(Date.now() + 30000).toISOString(); // 30 seconds from now
+  const later = new Date(Date.now() + 120000).toISOString(); // 2 minutes from now
 
   const soonCreds: Credentials = {
     userId: "user123",

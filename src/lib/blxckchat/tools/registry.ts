@@ -4,6 +4,7 @@ import { bibleTool } from "./bible-tools.js";
 import { veilTool } from "./veil-tools.js";
 import { tvTool } from "./tv-tools.js";
 import { lawTool } from "./law-tools.js";
+import { docsTool } from "./docs-tools.js";
 import { doctorTool, notifyTool, importContactsTool } from "./dashboard-tools.js";
 import { accountQueryTool } from "./account-tools.js";
 import { shellTool } from "./shell-tool.js";
@@ -49,6 +50,7 @@ export function buildToolRegistry(
     veilTool,
     tvTool,
     lawTool,
+    docsTool,
     doctorTool,
     notifyTool,
     importContactsTool,
