@@ -83,4 +83,13 @@ describe("provider model discovery", () => {
     assert.ok(models.includes("big-pickle"));
     assert.ok(models.includes("claude-sonnet-4-5"));
   });
+
+  test("listModelsForProvider for xai returns grok suggestions without zen ids", async () => {
+    globalThis.fetch = (async () => new Response("error", { status: 500 })) as typeof fetch;
+
+    const models = await listModelsForProvider("xai");
+    assert.ok(models.includes("grok-2-latest"));
+    assert.equal(models.some((id) => id.includes("big-pickle")), false);
+    assert.equal(models.some((id) => id.includes("deepseek-v4-flash-free")), false);
+  });
 });

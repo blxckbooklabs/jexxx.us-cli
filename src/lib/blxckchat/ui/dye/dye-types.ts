@@ -50,6 +50,8 @@ export interface DyeActionCallbacks {
   onFocusInput: () => void;
   onOpenModelPicker: () => void;
   onOpenProviderPicker: () => void;
+  /** Start BYOK setup for a catalog provider (e.g. slash "+ Connect xAI"). */
+  onSetupProvider?: (catalogId: string) => void | Promise<void>;
   onOpenDivinityPicker: () => void;
   onOpenAuthPicker: () => void;
   onOpenSlashPopup: (query: string) => void;

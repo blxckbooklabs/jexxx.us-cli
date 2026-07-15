@@ -41,6 +41,10 @@ import {
 } from "../session/tui-snapshot.js";
 import { isSecretPromptPasteKey } from "../secret-prompt-input.js";
 import { useMouseScroll } from "./use-mouse-scroll.js";
+import {
+  filterPickerItems,
+  resolvePickerSelection,
+} from "./picker-filter.js";
 
 export interface DyeAppOverlayHandles {
   showPicker: (
@@ -346,6 +350,10 @@ export const DyeApp: React.FC<DyeAppProps> = ({
 
     if (pickerState) {
       const resolve = pickerResolveRef.current;
+      const pickerFilterQuery = typedQuery;
+      const resetPickerSelection = (): void => {
+        setPickerState((s) => (s ? { ...s, selectedIndex: 0 } : s));
+      };
       if (key.escape) {
         resolve?.(null);
         pickerResolveRef.current = null;
@@ -359,7 +367,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       if (key.upArrow) {
         setPickerState((s) => {
           if (!s) return s;
-          const len = pickerItemsFiltered(s).length;
+          const len = filterPickerItems(s.items, pickerFilterQuery).length;
           if (len === 0) return s;
           const next = ((s.selectedIndex - 1 + len) % len);
           return { ...s, selectedIndex: next };
@@ -369,7 +377,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       if (key.downArrow) {
         setPickerState((s) => {
           if (!s) return s;
-          const len = pickerItemsFiltered(s).length;
+          const len = filterPickerItems(s.items, pickerFilterQuery).length;
           if (len === 0) return s;
           const next = ((s.selectedIndex + 1) % len);
           return { ...s, selectedIndex: next };
@@ -378,11 +386,15 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       }
       if (key.return) {
         if (pickerResolveRef.current) {
-          const filtered = pickerItemsFiltered(pickerState);
-          const picked = filtered[pickerState.selectedIndex];
+          const picked = resolvePickerSelection(
+            pickerState.items,
+            pickerFilterQuery,
+            pickerState.selectedIndex,
+          );
           resolve?.(picked ?? null);
           pickerResolveRef.current = null;
           setPickerState(null);
+          setTypedQuery("");
           return;
         }
       }
@@ -450,10 +462,12 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           setTypedQuery("");
           setFilterCursorPos(0);
           setFilterSelectionStart(null);
+          resetPickerSelection();
           return;
         }
         if (key.ctrl && input === "k") {
           setTypedQuery((prev) => prev.slice(0, filterCursorPos));
+          resetPickerSelection();
           return;
         }
         if (key.ctrl && input === "w") {
@@ -464,6 +478,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             setFilterSelectionStart(null);
             return prev.slice(0, start) + prev.slice(cp);
           });
+          resetPickerSelection();
           return;
         }
         if (key.meta && input === "d") {
@@ -472,6 +487,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             const end = wordBoundaryRight(prev, cp);
             return prev.slice(0, cp) + prev.slice(end);
           });
+          resetPickerSelection();
           return;
         }
         if ((key.meta || key.ctrl) && key.backspace) {
@@ -482,6 +498,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             setFilterSelectionStart(null);
             return prev.slice(0, start) + prev.slice(cp);
           });
+          resetPickerSelection();
           return;
         }
         if (key.backspace && !key.ctrl && !key.meta) {
@@ -500,6 +517,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             }
             return prev;
           });
+          resetPickerSelection();
           return;
         }
         if (key.delete) {
@@ -517,6 +535,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
             }
             return prev;
           });
+          resetPickerSelection();
           return;
         }
         if (!key.ctrl && !key.meta && input && input.length === 1) {
@@ -532,16 +551,19 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           });
           setFilterCursorPos((sel != null && sel !== cp ? Math.min(sel, cp) : cp) + 1);
           setFilterSelectionStart(null);
+          resetPickerSelection();
           return;
         }
       } else {
         // Items-focused: typing always appends, backspace removes last char
         if (input && input.length === 1 && !key.ctrl && !key.meta) {
           setTypedQuery((q) => q + input);
+          resetPickerSelection();
           return;
         }
         if (key.backspace && !key.ctrl && !key.meta) {
           setTypedQuery((q) => q.slice(0, -1));
+          resetPickerSelection();
           return;
         }
       }
@@ -1019,6 +1041,14 @@ export const DyeApp: React.FC<DyeAppProps> = ({
       if (key.return || key.tab) {
         const s = slashSuggestions[slashSelectedIndex];
         if (s) {
+          if (s.connectProvider && callbacks.onSetupProvider) {
+            setSlashSuggestions([]);
+            setSlashSelectedIndex(0);
+            setInputValue("");
+            store.inputValue = "";
+            void callbacks.onSetupProvider(s.connectProvider);
+            return;
+          }
           const cmdName = s.label.replace(/^\//, "");
           const newValue = `/${cmdName} `;
           store.inputValue = newValue;
@@ -1261,7 +1291,7 @@ export const DyeApp: React.FC<DyeAppProps> = ({
           state={
             pickerState
               ? (() => {
-                  const filtered = pickerItemsFiltered(pickerState);
+                  const filtered = filterPickerItems(pickerState.items, typedQuery);
                   const len = Math.max(filtered.length, 0);
                   const si =
                     len === 0
@@ -1289,14 +1319,3 @@ export const DyeApp: React.FC<DyeAppProps> = ({
     </AlternateScreen>
   );
 };
-
-function pickerItemsFiltered(state: PickerDisplayState): PickerItemDef[] {
-  const q = state.filterQuery.trim().toLowerCase();
-  if (!q) return state.items;
-  return state.items.filter(
-    (item) =>
-      item.label.toLowerCase().includes(q) ||
-      item.id.toLowerCase().includes(q) ||
-      (item.description?.toLowerCase().includes(q) ?? false),
-  );
-}
