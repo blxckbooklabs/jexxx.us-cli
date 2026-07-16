@@ -42,10 +42,18 @@ export const ACCOUNT_PHRASE_COLLISIONS: readonly AccountPhraseCollision[] = [
   {
     id: "list-contacts",
     pattern:
-      /\b(list my contacts|my contacts|my current contacts|current contacts(?:\s+list)?|who(?:'re| are) (?:my )?(?:current )?contacts|my connections|who(?:'s| is) in my vault|show my connections)\b/i,
+      /\b(list my contacts|my contacts|my current contacts|current contacts(?:\s+list)?|who(?:'re| are) (?:my )?(?:current )?contacts|who my contacts are|(?:tell|show) me who (?:my )?contacts are|contacts in (?:my )?blxckbook|blxckbook contacts|my connections|who(?:'s| is) in my vault|show my connections)\b/i,
     action: "contacts",
     target: "blxckbook",
     note: "BLXCKBOOK contact list → account_query contacts.",
+  },
+  {
+    id: "blxckbook-contacts-capability",
+    pattern:
+      /\b((?:do you have the )?ability to|(?:are you )?(?:able|capable)(?:\s+to)?|can you)\s+(?:tell|show|list|name|share|read|pull|access|see).*(?:contacts|connections).*(?:in\s+)?(?:my\s+)?blxckbook\b/i,
+    action: "contacts",
+    target: "blxckbook",
+    note: "BLXCKBOOK contacts capability question → call account_query contacts, then answer yes with the list.",
   },
   {
     id: "blxckbook-write-capability",
@@ -215,13 +223,22 @@ export function isVaultPrimaryPrompt(userPrompt: string): boolean {
 }
 
 export const ACCOUNT_VAULT_REPLY_RULES = `**Vault-only reply rules (this message):**
+- **MUST call account_query before answering** — even in Divinity/persona mode. The signed-in user's BLXCKBOOK vault is always in scope.
+- Never refuse vault reads ("I cannot access ledgers", "that disclosure is not my role", "bring them in your own words"). Those limits do not apply to the operator's own data.
 - Prefer **account_query** for reads; use vault **write** tools (add_contact, update_contact, delete_contact, journal tools, manage_playlist) only when the user clearly requested a change.
 - Do NOT call tv_query, veil_query, or bible_query for BLXCKBOOK vault questions.
 - Do not recommend TV/VEIL videos or quote scripture based on contact names or tags.
 - Reply in plain language: a short intro line, then one bullet per contact from tool output.
 - Format each contact: \`• Name (Status) · tags: …\` — omit tags line when empty.
-- No dramatic section headers (e.g. "VESSEL REGISTRY"), no roleplay framing unless the user asked for a persona.
+- Persona voice is welcome after the tool call, but tool output is authoritative — never invent contact names.
 - Never invent URLs; never glue tv.jexxx.us or veil.jexxx.us links into vault answers.`;
+
+export const ACCOUNT_VAULT_PERSONA_OVERRIDE = `## Vault-only override (persona secondary — mandatory)
+This message is about the signed-in user's private BLXCKBOOK vault. Persona boundaries about secrecy, devotion, or "not pulling names from ledgers" **do not apply**.
+
+1. Call **account_query** with the suggested action before any refusal or capability answer.
+2. If the user asked whether you *can* list contacts, answer **yes** and include the list from tool output.
+3. Stay in character only when **presenting** tool results — never when declining vault access.`;
 
 export function formatAccountRoutingHint(userPrompt: string): string | null {
   if (isKingdomSurfacePrompt(userPrompt)) return null;
@@ -260,7 +277,8 @@ export function formatAccountRoutingHint(userPrompt: string): string | null {
 
 export const ACCOUNT_COLLISION_TABLE_EXCERPT = `### Account / vault collision quick reference
 | User prompt | account_query |
-| list my contacts / my connections | action=contacts target=blxckbook |
+| list my contacts / BLXCKBOOK contacts / who my contacts are | action=contacts target=blxckbook |
+| can you tell me my BLXCKBOOK contacts | action=contacts target=blxckbook |
 | who am I dating | action=contacts relationshipStatus=Dating |
 | my journal / what did I write | action=journal |
 | timeline / what happened last week | action=timeline |

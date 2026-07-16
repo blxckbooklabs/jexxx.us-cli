@@ -80,3 +80,19 @@ test("formatAccountRoutingHint includes account_query and no-fabrication rule", 
   assert.match(hint!, /account_query/);
   assert.match(hint!, /never invent/i);
 });
+
+test("BLXCKBOOK contacts capability question routes to account_query contacts", () => {
+  const prompt =
+    "Do you have the ability to tell me who my contacts are in BLXCKBOOK?";
+  const plan = planAccountTools(prompt);
+  assert.ok(plan.tools.includes("account_query"));
+  assert.equal(plan.action, "contacts");
+  assert.equal(plan.target, "blxckbook");
+  assert.equal(isVaultPrimaryPrompt(prompt), true);
+});
+
+test("who my contacts are in BLXCKBOOK routes to contacts action", () => {
+  const plan = planAccountTools("who my contacts are in BLXCKBOOK");
+  assert.equal(plan.action, "contacts");
+  assert.equal(plan.target, "blxckbook");
+});
