@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  extractContactDeleteFromText,
   formatAccountRoutingHint,
+  isContactDeletePrompt,
   isVaultPrimaryPrompt,
   isVaultReadOnlyPrompt,
   isVaultWritePrompt,
@@ -127,4 +129,31 @@ test("CRUD capability question enables write tools", () => {
 
 test("create contact named Ruth is a vault write prompt", () => {
   assert.equal(isVaultWritePrompt("Create a test contact named Ruth."), true);
+});
+
+test("delete Anna Test captures contactName and enables write tools", () => {
+  const prompt = "Now, delete Anna Test.";
+  assert.equal(isContactDeletePrompt(prompt), true);
+  assert.equal(extractContactDeleteFromText(prompt), "Anna Test");
+  const plan = planAccountTools(prompt);
+  assert.equal(plan.contactName, "Anna Test");
+  assert.equal(plan.target, "blxckbook");
+  assert.equal(isVaultPrimaryPrompt(prompt), true);
+  assert.equal(isVaultReadOnlyPrompt(prompt), false);
+  assert.equal(isVaultWritePrompt(prompt), true);
+});
+
+test("create contact named Anna Test and assign phone captures contactName", () => {
+  const prompt =
+    "Create a contact named Anna Test and assign a random phone number + email.";
+  const plan = planAccountTools(prompt);
+  assert.equal(plan.contactName, "Anna Test");
+  assert.equal(isVaultWritePrompt(prompt), true);
+});
+
+test("formatAccountRoutingHint includes delete_contact for delete prompts", () => {
+  const hint = formatAccountRoutingHint("Now, delete Anna Test.");
+  assert.ok(hint);
+  assert.match(hint!, /delete_contact/);
+  assert.match(hint!, /Anna Test/);
 });

@@ -176,9 +176,11 @@ export const updateContactTool: BlxckchatTool = {
 export const deleteContactTool: BlxckchatTool = {
   name: "delete_contact",
   description:
-    "Permanently delete one BLXCKBOOK contact or NXT vessel (fuzzy-matched by name). This is a " +
-    "destructive, irreversible write to production data — always confirm with the user which " +
-    "specific contact before calling this, and never call it speculatively. Requires /auth login.",
+    "Permanently delete one BLXCKBOOK contact or NXT vessel (fuzzy-matched by name). For contacts " +
+    "created via add_contact, always use target=\"blxckbook\" — the sync trigger removes the NXT " +
+    "vessel automatically. This is a destructive, irreversible write — MUST call this tool when the " +
+    "user asks to delete/remove a contact; never claim deletion in prose without a successful tool " +
+    "result. After success, verify with account_query action=contacts. Requires /auth login.",
   parameters: {
     type: "object",
     properties: {
