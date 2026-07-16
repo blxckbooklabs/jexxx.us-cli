@@ -200,6 +200,13 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
     note: "Read intent → veil_query.",
   },
   {
+    id: "jexxxus-music",
+    pattern:
+      /\b(?:jexxxus\s*\|\s*music|music\.jexxx\.us|(?:what\s+(?:can you\s+)?tell me|tell me)\s+about\s+(?:the\s+)?music|what(?:'s| is)\s+(?:jexxxus\s*\|\s*)?music|crucifly\s*records?)\b/i,
+    tools: ["music_query"],
+    note: "JEXXXUS Music / Crucifly Records — music_query list or docs.",
+  },
+  {
     id: "music-surface",
     pattern:
       /\b(music\.jexxx\.us|jexxxus\s*\|\s*music|crucifly\s*records?|song\s+of\s+dylan|walk\s+on\s+wavs|traktrain|beat\s+store|sound\s+kits?|instrumentals?|lease\s+(?:a\s+)?beat|buy\s+beats?|gospel\s+rap|christian\s+hip[\s-]?hop)\b/i,
@@ -571,6 +578,11 @@ export function formatKingdomRoutingHint(
   if (plan.veilSearchQuery && plan.tools.includes("veil_query")) {
     lines.push(
       `VEIL search — call veil_query action=search query="${plan.veilSearchQuery}" (not action=list).`,
+    );
+  }
+  if (plan.tools.includes("music_query")) {
+    lines.push(
+      "Music (music.jexxx.us) — call music_query action=list or action=docs for Crucifly Records, beats, kits, and Traktrain links. Never invent track titles.",
     );
   }
   if (options?.conversationContext?.trim()) {

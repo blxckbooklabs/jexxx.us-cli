@@ -10,7 +10,9 @@ import {
   planKingdomTools,
   type KingdomRoutingOptions,
 } from "./kingdom-routing.js";
+import { listMusicCatalog } from "../music.js";
 import { formatLawPolicyList } from "./tools/law-format.js";
+import { formatMusicCatalogList } from "./tools/music-format.js";
 import { formatTvVideoList } from "./tools/tv-format.js";
 import { formatVeilArticleList } from "./tools/veil-format.js";
 
@@ -41,8 +43,9 @@ export async function prefetchGardenContext(
 
   const needsLaw = Boolean(plan.lawQuery);
   const needsDocs = plan.docsHint;
+  const needsMusic = plan.tools.includes("music_query");
 
-  if (!tvSearch && !veilSearch && verses.length === 0 && !needsLaw && !needsDocs) {
+  if (!tvSearch && !veilSearch && verses.length === 0 && !needsLaw && !needsDocs && !needsMusic) {
     return null;
   }
 
@@ -119,6 +122,13 @@ export async function prefetchGardenContext(
     } catch {
       blocks.push(`\n### JEXXXUS | TV — ${tvSearch}\n(Catalog unavailable — use tv_query action=search.)`);
     }
+  }
+
+  if (needsMusic) {
+    const catalog = listMusicCatalog(8);
+    blocks.push(
+      `\n### JEXXXUS Music (music.jexxx.us)\n${formatMusicCatalogList(catalog, catalog.length)}`,
+    );
   }
 
   return blocks.join("\n");
