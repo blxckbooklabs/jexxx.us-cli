@@ -157,3 +157,11 @@ test("formatAccountRoutingHint includes delete_contact for delete prompts", () =
   assert.match(hint!, /delete_contact/);
   assert.match(hint!, /Anna Test/);
 });
+
+test("delete Anna Test because ... captures only Anna Test not trailing prose", () => {
+  const prompt =
+    "Please try again to delete Anna Test because your agent has been updated.";
+  assert.equal(extractContactDeleteFromText(prompt), "Anna Test");
+  const plan = planAccountTools(prompt);
+  assert.equal(plan.contactName, "Anna Test");
+});
