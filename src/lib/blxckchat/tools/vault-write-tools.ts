@@ -28,7 +28,7 @@ export const addContactTool: BlxckchatTool = {
   parameters: {
     type: "object",
     properties: {
-      name: { type: "string", description: "Contact's name" },
+      name: { type: "string", description: "Contact's name — REQUIRED when creating a new contact" },
       notes: { type: "string", description: "Optional notes" },
       tags: { type: "array", items: { type: "string" }, description: "Optional tags" },
       relationshipStatus: { type: "string", description: "Optional relationship status" },
@@ -38,12 +38,14 @@ export const addContactTool: BlxckchatTool = {
         description: "Optional visibility (default: private)",
       },
     },
-    required: ["name"],
+    required: [],
   },
   requiresConfirmation: true,
   async execute(args: Record<string, unknown>): Promise<string> {
     const name = String(args.name ?? "").trim();
-    if (!name) return "Error: name is required.";
+    if (!name) {
+      return "Error: add_contact requires the 'name' parameter. Please call add_contact again with name set to the contact's name, e.g. name: \"Ruth\".";
+    }
 
     const resolved = await resolveAuthenticatedAccountSession();
     if (!resolved.ok) return `Error: ${resolved.message}`;
