@@ -110,3 +110,16 @@ test("add contact to BLXCKBOOK is not vault read-only", () => {
     false,
   );
 });
+
+test("contact named Ruth captures contactName and enables write tools", () => {
+  const prompt = "Let's try with a contact named Ruth.";
+  const plan = planAccountTools(prompt);
+  assert.equal(plan.contactName, "Ruth");
+  assert.equal(isVaultReadOnlyPrompt(prompt), false);
+});
+
+test("CRUD capability question enables write tools", () => {
+  const prompt =
+    "Do you have CRUD access, such as the ability to create a new test contact?";
+  assert.equal(isVaultReadOnlyPrompt(prompt), false);
+});
