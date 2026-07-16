@@ -8,6 +8,7 @@ import {
   listTvVideos,
   searchTvVideos,
 } from "../../tv.js";
+import { recommendTvVideos } from "../../tv-algorithm.js";
 import {
   formatTvDiscover,
   formatTvVideoFull,
@@ -97,9 +98,15 @@ export const tvTool: BlxckchatTool = {
       }
 
       case "list": {
+        // No query = a bare "recommend me some videos" ask, not a lookup
+        // for something specific — run the same DevotionRank shuffle the
+        // live site's homepage feed uses instead of always returning
+        // whatever sorts first in the source catalog (previously a static
+        // `allVideos.slice(0, limit)`, which meant every "recommend" turn
+        // surfaced the identical top-of-catalog videos).
         const filtered = query
           ? searchTvVideos(allVideos, query, limit)
-          : allVideos.slice(0, limit);
+          : recommendTvVideos(allVideos, limit);
         const body = formatTvVideoList(filtered, allVideos.length, sourceInfo);
         return `${body}\n\nPublic discovery:\nRSS: ${endpoints.feed}\nVideo sitemap: ${endpoints.sitemapVideo}\nllms-full.txt: ${endpoints.llmsFull}`;
       }

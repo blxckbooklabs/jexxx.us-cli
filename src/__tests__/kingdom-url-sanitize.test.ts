@@ -84,6 +84,31 @@ test("compactKingdomBulletLinks converts Title [url] to markdown links", () => {
   assert.doesNotMatch(out, /\[https:\/\/veil/);
 });
 
+test("sanitizeKingdomUrls strips a fully invented VEIL URL when the catalog is empty", () => {
+  const fabricated =
+    'Read: [The Weight of Silence](https://veil.jexxx.us/articles/the-weight-of-silence)';
+  const fixed = sanitizeKingdomUrls(fabricated, []);
+  assert.doesNotMatch(fixed, /veil\.jexxx\.us\/articles\/the-weight-of-silence/);
+  assert.match(fixed, /unverified link removed/);
+});
+
+test("sanitizeKingdomUrls strips a fabricated TV URL unrelated to any catalog entry", () => {
+  const fabricated = "Watch: https://tv.jexxx.us/video/altar-of-sacrifice";
+  const fixed = sanitizeKingdomUrls(fabricated, TV_CATALOG);
+  assert.doesNotMatch(fixed, /altar-of-sacrifice/);
+  assert.match(fixed, /unverified link removed/);
+});
+
+test("sanitizeKingdomUrls still repairs a real catalog URL when other fabricated ones are present", () => {
+  const mixed =
+    "Real: https://veil.jexxx.us/articles/10-christian-excuses-that-actually-mean-come-fuck-me-after-service\n" +
+    "Fake: https://veil.jexxx.us/articles/totally-made-up-article-that-does-not-exist";
+  const fixed = sanitizeKingdomUrls(mixed, VEIL_CATALOG);
+  assert.match(fixed, /after-service/);
+  assert.doesNotMatch(fixed, /totally-made-up-article-that-does-not-exist/);
+  assert.match(fixed, /unverified link removed/);
+});
+
 test("extractKingdomUrlsFromText extracts multiple glued veil URLs", () => {
   const glued =
     "https://veil.jexxx.us/articles/10-christian-excuses-that-actually-mean-come-fuck-me-after-servicehttps://veil.jexxx.us/articles/why-pastor-s-wives-make-the-best-sluts-a-deep-theological-filthy-breakdown";

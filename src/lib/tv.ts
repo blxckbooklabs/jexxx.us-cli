@@ -28,6 +28,12 @@ export interface TvPublicEndpoints {
   subscription: string;
 }
 
+export interface TvVideoInteractions {
+  likes: number;
+  saves: number;
+  shares: number;
+}
+
 export interface TvVideoMeta {
   slug: string;
   title: string;
@@ -40,6 +46,16 @@ export interface TvVideoMeta {
   tags: string[];
   thumbnail?: string;
   source: "local" | "llms-full" | "llms" | "rss";
+  /**
+   * Ranking signals for the DevotionRank shuffle (see tv-algorithm.ts).
+   * Only present when parsed from the local videos.json catalog — remote
+   * llms-full/RSS sources don't carry them, so ranking degrades gracefully
+   * to recency + randomness for those (still much better than static
+   * catalog-order slicing, just without the engagement weighting).
+   */
+  id?: string;
+  views?: number;
+  interactions?: TvVideoInteractions;
 }
 
 export interface TvVideo extends TvVideoMeta {
@@ -66,6 +82,8 @@ interface RawVideoRow {
   tags?: string[];
   embed_url?: string;
   native_url?: string;
+  views?: string | number;
+  interactions?: { likes?: number; saves?: number; shares?: number };
 }
 
 let remoteCache: { fetchedAt: number; videos: TvVideo[] } | null = null;
@@ -124,6 +142,18 @@ function normalizeCategories(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value.filter(Boolean) : [value];
 }
 
+/** Mirrors tv.jexxx.us/src/lib/algorithm.ts's parseViewCount (K/M suffixes). */
+function parseViewCount(value: string | number | undefined): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value === "number") return Number.isFinite(value) ? Math.round(value) : undefined;
+  const str = value.trim();
+  const num = Number.parseFloat(str.replace(/,/g, ""));
+  if (Number.isNaN(num)) return undefined;
+  if (str.toLowerCase().endsWith("m")) return Math.round(num * 1_000_000);
+  if (str.toLowerCase().endsWith("k")) return Math.round(num * 1_000);
+  return Math.round(num);
+}
+
 function rowToMeta(
   row: RawVideoRow,
   baseUrl: string,
@@ -146,6 +176,16 @@ function rowToMeta(
   if (row.uploadDate) meta.uploadDate = row.uploadDate;
   if (row.channel) meta.channel = row.channel;
   if (row.thumbnail) meta.thumbnail = row.thumbnail;
+  if (row.id) meta.id = row.id;
+  const views = parseViewCount(row.views);
+  if (views !== undefined) meta.views = views;
+  if (row.interactions) {
+    meta.interactions = {
+      likes: row.interactions.likes ?? 0,
+      saves: row.interactions.saves ?? 0,
+      shares: row.interactions.shares ?? 0,
+    };
+  }
   return meta;
 }
 

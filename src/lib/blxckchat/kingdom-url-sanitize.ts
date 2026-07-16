@@ -99,11 +99,18 @@ function levenshtein(a: string, b: string): number {
   return matrix[a.length]![b.length]!;
 }
 
+/**
+ * Finds a real catalog slug this fabricated/garbled one is *probably*
+ * a typo or glue-artifact of. Returns null — not the input back — when
+ * nothing in the catalog is close enough, since a non-match here almost
+ * always means the model invented the URL outright rather than mangling
+ * a real one (see sanitizeKingdomUrls, which treats null as "strip it").
+ */
 function closestCatalogSlug(
   compact: string,
   catalog: KingdomUrlEntry[],
   surface: "tv" | "veil",
-): string {
+): string | null {
   const exact = catalog.find((e) => e.surface === surface && e.slug === compact);
   if (exact) return exact.slug;
 
@@ -118,19 +125,19 @@ function closestCatalogSlug(
       best = entry.slug;
     }
   }
-  return best ?? compact;
+  return best;
 }
 
-function canonicalizeUrl(raw: string, catalog: KingdomUrlEntry[]): string {
+function canonicalizeUrl(raw: string, catalog: KingdomUrlEntry[]): string | null {
   const tv = raw.match(/^https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/([a-z0-9-]+)$/i);
   if (tv?.[1]) {
     const slug = closestCatalogSlug(tv[1].toLowerCase(), catalog, "tv");
-    return `https://tv.jexxx.us/video/${slug}`;
+    return slug ? `https://tv.jexxx.us/video/${slug}` : null;
   }
   const veil = raw.match(/^https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9-]+)$/i);
   if (veil?.[1]) {
     const slug = closestCatalogSlug(veil[1].toLowerCase(), catalog, "veil");
-    return `https://veil.jexxx.us/articles/${slug}`;
+    return slug ? `https://veil.jexxx.us/articles/${slug}` : null;
   }
   return raw;
 }
@@ -157,8 +164,24 @@ export function repairMarkdownUrlBlobs(text: string): string {
 }
 
 /**
+ * Placeholder swapped in for a kingdom URL that has no plausible match in
+ * this turn's real catalog — i.e. not a mangled real link (wrong host,
+ * glued/spaced slug) but one the model invented outright. Previously
+ * closestCatalogSlug fell back to returning the fabricated slug unchanged
+ * whenever the catalog was empty or had no close entry, so a persona
+ * roleplay turn that never actually called veil_query/tv_query could
+ * "cite" a fully made-up article and this sanitizer would wave it through
+ * untouched — it only ever repaired near-misses, never rejected outright
+ * fiction. Surfacing it as visibly broken beats laundering it into a
+ * clean-looking dead link.
+ */
+const UNVERIFIED_LINK = "[unverified link removed]";
+
+/**
  * Repair model-hallucinated kingdom URLs (wv host, spaced/glued slugs) using
- * canonical URLs from the same turn's tool/prefetch output.
+ * canonical URLs from the same turn's tool/prefetch output. URLs with no
+ * plausible match in that catalog are treated as fabricated and stripped,
+ * not passed through — see UNVERIFIED_LINK.
  */
 export function sanitizeKingdomUrls(response: string, catalog: KingdomUrlEntry[]): string {
   if (!response.trim()) return response;
@@ -171,18 +194,24 @@ export function sanitizeKingdomUrls(response: string, catalog: KingdomUrlEntry[]
     /https?:\/\/(?:tv|wv|tw)\.jexxx\.us\/video\/([a-z0-9][a-z0-9\s-]*[a-z0-9]|[a-z0-9])(?=[\s\]\),.;!?]|$)/gi,
     (_full, slugPart: string) => {
       const slug = closestCatalogSlug(slugPart.replace(/\s+/g, "").toLowerCase(), catalog, "tv");
-      return `https://tv.jexxx.us/video/${slug}`;
+      return slug ? `https://tv.jexxx.us/video/${slug}` : UNVERIFIED_LINK;
     },
   );
-  out = out.replace(KINGDOM_TV_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
+  out = out.replace(
+    KINGDOM_TV_URL,
+    (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog) ?? UNVERIFIED_LINK,
+  );
   out = out.replace(
     /https?:\/\/veil\.jexxx\.us\/articles\/([a-z0-9][a-z0-9\s-]*[a-z0-9]|[a-z0-9])(?=[\s\]\),.;!?]|$)/gi,
     (_full, slugPart: string) => {
       const slug = closestCatalogSlug(slugPart.replace(/\s+/g, "").toLowerCase(), catalog, "veil");
-      return `https://veil.jexxx.us/articles/${slug}`;
+      return slug ? `https://veil.jexxx.us/articles/${slug}` : UNVERIFIED_LINK;
     },
   );
-  out = out.replace(KINGDOM_VEIL_URL, (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog));
+  out = out.replace(
+    KINGDOM_VEIL_URL,
+    (url) => canonicalizeUrl(url.replace(/\s+/g, ""), catalog) ?? UNVERIFIED_LINK,
+  );
 
   out = repairMarkdownUrlBlobs(out);
   out = compactKingdomBulletLinks(out);

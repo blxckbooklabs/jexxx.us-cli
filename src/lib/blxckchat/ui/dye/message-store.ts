@@ -273,8 +273,12 @@ export class MessageStore {
   }
 
   scrollToTop(): void {
-    this.scrollOffset = 0;
-    this.pinnedToBottom = true;
+    // The store doesn't know the current render-line count or viewport
+    // height (that's computed in MessageView.tsx from formatted output,
+    // not raw block content) — go past any possible max and let
+    // MessageView's clamp resolve it to the true top on next render.
+    this.scrollOffset = Number.MAX_SAFE_INTEGER;
+    this.pinnedToBottom = false;
     this.notify();
   }
 

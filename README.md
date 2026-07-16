@@ -175,7 +175,7 @@ jexxxus shell
 | `import_contacts` | write, confirm | Wraps `jexxxus import`—prompts for confirmation |
 | `account_query` | read-only (RLS) | Signed-in user's vault, NXT, and TV playlists; super-admin `asUserId` optional |
 | `add_contact` | write, confirm (RLS) | New contact—auto-synced to both BLXCKBOOK and NXT via a shared DB trigger; refuses on name-match duplicates |
-| `update_contact` | write, confirm (RLS) | BLXCKBOOK contact or NXT vessel field edit—live in dashboard, no `asUserId` ever |
+| `update_contact` | write, confirm (RLS) | All dashboard columns (`phone`, `email`, `photo`, `social_links`, NXT fields, etc.)—never stash phone/email in `notes`; live in BLXCKBOOK + NXT via sync trigger |
 | `delete_contact` | write, confirm (RLS) | Permanently delete a BLXCKBOOK contact or NXT vessel—irreversible |
 | `add_journal_entry` | write, confirm (RLS) | BLXCKBOOK journal entry, optionally linked to contacts |
 | `update_journal_entry` | write, confirm (RLS) | Edit title/content/tags on an existing entry, matched by id or title |

@@ -227,6 +227,14 @@ interface MessageViewProps {
   onScroll: (offset: number) => void;
   terminalWidth: number;
   terminalHeight: number;
+  /**
+   * Real measured height (rows) of this component's flexGrow container,
+   * from `measureElement` in DyeApp.tsx. The sibling chrome (TopBar,
+   * StatusBar, InputView) doesn't add up to a fixed number of rows across
+   * every render — falls back to a `terminalHeight - 6` guess only before
+   * the first post-layout measurement lands.
+   */
+  viewportHeight?: number | undefined;
 }
 
 export const MessageView: React.FC<MessageViewProps> = ({
@@ -235,13 +243,14 @@ export const MessageView: React.FC<MessageViewProps> = ({
   onScroll,
   terminalWidth,
   terminalHeight,
+  viewportHeight,
 }) => {
   const soleHero =
     store.blocks.length === 1 && store.blocks[0]?.type === "hero"
       ? store.blocks[0]
       : null;
 
-  const viewHeight = terminalHeight - 6;
+  const viewHeight = viewportHeight ?? terminalHeight - 6;
 
   const renderLines = React.useMemo(
     () => buildRenderLines(store, terminalWidth),
@@ -260,7 +269,17 @@ export const MessageView: React.FC<MessageViewProps> = ({
   }
 
   const totalLines = renderLines.length;
-  const visibleEnd = totalLines - scrollOffset;
+  // scrollOffset can exceed the scrollable range (e.g. after new content
+  // shrinks totalLines, or a fast wheel/key burst overshoots the top).
+  // Clamping here — rather than in message-store's scrollUp/scrollPageUp,
+  // which don't know the current viewport height — keeps this the single
+  // place that reconciles offset against the live render. Unclamped, a
+  // large scrollOffset drives visibleEnd negative and Array.slice's
+  // negative-end semantics (offset from the *end* of the array) silently
+  // eat lines off the bottom of the window instead of clamping at the top.
+  const maxScrollOffset = Math.max(0, totalLines - viewHeight);
+  const clampedScrollOffset = Math.min(scrollOffset, maxScrollOffset);
+  const visibleEnd = totalLines - clampedScrollOffset;
   const visibleStart = Math.max(0, visibleEnd - viewHeight);
 
   const visibleLines = renderLines.slice(
