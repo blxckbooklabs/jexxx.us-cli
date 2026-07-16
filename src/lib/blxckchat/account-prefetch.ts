@@ -6,7 +6,11 @@ import {
 import type { AuthenticatedAccountSession } from "../account-data/session.js";
 import { resolveAuthenticatedAccountSession } from "../account-data/session.js";
 import { formatCredentialsDisplayName } from "../operator-identity.js";
-import { isVaultReadOnlyPrompt, planAccountTools } from "./account-routing.js";
+import {
+  isVaultReadOnlyPrompt,
+  isVaultWritePrompt,
+  planAccountTools,
+} from "./account-routing.js";
 
 export interface AccountPrefetchResult {
   text: string;
@@ -35,6 +39,10 @@ export async function prefetchAccountContext(
       return null;
     }
     resolvedSession = resolved.session;
+  }
+
+  if (isVaultWritePrompt(userPrompt)) {
+    return null;
   }
 
   const readOnly = isVaultReadOnlyPrompt(userPrompt);

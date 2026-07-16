@@ -15,6 +15,8 @@ export interface AccountExportPayload {
 }
 
 const DISABLED = new Set(["off", "false", "0", "disabled", "none"]);
+/** Fail fast when JEXXXUS | API is unreachable — avoids Vercel function timeouts. */
+const API_FETCH_TIMEOUT_MS = 8_000;
 
 export function getJexxxusApiBaseUrl(): string | null {
   const flag = process.env.JEXXXUS_ACCOUNT_API?.trim().toLowerCase();
@@ -63,7 +65,11 @@ async function accountApiFetch<T>(
 
   let response: Response;
   try {
-    response = await fetch(`${base}${path}`, { ...init, headers });
+    response = await fetch(`${base}${path}`, {
+      ...init,
+      headers,
+      signal: AbortSignal.timeout(API_FETCH_TIMEOUT_MS),
+    });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
     throw new Error(
