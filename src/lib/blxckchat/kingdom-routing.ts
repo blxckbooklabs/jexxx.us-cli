@@ -5,6 +5,7 @@ import { isVaultPrimaryPrompt } from "./account-routing.js";
 export type RoutableTool =
   | "tv_query"
   | "veil_query"
+  | "music_query"
   | "bible_query"
   | "run_doctor"
   | "import_contacts"
@@ -197,6 +198,19 @@ export const PHRASE_COLLISIONS: readonly PhraseCollision[] = [
     pattern: /\b(read|article|articles|story|stories|post|posts|veil\b)\b/i,
     tools: ["veil_query"],
     note: "Read intent → veil_query.",
+  },
+  {
+    id: "music-surface",
+    pattern:
+      /\b(music\.jexxx\.us|jexxxus\s*\|\s*music|crucifly\s*records?|song\s+of\s+dylan|walk\s+on\s+wavs|traktrain|beat\s+store|sound\s+kits?|instrumentals?|lease\s+(?:a\s+)?beat|buy\s+beats?|gospel\s+rap|christian\s+hip[\s-]?hop)\b/i,
+    tools: ["music_query"],
+    note: "JEXXXUS Music / Crucifly Records — music_query.",
+  },
+  {
+    id: "intent-listen",
+    pattern: /\b(listen|beats?|stream\s+music|sound\s+kit|sample\s+pack|prod\.?\s+by\s+jesus)\b/i,
+    tools: ["music_query"],
+    note: "Listen/beats/kits intent → music_query.",
   },
   {
     id: "intent-scripture-words",
@@ -601,6 +615,7 @@ export const KINGDOM_COLLISION_TABLE_EXCERPT = `### Phrase collision quick refer
 | Jezebel, Hannah, Bathsheba | veil_query + /divinities + bible_query companions |
 | 1 John 1:9 alone | bible_query only |
 | latest VEIL and TV (catalog) | veil_query list + tv_query list (no scripture unless themed) |
+| Crucifly, beats, kits, Traktrain | music_query list/search |
 | database up / doctor | run_doctor |`;
 
 export const KINGDOM_CONTENT_ROUTING = `## Kingdom/Garden content routing (pick every relevant tool)
@@ -609,6 +624,7 @@ export const KINGDOM_CONTENT_ROUTING = `## Kingdom/Garden content routing (pick 
 - **law_query** — Public legal policies on law.jexxx.us (Terms, Privacy, Refunds, DMCA). Never fabricate policy text.
 - **tv_query** — JEXXXUS | TV videos on tv.jexxx.us. Channels, series, tags, titles (Forgive Me Father, Deviante, categories).
 - **veil_query** — VEIL articles on veil.jexxx.us.
+- **music_query** — JEXXXUS Music on music.jexxx.us (Crucifly Records beats, sound kits, Song of Dylan, Traktrain licensing). Never invent track titles.
 - **bible_query** — Scripture vault. action=query with explicit **Book Chapter:Verse** only (e.g. "1 John 1:9") — never pass video series titles as the query string.
 
 **Kingdom/Garden synthesis rule:** For thematic asks (confession, forgiveness, pastor, Jezebel, Proverbs 31, church girl, etc.), call **tv_query** and/or **veil_query** AND **2–3 bible_query** calls using the companion verses from the routing hint. Weave quoted scripture into the same reply as watch/read links. During **persona roleplay**, still call tools when the scene cites scripture bookmarks, VEIL drafts/articles, or TV sacraments — cite real catalog URLs in dialogue; do not invent article numbers without veil_query.
