@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  isVaultPrimaryPrompt,
+  planAccountTools,
+} from "../lib/blxckchat/account-routing.js";
+import {
+  isKingdomSurfaceName,
+  isKingdomSurfacePrompt,
+} from "../lib/blxckchat/kingdom-surfaces.js";
+import {
   COMPANION_VERSE_SETS,
   formatKingdomRoutingHint,
   planKingdomTools,
@@ -184,4 +192,17 @@ test("regression 11: blueprint corruption beat triggers VEIL search", () => {
   });
   assert.ok(plan.tools.includes("veil_query"));
   assert.equal(plan.veilSearchQuery, "corruption");
+});
+
+test("Music surface is kingdom content, not a BLXCKBOOK contact", () => {
+  const prompt = "What can you tell me about Music?";
+  assert.ok(isKingdomSurfacePrompt(prompt));
+  assert.ok(isKingdomSurfaceName("Music"));
+  assert.ok(!isVaultPrimaryPrompt(prompt));
+  const accountPlan = planAccountTools(prompt);
+  assert.equal(accountPlan.tools.length, 0);
+  expectTools(prompt, { include: ["music_query"] });
+  const hint = formatKingdomRoutingHint(prompt);
+  assert.ok(hint);
+  assert.match(hint!, /music_query/i);
 });
