@@ -15,6 +15,9 @@ export interface BlxckbookContact {
   createdAt: string;
   tags: string[];
   notes: string;
+  phone?: string;
+  email?: string;
+  socialLinks: Array<{ platform: string; url: string }>;
   isDiscoverable: boolean;
   linkedEcosystemId: string | null;
   visibility: "private" | "shared" | "ecosystem";
@@ -60,7 +63,7 @@ export interface BlxckbookExport {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapContactRow(c: any): BlxckbookContact {
+export function mapContactRow(c: any): BlxckbookContact {
   return {
     id: c.id,
     name: c.name,
@@ -69,6 +72,9 @@ function mapContactRow(c: any): BlxckbookContact {
     createdAt: c.created_at || new Date().toISOString(),
     tags: c.tags || [],
     notes: c.notes || "",
+    phone: c.phone || undefined,
+    email: c.email || undefined,
+    socialLinks: (c.social_links || []) as Array<{ platform: string; url: string }>,
     isDiscoverable: c.is_discoverable || false,
     linkedEcosystemId: c.linked_ecosystem_id || null,
     visibility: c.visibility || "private",

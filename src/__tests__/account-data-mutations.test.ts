@@ -184,6 +184,20 @@ test("updateContact refuses to write protected fields", async () => {
   assert.match(result.message, /protected field/);
 });
 
+test("updateContact writes phone to the dedicated column", async () => {
+  const client = createMockVaultClient({
+    contacts: [{ id: "c1", user_id: "user_test", name: "Ruth Test", phone: null }],
+  });
+  const session = fakeSession({ blxckbook: client });
+
+  const result = await updateContact(session, "blxckbook", "ruth test", {
+    phoneNumber: "+1 (555) 555-1234",
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(client._tables.get("contacts")?.[0]?.phone, "+1 (555) 555-1234");
+});
+
 test("updateContact reports no match for an unknown contact name", async () => {
   const client = createMockVaultClient({ contacts: [] });
   const session = fakeSession({ blxckbook: client });

@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { BlxckbookContact, BlxckbookJournalEntry, BlxckbookTimelineEvent } from "./blxckbook-export.js";
+import {
+  mapContactRow,
+  type BlxckbookContact,
+  type BlxckbookJournalEntry,
+  type BlxckbookTimelineEvent,
+} from "./blxckbook-export.js";
 import { fetchBlxckbookExport } from "./blxckbook-export.js";
 import { fetchNxtExport } from "./nxt-export.js";
 import {
@@ -176,19 +181,7 @@ async function fetchBlxckbookContacts(
     throw new Error(`Failed to fetch contacts: ${error.message}`);
   }
 
-  return (data ?? []).map((c) => ({
-    id: c.id,
-    name: c.name,
-    photo: c.photo || "",
-    lastActive: c.last_active || "Just now",
-    createdAt: c.created_at || new Date().toISOString(),
-    tags: c.tags || [],
-    notes: c.notes || "",
-    isDiscoverable: c.is_discoverable || false,
-    linkedEcosystemId: c.linked_ecosystem_id || null,
-    visibility: c.visibility || "private",
-    relationshipStatus: c.relationship_status || null,
-  }));
+  return (data ?? []).map((c) => mapContactRow(c));
 }
 
 async function fetchBlxckbookJournal(
@@ -343,6 +336,8 @@ export async function executeAccountQuery(
       return [
         `Contact: ${contact.name}`,
         `Status: ${contact.relationshipStatus ?? "unset"}`,
+        `Phone: ${contact.phone ?? "(none)"}`,
+        `Email: ${contact.email ?? "(none)"}`,
         `Tags: ${contact.tags.length ? contact.tags.join(", ") : "(none)"}`,
         `Notes: ${truncateNotes(contact.notes) || "(empty)"}`,
         `Last active: ${contact.lastActive}`,

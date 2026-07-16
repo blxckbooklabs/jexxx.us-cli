@@ -15,15 +15,62 @@ import { fuzzyMatchContact, normalizeName } from "./account-query.js";
  * as the export fetchers.
  */
 
-const CONTACT_UPDATABLE_FIELDS = [
+/** Matches dxsh.blxckbook.jexxx.us + dxsh.nxt.jexxx.us editable contact/vessel columns. */
+export const CONTACT_UPDATABLE_FIELDS = [
   "name",
+  "photo",
   "notes",
   "tags",
+  "phone",
+  "email",
+  "social_links",
   "relationship_status",
   "visibility",
   "is_discoverable",
+  "linked_ecosystem_id",
+  "priority_level",
+  "primary_platform",
+  "personality_traits",
+  "urls",
+  "vibe",
+  "engagement_style",
+  "chemistry_notes",
+  "last_interaction_date",
+  "metadata",
 ] as const;
 type ContactUpdatableField = (typeof CONTACT_UPDATABLE_FIELDS)[number];
+
+const CONTACT_FIELD_ALIASES: Record<string, ContactUpdatableField> = {
+  phoneNumber: "phone",
+  phone_number: "phone",
+  emailAddress: "email",
+  email_address: "email",
+  relationshipStatus: "relationship_status",
+  isDiscoverable: "is_discoverable",
+  linkedEcosystemId: "linked_ecosystem_id",
+  socialLinks: "social_links",
+  photoUrl: "photo",
+  priorityLevel: "priority_level",
+  primaryPlatform: "primary_platform",
+  personalityTraits: "personality_traits",
+  engagementStyle: "engagement_style",
+  chemistryNotes: "chemistry_notes",
+  lastInteractionDate: "last_interaction_date",
+};
+
+const CONTACT_UPDATABLE_SET = new Set<string>(CONTACT_UPDATABLE_FIELDS);
+
+/** Map camelCase / model aliases to live Postgres column names. */
+export function normalizeContactUpdates(
+  updates: Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    const dbKey = CONTACT_FIELD_ALIASES[key] ?? key;
+    normalized[dbKey] = value;
+  }
+  return normalized;
+}
 
 /** NXT vessels have no fixed schema (see nxt-export.ts) — allow the same
  * shape BLXCKBOOK contacts use since dxsh.blxckbook.jexxx.us/dxsh.nxt sync
@@ -43,6 +90,10 @@ function sanitizeContactUpdates(
   const rejected: string[] = [];
   for (const [key, value] of Object.entries(updates)) {
     if (PROTECTED_FIELDS.has(key)) {
+      rejected.push(key);
+      continue;
+    }
+    if (!CONTACT_UPDATABLE_SET.has(key)) {
       rejected.push(key);
       continue;
     }
@@ -77,6 +128,10 @@ export async function addContact(
     tags?: string[];
     relationshipStatus?: string;
     visibility?: string;
+    phone?: string;
+    email?: string;
+    photo?: string;
+    socialLinks?: Array<{ platform: string; url: string }>;
   },
 ): Promise<AddContactResult> {
   const vault = resolveVaultClient(session, "blxckbook");
@@ -104,6 +159,10 @@ export async function addContact(
       tags: options?.tags ?? [],
       relationship_status: options?.relationshipStatus ?? null,
       visibility: options?.visibility ?? "private",
+      phone: options?.phone ?? null,
+      email: options?.email ?? null,
+      photo: options?.photo ?? null,
+      social_links: options?.socialLinks ?? [],
     })
     .select("id")
     .single();
@@ -132,11 +191,17 @@ export async function updateContact(
   contactName: string,
   updates: Record<string, unknown>,
 ): Promise<UpdateContactResult> {
-  const { fields, rejected } = sanitizeContactUpdates(updates);
+  const normalized = normalizeContactUpdates(updates);
+  const { fields, rejected } = sanitizeContactUpdates(normalized);
   if (rejected.length > 0) {
+    const protectedOnly = rejected.every((k) => PROTECTED_FIELDS.has(k));
     return {
       ok: false,
-      message: `Refused to update protected field(s): ${rejected.join(", ")}.`,
+      message: protectedOnly
+        ? `Refused to update protected field(s): ${rejected.join(", ")}.`
+        : `Refused unknown or protected field(s): ${rejected.join(", ")}. ` +
+          `Allowed: ${CONTACT_UPDATABLE_FIELDS.join(", ")}. ` +
+          "Use the dedicated phone/email columns — never stash phone numbers in notes.",
     };
   }
   if (Object.keys(fields).length === 0) {
@@ -660,5 +725,4 @@ export async function syncBlxckbookExport(
 }
 
 export type { SupabaseClient };
-export { CONTACT_UPDATABLE_FIELDS };
 export type { ContactUpdatableField };
