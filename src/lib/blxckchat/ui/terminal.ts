@@ -902,8 +902,26 @@ export async function startTerminalChat(
       }
       session.thinkingBlocks.push(...mergedBlocks);
 
-      const visible =
+      let visible =
         parsed.visibleContent || response || streamBuffer.getContent();
+
+      if (streamBuffer.length === 0 && visible.trim()) {
+        const animateBuf = new StreamBuffer();
+        for (let i = 0; i < visible.length; i += 2) {
+          animateBuf.append(visible.slice(i, i + 2));
+          thinkingParser.reset();
+          thinkingParser.append(animateBuf.getContent());
+          const state = thinkingParser.getState();
+          tui.messageBox.updateAssistantStream(
+            assistantBlockIndex,
+            formatLiveStreamDisplay(state),
+            state.visible,
+            state.thinking,
+          );
+          await new Promise((r) => setTimeout(r, 12));
+        }
+      }
+
       addAssistantMessage(session, visible);
       tui.messageBox.finalizeAssistant(
         assistantBlockIndex,
