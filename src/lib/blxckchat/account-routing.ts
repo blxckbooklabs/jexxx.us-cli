@@ -222,6 +222,23 @@ export function isVaultPrimaryPrompt(userPrompt: string): boolean {
   return planAccountTools(userPrompt).tools.length > 0;
 }
 
+const VAULT_MUTATION_INTENT =
+  /\b(add|create|update|edit|change|modify|delete|remove|import|sync)\b/i;
+
+/** Read-only vault turn — safe to answer from server-prefetched data without tool loop. */
+export function isVaultReadOnlyPrompt(userPrompt: string): boolean {
+  if (!isVaultPrimaryPrompt(userPrompt)) return false;
+  const plan = planAccountTools(userPrompt);
+  if (!plan.action || plan.action === "export_preview") return false;
+  if (
+    VAULT_MUTATION_INTENT.test(userPrompt) &&
+    /\b(?:contact|journal|playlist|vault|blxckbook|nxt)\b/i.test(userPrompt)
+  ) {
+    return false;
+  }
+  return true;
+}
+
 export const ACCOUNT_VAULT_REPLY_RULES = `**Vault-only reply rules (this message):**
 - **MUST call account_query before answering** — even in Divinity/persona mode. The signed-in user's BLXCKBOOK vault is always in scope.
 - Never refuse vault reads ("I cannot access ledgers", "that disclosure is not my role", "bring them in your own words"). Those limits do not apply to the operator's own data.

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   formatAccountRoutingHint,
   isVaultPrimaryPrompt,
+  isVaultReadOnlyPrompt,
   planAccountTools,
 } from "../lib/blxckchat/account-routing.js";
 
@@ -95,4 +96,17 @@ test("who my contacts are in BLXCKBOOK routes to contacts action", () => {
   const plan = planAccountTools("who my contacts are in BLXCKBOOK");
   assert.equal(plan.action, "contacts");
   assert.equal(plan.target, "blxckbook");
+});
+
+test("BLXCKBOOK contacts capability is vault read-only", () => {
+  const prompt =
+    "Do you have the ability to tell me who my contacts are in BLXCKBOOK?";
+  assert.equal(isVaultReadOnlyPrompt(prompt), true);
+});
+
+test("add contact to BLXCKBOOK is not vault read-only", () => {
+  assert.equal(
+    isVaultReadOnlyPrompt("add a new contact to my BLXCKBOOK named Alex"),
+    false,
+  );
 });

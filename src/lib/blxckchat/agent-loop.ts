@@ -239,8 +239,8 @@ async function buildSystemPrompt(
   }
 
   const accountPrefetch = await prefetchAccountContext(userPrompt);
-  if (accountPrefetch) {
-    prompt = `${prompt}\n\n${accountPrefetch}`;
+  if (accountPrefetch?.text) {
+    prompt = `${prompt}\n\n${accountPrefetch.text}`;
   }
 
   const operatorContext = await buildSignedInOperatorContext();
